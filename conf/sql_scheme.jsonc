@@ -1,0 +1,94 @@
+{
+    //** SQLite db scheme
+    //** create new DB for changes to take effect
+    //**
+    //** column names with lower case
+    //** table names with upper case only
+    //** data ONLY upper case
+    //**
+    //** id columns are assumed to be INTEGER PRIMARY KEY and created automatically
+    //** reference with FOREIGN key only to UNIQUE/PRIMARY columns
+    //** tables with FOREIGN should follow tables they refer (order matter)
+    //** UNIQUE columns are indexed automatically
+    //** PRIMARY columns are indexed automatically
+    //** HASH_COLS is not SQL! it's aditional info to allow hashing automation
+
+    //** preparing BOM for project
+    //** import DEVICE with bom_qty and shop_qty and cost from file
+    //** do not affect stock untill not commited,
+    //** write all data about DEVICE and shop (cost)
+    "BOM": {
+        "qty": "INTEGER NOT NULL",
+        "order_qty": "INTEGER NOT NULL",
+        "device_hash": "TEXT",
+        "FOREIGN": [
+            {
+                "device_hash": "DEVICE(hash)"
+            }
+        ],
+        "UNIQUE": ["device_hash"]
+    },
+    //** list of devices, not necessery in stock
+    "DEVICE": {
+        "hash": "TEXT PRIMARY KEY",
+        "device_id": "TEXT NOT NULL",
+        "device_manufacturer": "TEXT NOT NULL",
+        "device_description": "TEXT",
+        "package": "TEXT",
+        "value": "INTEGER",
+        "units": "TEXT",
+        "HASH_COLS": {"hash":["device_id","device_manufacturer"]}
+    },
+    //** shop list, with cost and order_qty and date
+    "SHOP": {
+        "id": "INTEGER PRIMARY KEY",
+        "device_hash": "TEXT",
+        "date": "DATE NOT NULL",
+        "shop": "TEXT NOT NULL",
+        "shop_id": "TEXT NOT NULL",
+        "price": "INTEGER NOT NULL",
+        "order_qty": "INTEGER NOT NULL",
+        "FOREIGN": [
+            {
+                "device_hash": "DEVICE(hash)"
+            }
+        ],
+        "UNIQUE": ["device_hash","date","shop"]
+
+    },
+    //** what we have in stock
+    "STOCK": {
+        "id": "INTEGER PRIMARY KEY",
+        "device_hash": "TEXT",
+        "stock_qty": "INTEGER NOT NULL",
+        "FOREIGN": [
+            {
+                "device_hash": "DEVICE(hash)"
+            }
+        ],
+        "UNIQUE":["device_hash"]
+    },
+    //** projects, with list of devices and qty
+    "PROJECT": {
+        "proj_hash": "INTEGER",
+        "device_hash": "TEXT",
+        "qty": "INTEGER NOT NULL",
+        "FOREIGN": [
+            {
+                "device_hash": "DEVICE(hash)"
+            },
+            {
+                "proj_hash": "PROJECT_INFO(hash)"
+            }
+        ]
+    },
+    //** project description and name
+    "PROJECT_INFO": {
+        "hash": "TEXT PRIMARY KEY",
+        "project_name": "TEXT NOT NULL",
+        "description":"TEXT",
+        "dir": "TEXT",
+        "UNIQUE": ["project_name"],
+        "HASH_COLS": {"hash":["project_name"]}
+    }
+}

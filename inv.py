@@ -13,9 +13,12 @@ if __name__ == "__main__":
         description="""
         INVentory management system.
         store information about available stock, devices info, and shop cost.
-        Also store projects (list of devices) and assemblies (list of projects).
+        Also store projects (list of devices).
+        All imported date are temporary stored in BOM table, allowing creation
+        of common BOM and shop list. When comited, alements from BOM table is
+        transfered to stock table and project is created.
         
-        Scan all BOMs and put into transaction DB (each element into separate row).
+        Scan all BOMs and put into BOM table (each element into separate row).
         Always write to device table and shop table (also when not adding to stock)
         add to stock when commiting BOM
         Output is written in stock.sqldb file. If the file is not found, it will be created based on sql_scheme.jsonc file
@@ -27,40 +30,42 @@ if __name__ == "__main__":
     )
     command_parser = cli.add_subparsers(title="commands", dest="command")
 
-    cli_bom = command_parser.add_parser(
-        "bom", help="scan BOMs and put into transaction DB"
+    cli_import_bom = command_parser.add_parser(
+        "import_bom",
+        allow_abbrev=True,
+        help="scan xls/csv files and put into BOM table",
     )
-    cli_bom.add_argument(
+    cli_import_bom.add_argument(
         "-d",
         "--dir",
         default=os.getcwd(),  # for jupyter: os.path.dirname(os.path.abspath(__file__))
         help="Directory to start scan with. If omitted, current directory is used",
         required=False,
     )
-    cli_bom.add_argument(
+    cli_import_bom.add_argument(
         "-f",
         "--file",
         help="""
-        xls\\xlsx file name to add/replace in stock.csv.
+        xls/xlsx file name to add/replace in stock.csv.
         Will import only files where this FILE is within file name. Case sensitive
         """,
         required=False,
     )
-    cli_bom.add_argument(
+    cli_import_bom.add_argument(
         "-q",
         "--qty",
         help="multiply 'Order Qty.' by this value. If omitted, no multiplication is done, if q=-1 will ask for value for each BOM",
         required=False,
         default=1,
     )
-    cli_bom.add_argument(
+    cli_import_bom.add_argument(
         "-F",
         "--format",
         help=f"format of file to import, possible values: {list(import_format.keys())}. Defoult is {list(import_format.keys())[0]}",
         required=False,
         default=list(import_format.keys())[0],  # LCSC
     )
-    cli_bom.set_defaults(func=bom)
+    cli_import_bom.set_defaults(func=bom)
 
     cli_transact = command_parser.add_parser(
         "transact",
@@ -95,6 +100,12 @@ if __name__ == "__main__":
     cli_commit.set_defaults(func=commit)
 
     args = cli.parse_args()
+    # may happen (for sure in vscode when debuging) that args have some spaces
+    for attr_name in dir(args):
+        if not attr_name.startswith("__"):
+            attr_val = getattr(args, attr_name)
+            if isinstance(attr_val, str):
+                setattr(args, attr_name, attr_val.strip())
 
     # check if we have proper sql file
     try:

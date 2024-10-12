@@ -11,6 +11,14 @@
                 "${command:pickArgs}"
             ]
         },
+        {
+            "name": "bom with gps dir",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "inv",
+            "console": "integratedTerminal",
+            "args": ["bom","-d /home/mi/docs/prog/MCU/gps_chip_antena/"]
+        },
         
     ]
 }

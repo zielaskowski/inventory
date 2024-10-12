@@ -8,8 +8,13 @@ import pandas as pd
 
 from app.common import read_json
 from conf.config import db_file, SQL_scheme
-from app.error import sql_checkError, sql_createError, read_jsonError, sql_executeError
-from app.error import messageHandler
+from app.error import (
+    sql_checkError,
+    sql_createError,
+    read_jsonError,
+    sql_executeError,
+)
+from app.error import messageHandler, sql_tabError
 
 
 msg = messageHandler()
@@ -79,7 +84,9 @@ def query(
         return pd.DataFrame()
     resp = resp[cmd]
     if tab == "STOCK":
-        idx = stock_index(db_file=db_file, search=resp.loc[:, "symbol"].to_list())
+        idx = stock_index(
+            db_file=db_file, search=resp.loc[:, "symbol"].to_list()
+        )
         if idx is not None:
             resp = resp.merge(idx, how="left", on="symbol")
     return resp.drop_duplicates()
@@ -105,7 +112,9 @@ def index_components(db_file: str, search: List) -> List[str]:
     cmd += "i.name LIKE 'none' "  # just to finish last OR
     cmd += ")"
     resp = __sql_execute__([cmd], db_file=db_file)
-    return [] if resp is None or resp[cmd].empty else resp[cmd]["symbol"].to_list()
+    return (
+        [] if resp is None or resp[cmd].empty else resp[cmd]["symbol"].to_list()
+    )
 
 
 def stock_index(db_file: str, search: List) -> Union[pd.DataFrame, None]:
@@ -135,7 +144,9 @@ def stock_index(db_file: str, search: List) -> Union[pd.DataFrame, None]:
     return resp[cmd]
 
 
-def currency_of_country(db_file: str, country: Union[List, set]) -> pd.DataFrame:
+def currency_of_country(
+    db_file: str, country: Union[List, set]
+) -> pd.DataFrame:
     """
     Return currency info for country
     """
@@ -176,23 +187,28 @@ def currency_rate(db_file: str, dat: pd.DataFrame) -> pd.DataFrame:
     return pd.concat(resp.values(), ignore_index=True)
 
 
-def tab_exists(tab: str) -> bool:
+def tab_exists(tab: str) -> None:
     # check if tab exists!
     sql_scheme = read_json(SQL_scheme)
     if tab not in sql_scheme.keys():
-        print("Wrong table name. Existing tables:")
-        print(list(sql_scheme.keys()))
-        return False
-    return True
+        raise sql_tabError(tab, sql_scheme.keys())
 
 
-def put(dat: pd.DataFrame, tab: str, on_conflict: str) -> Union[Dict, None]:
+def put(dat: pd.DataFrame, tab: str, on_conflict: list[dict]) -> Dict:
     # put DataFrame into sql at table=tab
     # takes from DataFrame only columns present in sql table
     # check if tab exists!
-    # on_conflict: '+' | 'replace' | 'ignore'
-    if not tab_exists(tab):
-        return
+    # on_conflict is a list of dictionary:
+    # [
+    #  {
+    #  'action': UPDATE SET|REPLACE|NOTHING|FAIL|ABORT|ROLLBACK
+    #  'unique_col':[cols] //may be from UNIQUE or PRIMARY KEY
+    #  'add_col':[cols] //UPDATE will add new value to existing
+    #  }
+    # ]
+    # put() may raise sql_executeError and sql_tabError
+    tab_exists(tab)
+
     if dat.empty:
         return
     # all data shall be in capital letters!
@@ -200,39 +216,36 @@ def put(dat: pd.DataFrame, tab: str, on_conflict: str) -> Union[Dict, None]:
         lambda x: x.str.upper() if isinstance(x, str) else x  # type: ignore
     )
 
-    sql_scheme = read_json(SQL_scheme)
-    tabL = [f"{tab}_DESC", tab] if f"{tab}_DESC" in sql_scheme.keys() else [tab]
-
-    # ON CONFLICT (unique_col1, unique_col2) DO UPDATE SET col = EXCLUDED.col
-
     # add new data to sql
-    for t in tabL:
-        sql_columns = tab_columns(t, db_file)
-        d = dat.loc[:, [c in sql_columns for c in dat.columns]]
-        resp = __write_table__(
-            dat=d,
-            tab=t,
-            db_file=db_file,
-        )
-        if not resp:
-            return
-
-    return {"put": "success"}
+    sql_columns = tab_columns(tab)
+    d = dat.loc[:, [c in sql_columns for c in dat.columns]]
+    return __write_table__(dat=d, tab=tab, on_conflict=on_conflict)
 
 
 def __write_table__(
-    dat: pd.DataFrame, tab: str, db_file: str
-) -> Union[None, Dict[str, pd.DataFrame]]:
+    dat: pd.DataFrame, tab: str, on_conflict: str
+) -> Dict[str, pd.DataFrame]:
     """writes DataFrame to SQL table 'tab'"""
     records = list(dat.astype("string").to_records(index=False))
     records = [tuple(__escape_quote__(r)) for r in records]
-    cmd = [
-        f"""INSERT OR REPLACE INTO {tab} {tuple(dat.columns)}
-            VALUES {values_list}
+
+    cmd = f"""INSERT INTO {tab} {tuple(dat.columns)}
+            VALUES
         """
-        for values_list in records
-    ]
-    return __sql_execute__(cmd, db_file)
+    cmd += ",".join([str(c) for c in records])
+    
+    for conflict in on_conflict:
+        action = conflict["action"]
+        unique_col = conflict["unique_col"]
+
+        cmd += f"""ON CONFLICT ({','.join(unique_col)})
+                    DO {action}
+                """
+        if action == "UPDATE SET":
+            cmd += ",".join(
+                [f"{c} = {c} + EXCLUDED.{c}" for c in conflict["add_col"]]
+            )
+    return __sql_execute__([cmd])
 
 
 def getDF(**kwargs) -> pd.DataFrame:
@@ -348,13 +361,17 @@ def __split_list__(lst: str, nel: int) -> list:
     """
     lst_split = re.split(" OR ", lst)
     n = (len(lst_split) // nel) + 1
-    cmd_split = [" OR ".join(lst_split[i * nel : (i + 1) * nel]) for i in range(n)]
+    cmd_split = [
+        " OR ".join(lst_split[i * nel : (i + 1) * nel]) for i in range(n)
+    ]
     # make sure each part starts and ends with parenthesis
     cmd_split = ["(" + re.sub(r"[\(\)]", "", s) + ") " for s in cmd_split]
     return cmd_split
 
 
-def rm_all(tab: str, symbol: str, db_file: str) -> Union[None, Dict[str, pd.DataFrame]]:
+def rm_all(
+    tab: str, symbol: str, db_file: str
+) -> Union[None, Dict[str, pd.DataFrame]]:
     """
     Remove all instances to asset
     remove from given tab, from tab+_DESC and from COMPONENTS
@@ -397,7 +414,7 @@ def sql_check() -> None:
     """
     # make sure if exists
     if not os.path.isfile(db_file):
-        msg.SQL_file_missing(db_file)
+        msg.SQL_file_miss(db_file)
         sql_create()
 
     # check if correct sql
@@ -416,7 +433,10 @@ def sql_check() -> None:
 def __sql_execute__(script: list) -> Dict[str, pd.DataFrame]:
     """Execute provided SQL commands.
     If db returns anything write as dict {command: respose as pd.DataFrame}
+    Command is shortened to first 100 characters
     Split cmd if logic tree exceeds 500 (just in case as limit is 1000)
+    Also control cmd character number (<100e6) NOT IMPLEMENTED
+    will generate error only
 
     Args:
         script (list): list of sql commands to execute
@@ -424,8 +444,12 @@ def __sql_execute__(script: list) -> Dict[str, pd.DataFrame]:
 
     Returns:
         Dict: dict of response from sql
-            {command: response in form of pd.DataFrame (may be empty)}
+            {command[0:20]: response in form of pd.DataFrame (may be empty)}
     """
+    for c in script:
+        if len(c) > 100e6:
+            raise sql_executeError("Command too long ", c)
+
     ans = {}
     cmd = ""
     # when writing panda as dictionary
@@ -437,17 +461,19 @@ def __sql_execute__(script: list) -> Dict[str, pd.DataFrame]:
     script_split = __split_cmd__(script)
     try:
         con = sqlite3.connect(
-            db_file, detect_types=sqlite3.PARSE_COLNAMES | sqlite3.PARSE_DECLTYPES
+            db_file,
+            detect_types=sqlite3.PARSE_COLNAMES | sqlite3.PARSE_DECLTYPES,
         )
         cur = con.cursor()
         for cmd_split in script_split:
             cmd = script[script_split.index(cmd_split)]
+            cmd100 = cmd[0:100]
             for c in cmd_split:
                 cur.execute(c)
                 if a := cur.fetchall():
                     colnames = [c[0] for c in cur.description]
                     if cmd in ans:
-                        ans[cmd] = pd.concat(
+                        ans[cmd100] = pd.concat(
                             [
                                 ans[cmd].fillna(""),
                                 pd.DataFrame(a, columns=colnames).fillna(""),
@@ -455,15 +481,15 @@ def __sql_execute__(script: list) -> Dict[str, pd.DataFrame]:
                             ignore_index=True,
                         )
                     else:
-                        ans[cmd] = pd.DataFrame(a, columns=colnames)
+                        ans[cmd100] = pd.DataFrame(a, columns=colnames)
                 else:
-                    ans[cmd] = pd.DataFrame()
+                    ans[cmd100] = pd.DataFrame()
         con.commit()
         return ans
     except sqlite3.IntegrityError as err:
-        raise sql_executeError(err, cmd)
+        raise sql_executeError(err, cmd100)
     except sqlite3.Error as err:
-        raise sql_executeError(err, cmd)
+        raise sql_executeError(err, cmd100)
     finally:
         cur.close()  # type: ignore
         con.close()  # type: ignore
@@ -498,12 +524,16 @@ def sql_create() -> None:
         tab_cmd += ") "
         sql_cmd.append(tab_cmd)
         if unique_cols := str(
-            sql_scheme[tab]["UNIQUE"] if "UNIQUE" in sql_scheme[tab].keys() else ""
+            sql_scheme[tab]["UNIQUE"]
+            if "UNIQUE" in sql_scheme[tab].keys()
+            else ""
         ):
             # replace square brackets with parenthesis
             unique_cols = re.sub(r"\[", r"(", unique_cols)
             unique_cols = re.sub(r"\]", r")", unique_cols)
-            tab_cmd = f"CREATE UNIQUE INDEX uniqueRow_{tab} ON {tab} {unique_cols}"
+            tab_cmd = (
+                f"CREATE UNIQUE INDEX uniqueRow_{tab} ON {tab} {unique_cols}"
+            )
             sql_cmd.append(tab_cmd)
 
     # sort sql_cmd list (to make sure you refer to columns that already exists)
@@ -522,7 +552,7 @@ def sql_create() -> None:
         print(err)
         raise sql_createError(SQL_scheme)
 
-    if sorted(status[sql_cmd[-1]]["tbl_name"].to_list()) != sorted(
+    if sorted(status[sql_cmd[-1][0:100]]["tbl_name"].to_list()) != sorted(
         list(sql_scheme.keys())
     ):
         if os.path.isfile(db_file):

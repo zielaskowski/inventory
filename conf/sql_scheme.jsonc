@@ -19,14 +19,12 @@
     //** write all data about DEVICE and shop (cost)
     "BOM": {
         "qty": "INTEGER NOT NULL",
-        "order_qty": "INTEGER NOT NULL",
-        "device_hash": "TEXT",
+        "device_hash": "TEXT PRIMARY KEY",
         "FOREIGN": [
             {
                 "device_hash": "DEVICE(hash)"
             }
-        ],
-        "UNIQUE": ["device_hash"]
+        ]
     },
     //** list of devices, not necessery in stock
     "DEVICE": {
@@ -35,8 +33,6 @@
         "device_manufacturer": "TEXT NOT NULL",
         "device_description": "TEXT",
         "package": "TEXT",
-        "value": "INTEGER",
-        "units": "TEXT",
         "HASH_COLS": {"hash":["device_id","device_manufacturer"]}
     },
     //** shop list, with cost and order_qty and date
@@ -58,19 +54,18 @@
     },
     //** what we have in stock
     "STOCK": {
-        "id": "INTEGER PRIMARY KEY",
-        "device_hash": "TEXT",
+        "device_hash": "TEXT PRIMARY KEY",
         "stock_qty": "INTEGER NOT NULL",
         "FOREIGN": [
             {
                 "device_hash": "DEVICE(hash)"
             }
-        ],
-        "UNIQUE":["device_hash"]
+        ]
     },
     //** projects, with list of devices and qty
     "PROJECT": {
-        "proj_hash": "INTEGER",
+        "id":"INTEGER PRIMARY KEY",
+        "proj_name": "TEXT",
         "device_hash": "TEXT",
         "qty": "INTEGER NOT NULL",
         "FOREIGN": [
@@ -78,17 +73,15 @@
                 "device_hash": "DEVICE(hash)"
             },
             {
-                "proj_hash": "PROJECT_INFO(hash)"
+                "proj_name": "PROJECT_INFO(project_name)"
             }
-        ]
+        ],
+        "UNIQUE": ["proj_name","device_hash"]
     },
     //** project description and name
     "PROJECT_INFO": {
-        "hash": "TEXT PRIMARY KEY",
-        "project_name": "TEXT NOT NULL",
+        "project_name": "TEXT PRIMARY KEY",
         "description":"TEXT",
-        "dir": "TEXT",
-        "UNIQUE": ["project_name"],
-        "HASH_COLS": {"hash":["project_name"]}
+        "dir": "TEXT"
     }
 }

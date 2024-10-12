@@ -2,7 +2,7 @@ import locale
 import json
 import sys
 import hashlib
-from typing import Dict, Union, Tuple
+from typing import Dict, Union
 from argparse import Namespace
 import re
 import os
@@ -13,10 +13,9 @@ from contextlib import contextmanager
 from datetime import date, timedelta
 from datetime import datetime as dt
 import pytz
-import json
 from json import JSONDecodeError
 
-from app.error import read_jsonError, check_dirError
+from app.error import read_jsonError, check_dirError, hashError
 
 
 def read_json(file: str) -> Dict:
@@ -52,14 +51,14 @@ def find_xlsx_files(directory: str) -> list:
 def check_dir_file(args: Namespace) -> list[str]:
     # check search directory
     if not os.path.exists(args.dir):
-        raise check_dirError(f"{args.dir} doesn't exists")
+        raise check_dirError(args.dir)
     xlsx_files = find_xlsx_files(args.dir)
 
     # filter by file name
     if args.file is not None:
         xlsx_files = [f for f in xlsx_files if args.file in f]
         if xlsx_files == []:
-            raise check_dirError(f"{args.file} doesn't exists")
+            raise check_dirError(args.file)
     return xlsx_files
 
 
@@ -127,14 +126,9 @@ def convert_date(dates: pd.Series) -> pd.Series:
     return d1
 
 
-def hash_table(dat: pd.DataFrame, tab: str) -> Union[pd.Series, None]:
-    if not all(el in dat.columns for el in ["symbol", "name"]):
-        print("no columns to hash")
-        return None
-    d = dat.copy(deep=True)
-    d["tab"] = tab
-    d["hash"] = [
-        hashlib.md5("".join(r).encode("utf-8")).hexdigest()
-        for r in d.loc[:, ["symbol", "name", "tab"]].to_records(index=False)
-    ]
-    return d["hash"]
+def hash_table(tab: str, dat: pd.Series, cols: list[str]) -> pd.Series:
+    if not all(c in dat for c in cols):
+        raise hashError(cols)
+
+    # d = dat.copy(deep=True)
+    return hashlib.md5("".join(list(dat[cols])).encode("utf-8")).hexdigest()

@@ -22,7 +22,7 @@ import_format = {
             "package.1": "package",
             "description.1": "device_description",
             "order qty.": "order_qty",
-            "Unit Price(USD)": 'price'
+            "unit price(usd)": 'price'
         },
         "dtype": {  # lower case only, after cols rename!
             "qty": int,

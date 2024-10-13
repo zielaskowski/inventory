@@ -12,17 +12,37 @@
     //** UNIQUE columns are indexed automatically
     //** PRIMARY columns are indexed automatically
     //** HASH_COLS is not SQL! it's aditional info to allow hashing automation
-
+    //** ON_CONFLICT describes action to perform on conflict
     //** preparing BOM for project
     //** import DEVICE with bom_qty and shop_qty and cost from file
     //** do not affect stock untill not commited,
     //** write all data about DEVICE and shop (cost)
     "BOM": {
+        "id": "INTEGER PRIMARY KEY",
         "qty": "INTEGER NOT NULL",
-        "device_hash": "TEXT PRIMARY KEY",
+        "device_hash": "TEXT NOT NULL",
+        "dir": "TEXT",
+        "file": "TEXT NOT NULL",
         "FOREIGN": [
             {
                 "device_hash": "DEVICE(hash)"
+            }
+        ],
+        "UNIQUE": [
+            "device_hash",
+            "file"
+        ],
+        "ON_CONFLICT": [
+            {
+                "action": "UPDATE SET",
+                "unique_col": [
+                    "device_hash",
+                    "file"
+                ],
+                "add_col": [
+                    "qty"
+                ]
+                //**# UPDATE will add new value to existing valu in add_col
             }
         ]
     },
@@ -33,7 +53,17 @@
         "device_manufacturer": "TEXT NOT NULL",
         "device_description": "TEXT",
         "package": "TEXT",
-        "HASH_COLS": {"hash":["device_id","device_manufacturer"]}
+        "HASH_COLS": {
+            "hash": [
+                "device_id",
+                "device_manufacturer"
+            ]
+        },
+        "ON_CONFLICT": [
+            {
+                "action": "REPLACE"
+            }
+        ]
     },
     //** shop list, with cost and order_qty and date
     "SHOP": {
@@ -49,8 +79,16 @@
                 "device_hash": "DEVICE(hash)"
             }
         ],
-        "UNIQUE": ["device_hash","date","shop"]
-
+        "UNIQUE": [
+            "device_hash",
+            "date",
+            "shop"
+        ],
+        "ON_CONFLICT": [
+            {
+                "action": "REPLACE"
+            }
+        ]
     },
     //** what we have in stock
     "STOCK": {
@@ -60,13 +98,24 @@
             {
                 "device_hash": "DEVICE(hash)"
             }
+        ],
+        "ON_CONFLICT": [
+            {
+                "action": "UPDATE SET",
+                "unique_col": [
+                    "device_hash"
+                ],
+                "add_col": [
+                    "stock_qty"
+                ]
+            }
         ]
     },
     //** projects, with list of devices and qty
     "PROJECT": {
-        "id":"INTEGER PRIMARY KEY",
-        "proj_name": "TEXT",
-        "device_hash": "TEXT",
+        "id": "INTEGER PRIMARY KEY",
+        "proj_name": "TEXT NOT NULL",
+        "device_hash": "TEXT NOT NULL",
         "qty": "INTEGER NOT NULL",
         "FOREIGN": [
             {
@@ -76,12 +125,32 @@
                 "proj_name": "PROJECT_INFO(project_name)"
             }
         ],
-        "UNIQUE": ["proj_name","device_hash"]
+        "UNIQUE": [
+            "proj_name",
+            "device_hash"
+        ],
+        "ON_CONFLICT": [
+            {
+                "action": "UPDATE SET",
+                "unique_col": [
+                    "proj_name",
+                    "device_hash"
+                ],
+                "add_col": [
+                    "qty"
+                ]
+            }
+        ]
     },
     //** project description and name
     "PROJECT_INFO": {
         "project_name": "TEXT PRIMARY KEY",
-        "description":"TEXT",
-        "dir": "TEXT"
+        "description": "TEXT",
+        "dir": "TEXT",
+        "ON_CONFLICT": [
+            {
+                "action": "REPLACE"
+            }
+        ]
     }
 }

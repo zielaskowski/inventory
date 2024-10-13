@@ -17,8 +17,21 @@
             "request": "launch",
             "module": "inv",
             "console": "integratedTerminal",
-            "args": ["bom","-d /home/mi/docs/prog/MCU/gps_chip_antena/"]
+            "args": [
+                "import_bom",
+                "-d /home/mi/docs/prog/MCU/gps_chip_antena/",
+                "-r"
+            ]
         },
-        
+        {
+            "name": "shop list",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "inv",
+            "console": "integratedTerminal",
+            "args": [
+                "transact",
+            ]
+        },
     ]
 }

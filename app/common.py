@@ -18,6 +18,7 @@ from json import JSONDecodeError
 from app.error import read_jsonError, check_dirError, hashError
 
 
+
 def read_json(file: str) -> Dict:
     """read json file
     ignores comments: everything from '//**' to eol"""
@@ -102,7 +103,9 @@ def convert_date(dates: pd.Series) -> pd.Series:
     dates = dates.apply(lambda x: x if not pd.isna(x) else "1 Sty 1900")
     dates = dates.apply(lambda x: x if re.search(r"[0-9]", x) else "1 Sty 1900")
 
-    d1 = date_locale(today + " " + dates, "en_GB.utf8", r"%d %b %Y %H:%M")  # hh:ss
+    d1 = date_locale(
+        today + " " + dates, "en_GB.utf8", r"%d %b %Y %H:%M"
+    )  # hh:ss
     d2 = date_locale(year + " " + dates, "en_GB.utf8", r"%Y %d %b")  # 24 Feb
     d3 = date_locale(year + " " + dates, "en_GB.utf8", r"%Y %b %d")  # Jan 22
     d4 = date_locale(year + " " + dates, "en_GB.utf8", r"%Y %d %b")  # 25 Jan
@@ -132,3 +135,17 @@ def hash_table(tab: str, dat: pd.Series, cols: list[str]) -> pd.Series:
 
     # d = dat.copy(deep=True)
     return hashlib.md5("".join(list(dat[cols])).encode("utf-8")).hexdigest()
+
+
+def unpack_foreign(foreign: list[dict[str, str]]) -> list[str]:
+    col = list(foreign.keys())[0]
+    # get foreign table and column
+    f_tab_col = list(foreign.values())[0]
+
+    # get foreign_tab
+    (
+        f_tab,
+        f_col,
+    ) = f_tab_col.split("(")
+    f_col = f_col.replace(")", "")
+    return col, f_tab, f_col

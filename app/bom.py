@@ -1,10 +1,11 @@
 import os
+from datetime import date
 import pandas as pd
 from pandas.errors import ParserError
 from argparse import Namespace
 
-from app.sql import put
-from app.common import check_dir_file, read_json, hash_table
+from app.sql import put, getL, rm
+from app.common import check_dir_file, read_json, hash_table, unpack_foreign
 from conf.config import import_format, SQL_scheme
 from app.error import messageHandler, write_bomError
 
@@ -15,6 +16,8 @@ def import_bom(
     args: Namespace,
 ) -> None:
     xls_files = check_dir_file(args)
+    new_stock = pd.DataFrame()
+    imported_files = []
 
     # import all xlsx files
     for file in xls_files:
@@ -42,54 +45,88 @@ def import_bom(
             print(e)
             continue
 
+        old_files = getL(tab="BOM", get=["file"])
+        if args.replace:
+            # remove all old data
+            rm(tab="BOM", value=os.path.basename(file), column="file")
+        else:
+            if os.path.basename(file) in old_files:
+                msg.file_already_imported(os.path.basename(file))
+                print("Are you sure you want to add this file again? (y/n)")
+                if input() != "y":
+                    continue
+
         # rename (and tidy) columns according to format of imported file
         new_stock = __columns_align__(
             new_stock.copy(),
             file=file,
             supplier=args.format,
         )
+
+        # write data to SQL
         try:
-            write_bom(
+            write_tab(
                 dat=new_stock.copy(),
+                tab="DEVICE",
                 qty=args.qty,
                 file=file,
-                format=import_format[args.format]["header"],
+                row_shift=import_format[args.format]["header"],
             )
-        except write_bomError as e:
-            print(e)
-            continue
-
-        try:
-            write_shop(
+            write_tab(
                 dat=new_stock.copy(),
+                tab="BOM",
+                qty=args.qty,
                 file=file,
-                format=import_format[args.format]["header"],
+                row_shift=import_format[args.format]["header"],
+            )
+            write_tab(
+                dat=new_stock.copy(),
+                tab="SHOP",
+                qty=args.qty,
+                file=file,
+                row_shift=import_format[args.format]["header"],
             )
         except write_bomError as e:
             print(e)
             continue
-            
-def write_shop(dat: pd.DataFrame, file: str, row_shift: int) -> None:
-    pass
+        imported_files.append(file)
 
-def write_bom(dat: pd.DataFrame, qty: int, file: str, row_shift: int) -> None:
+    # summary
+    if new_stock.empty:
+        msg.BOM_import_summary(files=[], devs=0, cost=0)
+    else:
+        devs = len(new_stock["device_id"].unique())
+        new_stock["tot_cost"] = new_stock["price"] * new_stock["qty"]
+        cost = new_stock["tot_cost"].sum()
+        msg.BOM_import_summary(imported_files, devs, cost)
+
+
+def write_tab(
+    dat: pd.DataFrame, tab: str, qty: int, file: str, row_shift: int
+) -> None:
+    # prepares and check if data aligned with table.
+    # then writes to table
+
     # check columns: mandatary, nice to have
     # and hash, also from foreign tables
     (
         BOM_must_cols,
         BOM_nice_cols,
         BOM_hash_cols,
-    ) = __tab_cols__("BOM")
-    
+    ) = __tab_cols__(tab)
+
     # check if all required columns are in new_stock
     missing_cols = [c for c in BOM_must_cols if c not in dat.columns]
     if any(missing_cols):
-        raise write_bomError(f"Missing mandatory columns: {missing_cols}")
+        raise write_bomError(
+            f"For table {tab} missing mandatory columns: {missing_cols}"
+        )
 
     # multiply by qty or ask for value
-    if qty == -1:
-        qty = input(f"Provide 'Qty' multiplyer for {file}: ")
-    dat["qty"] = dat["qty"] * qty
+    if "qty" in dat.columns:
+        if qty == -1:
+            qty = input(f"Provide 'Qty' multiplyer for {file}: ")
+        dat["qty"] = dat["qty"] * qty
 
     # remove rows with NA in must_cols
     dat = __NA_rows__(
@@ -104,7 +141,7 @@ def write_bom(dat: pd.DataFrame, qty: int, file: str, row_shift: int) -> None:
         hash_cols = BOM_hash_cols[hashed_col]
         dat[hashed_col] = dat.apply(
             lambda x: hash_table(
-                "BOM",
+                tab,
                 x,
                 hash_cols,
             ),
@@ -113,22 +150,11 @@ def write_bom(dat: pd.DataFrame, qty: int, file: str, row_shift: int) -> None:
 
     # put into SQL
     # need to start from DEVICE becouse BOM refer to it
+    sql_scheme = read_json(SQL_scheme)
     put(
         dat=dat,
-        tab="DEVICE",
-        on_conflict=[{"action": "IGNORE", "unique_col": ["hash"]}],
-    )
-
-    put(
-        dat=dat,
-        tab="BOM",
-        on_conflict=[
-            {
-                "action": "UPDATE SET",
-                "unique_col": ["device_hash"],
-                "add_col": ["qty"],  # UPDATE will add new value to existing
-            },
-        ],
+        tab=tab,
+        on_conflict=sql_scheme[tab]["ON_CONFLICT"],
     )
 
 
@@ -141,30 +167,15 @@ def __NA_rows__(
     # check rows with any NA
 
     # inform user and remove from new_stock, remove only when must rows missing
-    na_rows = df[
-        df.loc[
-            :,
-            must_cols,
-        ]
-        .isna()
-        .any(axis=1)
-    ]
-    na_rows_int = na_rows.index.values + row_shift
-    print(f"Missing necessery data in rows: {na_rows_int}. Skiping these rows.")
+    na_rows = df[df.loc[:, must_cols].isna().any(axis=1)]
+    na_rows_id: list[int] = [int(c) + row_shift for c in na_rows.index.values]
+    msg.na_rows(row_id=na_rows_id)
     df = df[~df.index.isin(na_rows.index)]
 
     # check for nice cols
     nicer_cols = [c for c in nice_cols if c in df.columns]
-    na_rows = df[
-        df.loc[
-            :,
-            nicer_cols,
-        ]
-        .isna()
-        .any(axis=1)
-    ]
-    print("These rows have NAs in NON essential columns:")
-    print(na_rows)
+    na_rows = df[df.loc[:, nicer_cols].isna().any(axis=1)]
+    msg.na_rows(rows=na_rows)
 
     return df
 
@@ -206,19 +217,10 @@ def __tab_cols__(
 
     if "FOREIGN" in tab_cols:
         for F in sql_scheme[tab]["FOREIGN"]:
-            col = list(F.keys())[0]
+            col, foreign_tab, foreign_col = unpack_foreign(F)
+
             nice_cols = [c for c in nice_cols if c not in col]
             must_cols = [c for c in must_cols if c not in col]
-
-            # get foreign table and column
-            foreign_tab_col = list(F.values())[0]
-
-            # get foreign_tab
-            (
-                foreign_tab,
-                foreign_col,
-            ) = foreign_tab_col.split("(")
-            foreign_col = foreign_col.replace(")", "")
 
             # get foreign columns
             (
@@ -304,6 +306,7 @@ def __columns_align__(
     # add column with path and file name and supplier
     n_stock["dir"] = os.path.dirname(file)
     n_stock["file"] = os.path.basename(file)
-    n_stock["supplier"] = supplier
+    n_stock["shop"] = supplier
+    n_stock["date"] = date.today().strftime("%Y-%m-%d")
 
     return n_stock

@@ -6,8 +6,8 @@ from typing import Dict, List, Union, Set
 
 import pandas as pd
 
-from app.common import read_json
-from conf.config import db_file, SQL_scheme
+from app.common import read_json, unpack_foreign
+from conf.config import db_file, SQL_scheme, SQL_keywords
 from app.error import (
     sql_checkError,
     sql_createError,
@@ -229,22 +229,28 @@ def __write_table__(
     records = list(dat.astype("string").to_records(index=False))
     records = [tuple(__escape_quote__(r)) for r in records]
 
-    cmd = f"""INSERT INTO {tab} {tuple(dat.columns)}
+    for conflict in on_conflict:
+        action = conflict["action"]
+        if action == "UPDATE SET":
+            unique_col = conflict["unique_col"]
+            cmd_action = f"""ON CONFLICT ({','.join(unique_col)})
+                        DO {action}
+                    """
+            cmd_action += ",".join(
+                [f"{c} = {c} + EXCLUDED.{c}" for c in conflict["add_col"]]
+            )
+            action = ""
+        else:
+            action = "OR " + action
+            cmd_action = ""
+            break
+
+    cmd = f"""INSERT {action} INTO {tab} {tuple(dat.columns)}
             VALUES
         """
     cmd += ",".join([str(c) for c in records])
-    
-    for conflict in on_conflict:
-        action = conflict["action"]
-        unique_col = conflict["unique_col"]
+    cmd += cmd_action
 
-        cmd += f"""ON CONFLICT ({','.join(unique_col)})
-                    DO {action}
-                """
-        if action == "UPDATE SET":
-            cmd += ",".join(
-                [f"{c} = {c} + EXCLUDED.{c}" for c in conflict["add_col"]]
-            )
     return __sql_execute__([cmd])
 
 
@@ -269,7 +275,44 @@ def getL(**kwargs) -> List:
 
 
 def get(
-    db_file: str,
+    tab: str,
+    get: Union[List[str], Set] = ["%"],
+    search: Union[List[str], Set] = ["%"],
+    where: Union[List[str], Set] = ["%"],
+    follow: bool = False,
+) -> Dict[str, pd.DataFrame]:  # sourcery skip: default-mutable-arg
+    """get info from table
+    return as Dict:
+    - each key for column searched,
+    - value as DataFrame with columns selected by get
+    return only unique values
+
+    Args:
+        tab: table to search
+        get: column name to extract (defoult '%' for all columns)
+        search: what to get (defoult '%' for everything)
+        where: columns used for searching (defoult '%' for everything)
+        follow: if True, search in all FOREIGN subtables
+    """
+    sql_scheme = read_json(SQL_scheme)
+    if "FOREIGN" not in sql_scheme[tab].keys():
+        follow = False
+
+    resp = __get_tab__(tab=tab, get=get, search=search, where=where)
+    if follow:
+        for r in resp:
+            base_tab = resp[r]
+            for F in sql_scheme[tab]['FOREIGN']:
+                col, f_tab, f_col = unpack_foreign(F)
+                f_DF = getDF(tab=f_tab)
+                base_tab = base_tab.merge(f_DF, left_on=col, right_on=f_col)
+                resp[r] = base_tab
+
+    return resp
+
+
+
+def __get_tab__(
     tab: str,
     get: Union[List[str], Set] = ["%"],
     search: Union[List[str], Set] = ["%"],
@@ -282,7 +325,6 @@ def get(
     return only unique values
 
     Args:
-        db_file: file location
         tab: table to search
         get: column name to extract (defoult '%' for all columns)
         search: what to get (defoult '%' for everything)
@@ -290,7 +332,7 @@ def get(
     """
     search = __escape_quote__(search)
     resp = {}
-    all_cols = tab_columns(tab=tab, db_file=db_file)
+    all_cols = tab_columns(tab=tab)
     tab = tab.upper()
     search = [s.upper() for s in search]
     get = [g.lower() for g in get]
@@ -305,8 +347,7 @@ def get(
         return {}
 
     # check if tab exists!
-    if not tab_exists(tab):
-        return {}
+    tab_exists(tab)
 
     for c in where:
         cmd = f"SELECT {','.join(get)} FROM {tab} WHERE "
@@ -314,8 +355,8 @@ def get(
         cmd += " ".join([f"{c} LIKE '{s}' OR " for s in search])
         cmd += f"{c} LIKE 'none'"  # just to close last 'OR'
         cmd += ")"
-        if resp_col := __sql_execute__([cmd], db_file):
-            resp[c] = resp_col[cmd].drop_duplicates()
+        if resp_col := __sql_execute__([cmd]):
+            resp[c] = resp_col[cmd[0:100]].drop_duplicates()
     return resp
 
 
@@ -367,6 +408,12 @@ def __split_list__(lst: str, nel: int) -> list:
     # make sure each part starts and ends with parenthesis
     cmd_split = ["(" + re.sub(r"[\(\)]", "", s) + ") " for s in cmd_split]
     return cmd_split
+
+
+def rm(tab: str, value: str, column: str) -> None:
+    """Remove all instances of value from column in tab"""
+    cmd = f"DELETE FROM {tab} WHERE {column}='{value}'"
+    __sql_execute__([cmd])
 
 
 def rm_all(
@@ -422,9 +469,7 @@ def sql_check() -> None:
     for i in range(len(sql_scheme)):
         tab = list(sql_scheme.keys())[i]
         scheme_cols = [
-            k
-            for k in sql_scheme[tab].keys()
-            if k not in ["FOREIGN", "UNIQUE", "HASH_COLS"]
+            k for k in sql_scheme[tab].keys() if k not in SQL_keywords
         ]
         if tab_columns(tab) != scheme_cols:
             raise sql_checkError(db_file, tab)
@@ -514,7 +559,7 @@ def sql_create() -> None:
     for tab in sql_scheme:
         tab_cmd = f"CREATE TABLE {tab} ("
         for col in sql_scheme[tab]:
-            if col not in ["FOREIGN", "UNIQUE", "HASH_COLS"]:
+            if col not in SQL_keywords:
                 tab_cmd += f"{col} {sql_scheme[tab][col]}, "
             elif col == "FOREIGN":  # FOREIGN
                 for foreign in sql_scheme[tab][col]:

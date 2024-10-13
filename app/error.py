@@ -1,4 +1,6 @@
 import os
+import pandas as pd
+
 
 class write_bomError(Exception):
     def __init__(self, msg: str, *args: object) -> None:
@@ -66,7 +68,7 @@ class sql_executeError(Exception):
     def __init__(self, err: object, cmd: str, *args: object) -> None:
         self.message = str(err) + " on cmd:\n" + cmd[0:100]
         if len(cmd) > 100:
-            self.message +='[...]'
+            self.message += "[...]"
         super().__init__(*args)
 
     def __str__(self) -> str:
@@ -85,6 +87,8 @@ class hashError(Exception):
 class messageHandler:
     def __init__(self) -> None:
         self.message = []
+        # store dataframe hash, to avoid showing twice the same info
+        self.df_hash: float = 0
 
     def SQL_file_miss(self, db_file: str) -> None:
         self.message.append(f"SQL file {db_file} is missing!")
@@ -100,9 +104,41 @@ class messageHandler:
         self.__exec__()
 
     def import_file(self, file: str) -> None:
-        self.message.append("___________________")
+        self.message.append("______Import_______")
         self.message.append("*******************")
         self.message.append(f"Importing file: {os.path.basename(file)}")
+        self.__exec__()
+
+    def na_rows(
+        self, row_id: list[int] = [], rows: pd.DataFrame = pd.DataFrame()
+    ) -> None:
+        if row_id != []:
+            self.message.append(
+                f"Missing necessery data in rows: {row_id}. Skiping these rows."
+            )
+        elif not rows.empty:
+            df_hash = float(pd.util.hash_pandas_object(rows).sum())
+            if self.df_hash != df_hash:
+                self.df_hash = df_hash
+                self.message.append("These rows have NAs in NON essential columns:")
+                self.message.append(rows.__str__())
+
+        self.__exec__()
+
+    def file_already_imported(self, file: str) -> None:
+        self.message.append(f"File {file} was already imported.")
+        self.message.append("Consider using option --replace.")
+        self.__exec__()
+
+    def BOM_import_summary(self, files:list[str], devs: int, cost:float) -> None:
+        self.message.append("______SUMMARY_______")
+        self.message.append("*******************")
+        if devs==0:
+            self.message.append("No devices were added to BOM table.")
+        else:
+            self.message.append(f"{len(files)} files were imported to BOM table:")
+            self.message.append(str(files))
+            self.message.append(f"{devs} devices were added to BOM table, with cost of {cost} in total.")
         self.__exec__()
 
     def __exec__(self) -> None:

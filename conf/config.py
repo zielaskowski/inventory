@@ -1,6 +1,9 @@
 # configuration globals
 SQL_scheme = "./conf/sql_scheme.jsonc"
 
+# list of keywords to be ignored during reading columns from tab
+SQL_keywords = ["FOREIGN", "UNIQUE", "HASH_COLS", "ON_CONFLICT"]
+
 db_file = "./inventory.sqlite"
 cols = (
     []

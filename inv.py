@@ -1,7 +1,7 @@
 import os
 import argparse
 
-from app.bom import bom
+from app.bom import import_bom
 from app.transaction import trans
 from app.commit import commit
 from app.sql import sql_check
@@ -33,7 +33,7 @@ if __name__ == "__main__":
     cli_import_bom = command_parser.add_parser(
         "import_bom",
         allow_abbrev=True,
-        help="scan xls/csv files and put into BOM table",
+        help="Scan xls/csv files and add into BOM table.",
     )
     cli_import_bom.add_argument(
         "-d",
@@ -52,29 +52,40 @@ if __name__ == "__main__":
         required=False,
     )
     cli_import_bom.add_argument(
-        "-q",
-        "--qty",
-        help="multiply 'Order Qty.' by this value. If omitted, no multiplication is done, if q=-1 will ask for value for each BOM",
-        required=False,
-        default=1,
-    )
-    cli_import_bom.add_argument(
         "-F",
         "--format",
         help=f"format of file to import, possible values: {list(import_format.keys())}. Defoult is {list(import_format.keys())[0]}",
         required=False,
         default=list(import_format.keys())[0],  # LCSC
     )
-    cli_import_bom.set_defaults(func=bom)
+    cli_import_bom.add_argument(
+        "-r",
+        "--replace",
+        action='store_true',
+        help="Replace items already imported from the same file",
+        required=False,
+    )
+    cli_import_bom.add_argument(
+        "-q",
+        "--qty",
+        help="multiply 'Order Qty.' by this value. If omitted, no multiplication is done, if q=-1 will ask for value for each BOM",
+        required=False,
+        default=1,
+    )
+    cli_import_bom.set_defaults(func=import_bom)
 
     cli_transact = command_parser.add_parser(
         "transact",
         allow_abbrev=True,
-        help="""Prepare 'shoping list' file from previously imported BOM considering stock.
+        help="""Prepare 'shopping list' file from previously imported BOM considering stock.
         Can also prepare file based on project name""",
     )
     cli_transact.add_argument(
-        "-f", "--file", help="file name to save shoping list", required=False
+        "-f", 
+        "--file",
+        help="File name to save shoping list, defoult is 'shopping list.csv'",
+        required=False,
+        default="shopping_list.csv",
     )
     cli_transact.add_argument(
         "-d",

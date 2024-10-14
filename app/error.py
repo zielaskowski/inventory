@@ -104,6 +104,7 @@ class messageHandler:
         self.__exec__()
 
     def import_file(self, file: str) -> None:
+        self.message.append("")
         self.message.append("______Import_______")
         self.message.append("*******************")
         self.message.append(f"Importing file: {os.path.basename(file)}")
@@ -125,20 +126,34 @@ class messageHandler:
 
         self.__exec__()
 
-    def file_already_imported(self, file: str) -> None:
+    def file_already_imported(self, file: str) -> bool:
         self.message.append(f"File {file} was already imported.")
         self.message.append("Consider using option --replace.")
+        self.message.append("Are you sure you want to add this file again? (y/n)")
         self.__exec__()
+        if input() == "y":
+            return True
+        else:
+            return False
 
-    def BOM_import_summary(self, files:list[str], devs: int, cost:float) -> None:
+    def BOM_import_summary(self, files:list[str], dat:pd.DataFrame) -> None:
+        self.message.append("")
         self.message.append("______SUMMARY_______")
         self.message.append("*******************")
-        if devs==0:
+        if dat.empty:
             self.message.append("No devices were added to BOM table.")
         else:
             self.message.append(f"{len(files)} files were imported to BOM table:")
             self.message.append(str(files))
-            self.message.append(f"{devs} devices were added to BOM table, with cost of {cost} in total.")
+            if "device_id" in dat.columns:
+                devs = len(dat["device_id"].unique())
+                self.message.append(f"{devs} devices were added to BOM table.")
+            if "price" in dat.columns:
+                if "qty" not in dat.columns:
+                    dat["qty"] = 1
+                dat["tot_cost"] = dat["price"] * dat["qty"]
+                cost = dat["tot_cost"].sum()
+                self.message.append(f"{devs} With cost of {cost} in total.")
         self.__exec__()
 
     def __exec__(self) -> None:

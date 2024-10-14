@@ -302,14 +302,13 @@ def get(
     if follow:
         for r in resp:
             base_tab = resp[r]
-            for F in sql_scheme[tab]['FOREIGN']:
+            for F in sql_scheme[tab]["FOREIGN"]:
                 col, f_tab, f_col = unpack_foreign(F)
                 f_DF = getDF(tab=f_tab)
                 base_tab = base_tab.merge(f_DF, left_on=col, right_on=f_col)
                 resp[r] = base_tab
 
     return resp
-
 
 
 def __get_tab__(
@@ -410,9 +409,11 @@ def __split_list__(lst: str, nel: int) -> list:
     return cmd_split
 
 
-def rm(tab: str, value: str, column: str) -> None:
+def rm(tab: str, value: str='%', column: str='%') -> None:
     """Remove all instances of value from column in tab"""
-    cmd = f"DELETE FROM {tab} WHERE {column}='{value}'"
+    cmd = f"DELETE FROM {tab}"
+    if column != "%":
+        cmd += f"WHERE {column}='{value}'"
     __sql_execute__([cmd])
 
 

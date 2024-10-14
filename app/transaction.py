@@ -30,3 +30,4 @@ def trans(args: Namespace):
 
     BOM.drop(columns=["hash", "device_hash"], inplace=True)
     BOM.to_csv(args.file)
+    print(f"{args.file} saved in {args.dir}")

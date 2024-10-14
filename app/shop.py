@@ -1,33 +1,17 @@
-import os
-import pandas as pd
-from pandas.errors import ParserError
 from argparse import Namespace
+import pandas as pd
 
-from app.sql import getL, getDF, rm
 from app.common import check_dir_file
 from app.tabs import __columns_align__, write_tab
 from conf.config import import_format
 from app.error import messageHandler, write_bomError
+from pandas.errors import ParserError
 
 msg = messageHandler()
 
 
-def bom_import(
-    args: Namespace,
-) -> None:
-    if args.clean:
-        # remove all old data
-        rm(tab="BOM")
-        print("Removed all data from BOM table")
-        return
-
-    if not args.reimport:
-        xls_files = check_dir_file(args)
-    else:
-        xls_files = getDF(tab="BOM", get=["dir", "file"])
-        xls_files["path"] = xls_files["dir"] + "/" + xls_files["file"]
-        xls_files = xls_files["path"].tolist()
-
+def chart_import(args: Namespace) -> None:
+    xls_files = check_dir_file(args)
     new_stock = pd.DataFrame()
     imported_files = []
 
@@ -56,18 +40,6 @@ def bom_import(
             print("Possibly 'no matched' row.")
             print(e)
             continue
-        except FileNotFoundError as e:
-            print(e)
-            continue
-
-        old_files = getL(tab="BOM", get=["file"])
-        if args.overwrite:
-            # remove all old data
-            rm(tab="BOM", value=os.path.basename(file), column="file")
-        else:
-            if os.path.basename(file) in old_files:
-                if not msg.file_already_imported(os.path.basename(file)):
-                    continue
 
         # rename (and tidy) columns according to format of imported file
         new_stock = __columns_align__(
@@ -75,19 +47,11 @@ def bom_import(
             file=file,
             supplier=args.format,
         )
-
         # write data to SQL
         try:
             write_tab(
                 dat=new_stock.copy(),
                 tab="DEVICE",
-                qty=args.qty,
-                file=file,
-                row_shift=import_format[args.format]["header"],
-            )
-            write_tab(
-                dat=new_stock.copy(),
-                tab="BOM",
                 qty=args.qty,
                 file=file,
                 row_shift=import_format[args.format]["header"],
@@ -103,6 +67,6 @@ def bom_import(
             print(e)
             continue
         imported_files.append(file)
-
+    
     # summary
     msg.BOM_import_summary(imported_files, new_stock)

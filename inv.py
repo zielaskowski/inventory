@@ -1,7 +1,8 @@
 import os
 import argparse
 
-from app.bom import import_bom
+from app.bom import bom_import
+from app.shop import chart_import
 from app.transaction import trans
 from app.commit import commit
 from app.sql import sql_check
@@ -31,7 +32,7 @@ if __name__ == "__main__":
     command_parser = cli.add_subparsers(title="commands", dest="command")
 
     cli_import_bom = command_parser.add_parser(
-        "import_bom",
+        "bom_import",
         allow_abbrev=True,
         help="Scan xls/csv files and add into BOM table.",
     )
@@ -59,11 +60,25 @@ if __name__ == "__main__":
         default=list(import_format.keys())[0],  # LCSC
     )
     cli_import_bom.add_argument(
-        "-r",
-        "--replace",
-        action='store_true',
-        help="Replace items already imported from the same file",
+        "-o",
+        "--overwrite",
+        action="store_true",
+        help="""During import: replace items already imported from the same file.
+                If omitted, items will be added to existing items from the same file.""",
         required=False,
+    )
+    cli_import_bom.add_argument(
+        "-r",
+        "--reimport",
+        action="store_true",
+        help="""Import again (and replace) items in BOM table.""",
+    )
+    cli_import_bom.add_argument(
+        "-c",
+        "--clean",
+        action="store_true",
+        help="""Clean BOM table: remove all items. Do not touch any ather table in DB.
+                Ignores all other arguments.""",
     )
     cli_import_bom.add_argument(
         "-q",
@@ -72,7 +87,37 @@ if __name__ == "__main__":
         required=False,
         default=1,
     )
-    cli_import_bom.set_defaults(func=import_bom)
+    cli_import_bom.set_defaults(func=bom_import)
+
+    cli_import_chart = command_parser.add_parser(
+        "chart_import",
+        allow_abbrev=True,
+        help="Scan for xls files and import shopping chart",
+    )
+    cli_import_chart.add_argument(
+        "-d",
+        "--dir",
+        default=os.getcwd(),  # for jupyter: os.path.dirname(os.path.abspath(__file__))
+        help="Directory to start scan with. If omitted, current directory is used",
+        required=False,
+    )
+    cli_import_chart.add_argument(
+        "-f",
+        "--file",
+        help="""
+        xls/xlsx file name to add/replace in stock.csv.
+        Will import only files where this FILE is within file name. Case sensitive
+        """,
+        required=False,
+    )
+    cli_import_chart.add_argument(
+        "-F",
+        "--format",
+        help=f"format of file to import, possible values: {list(import_format.keys())}. Defoult is {list(import_format.keys())[0]}",
+        required=False,
+        default=list(import_format.keys())[0],  # LCSC
+    )
+    cli_import_chart.set_defaults(func=chart_import)
 
     cli_transact = command_parser.add_parser(
         "transact",
@@ -81,7 +126,7 @@ if __name__ == "__main__":
         Can also prepare file based on project name""",
     )
     cli_transact.add_argument(
-        "-f", 
+        "-f",
         "--file",
         help="File name to save shoping list, defoult is 'shopping list.csv'",
         required=False,

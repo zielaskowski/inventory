@@ -25,12 +25,28 @@ import_format = {
             "package.1": "package",
             "description.1": "device_description",
             "order qty.": "order_qty",
-            "unit price(usd)": 'price'
+            "unit price(usd)": "price",
         },
         "dtype": {  # lower case only, after cols rename!
             "qty": int,
             "order_qty": int,
             "price": float,
         },
-    }
+    },
+    "easyEDA": {
+        "header": 0,
+        "index_col": None,
+        "usecols": list(range(0,20)),
+        "na_values": "-",
+        "cols": {  # lower case only, align with sql_scheme.jsonc
+            "quantity": "qty",
+            "manufacturer part": "device_id",
+            "manufacturer": "device_manufacturer",
+            "supplier footprint": "package",
+            "description": "device_description",
+        },
+        "dtype": {  # lower case only, after cols rename!
+            "qty": int
+        },
+    },
 }

@@ -63,7 +63,7 @@ def bom_import(
         old_files = getL(tab="BOM", get=["file"])
         if args.overwrite:
             # remove all old data
-            rm(tab="BOM", value=os.path.basename(file), column="file")
+            rm(tab="BOM", value=[os.path.basename(file)], column=["file"])
         else:
             if os.path.basename(file) in old_files:
                 if not msg.file_already_imported(os.path.basename(file)):

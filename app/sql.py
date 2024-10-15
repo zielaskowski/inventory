@@ -312,7 +312,7 @@ def get(
         get = all_cols
 
     if follow:
-        resp = __get_tab__(tab=tab, get=all_cols,search=search, where=where)
+        resp = __get_tab__(tab=tab, get=all_cols, search=search, where=where)
         for r in resp:
             base_tab = resp[r]
             if not base_tab.empty:
@@ -323,7 +323,6 @@ def get(
                     if any(c not in base_tab.columns for c in get):
                         raise sql_getError(get, base_tab.columns)
                     resp[r] = base_tab[get]
-                
 
     else:
         if any(g not in all_cols for g in get):
@@ -414,13 +413,18 @@ def __split_list__(lst: str, nel: int) -> list:
     return cmd_split
 
 
-def rm(tab: str, value: str = "%", column: str = "%") -> None:
+def rm(tab: str, value: list[str] = ["%"], column: list[str] = ["%"]) -> None:
     """Remove all instances of value from column in tab"""
-    # improve by removing with lists
-    cmd = f"DELETE FROM {tab} "
-    if column != "%":
-        cmd += f" WHERE {column}='{value}'"
-    __sql_execute__([cmd])
+    if value == ["%"]:
+        column = ["%"]
+    for c in column:
+        cmd = f"DELETE FROM {tab} "
+        if column != ["%"]:
+            cmd += 'WHERE ('
+            cmd += " ".join([f"{c} LIKE '{s}' OR " for s in value])
+            cmd += f"{c} LIKE 'none'"  # just to close last 'OR'
+            cmd += ")"
+        __sql_execute__([cmd])
 
 
 def tab_columns(tab: str) -> List[str]:

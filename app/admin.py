@@ -30,9 +30,8 @@ def remove_dev(dev: list[str], by: str, force: bool) -> None:
         )
         project_tab = project_tab[project_tab[by].isin(dev)]
         project_tab = set(project_tab["proj_name"].tolist())
-        for p in project_tab:
-            rm(tab="PROJECT", value=p, column="proj_name")
-            rm(tab="PROJECT_INFO", value=p, column="project_name")
+        rm(tab="PROJECT", value=project_tab, column=["proj_name"])
+        rm(tab="PROJECT_INFO", value=project_tab, column=["project_name"])
 
     hash_id = getL(tab="DEVICE", get=["hash"], search=dev, where=[by])
 
@@ -47,7 +46,4 @@ def remove_dev(dev: list[str], by: str, force: bool) -> None:
             for k, v in hash_cols.items()
             if "device_id" in v and k in sql_scheme[t]
         ]
-        for col in hashed_col:
-            for h in hash_id:
-                rm(tab=t, value=h, column=col)
-                # improve by removing with lists
+        rm(tab=t, value=hash_id, column=hashed_col)

@@ -4,9 +4,10 @@ from datetime import date
 import pandas as pd
 
 from app.sql import put
+from app.device import align_manufacturer
 from app.error import write_bomError
 from app.error import messageHandler
-from app.common import read_json, hash_table, unpack_foreign
+from app.common import read_json, hash_table, __tab_cols__
 from conf.config import SQL_scheme, import_format
 
 msg = messageHandler()
@@ -46,6 +47,9 @@ def write_tab(
         row_shift=row_shift + 2,  # one for header, and one to start from zero
     )
 
+    # align manufacturer for common device_id
+    dat = align_manufacturer(dat)
+
     # hash rows
     for hashed_col in BOM_hash_cols:
         hash_cols = BOM_hash_cols[hashed_col]
@@ -59,7 +63,6 @@ def write_tab(
         )
 
     # put into SQL
-    # need to start from DEVICE becouse BOM refer to it
     sql_scheme = read_json(SQL_scheme)
     put(
         dat=dat,
@@ -90,100 +93,6 @@ def __NA_rows__(
     return df
 
 
-def __tab_cols__(
-    tab: str,
-) -> list[list[str], list[str], dict[str : list[str]],]:
-    # return list of columns that are required for the given tab
-    # and list of columns that are "nice to have"
-    # follow FOREIGN key constraints to other tab
-    # and check HASH_COLS if exists in other tab
-    sql_scheme = read_json(SQL_scheme)
-    if tab not in sql_scheme:
-        raise ValueError(f"Table {tab} does not exists in SQL_scheme")
-
-    tab_cols = list(sql_scheme.get(tab))
-    must_cols = [c for c in tab_cols if "NOT NULL" in sql_scheme[tab][c]]
-    must_cols = [
-        c for c in must_cols if "PRIMARY KEY" not in sql_scheme[tab][c]
-    ]
-    nice_cols = [c for c in tab_cols if "NOT NULL" not in sql_scheme[tab][c]]
-    nice_cols = [
-        c for c in nice_cols if "PRIMARY KEY" not in sql_scheme[tab][c]
-    ]
-    hash_dic = {}
-
-    if "HASH_COLS" in tab_cols:
-        hashed_col = list(sql_scheme[tab]["HASH_COLS"].keys())[0]
-        hash_cols = [v for _, v in sql_scheme[tab]["HASH_COLS"].items()][0]
-        must_cols = [c for c in must_cols if c not in hashed_col]
-        nice_cols = [c for c in nice_cols if c not in hashed_col]
-        hash_dic = {hashed_col: hash_cols}
-
-    if "UNIQUE" in tab_cols:
-        for U in sql_scheme[tab]["UNIQUE"]:
-            must_cols += [U]
-            if U in nice_cols:
-                nice_cols.remove(U)
-
-    if "FOREIGN" in tab_cols:
-        for F in sql_scheme[tab]["FOREIGN"]:
-            col, foreign_tab, foreign_col = unpack_foreign(F)
-
-            nice_cols = [c for c in nice_cols if c not in col]
-            must_cols = [c for c in must_cols if c not in col]
-
-            # get foreign columns
-            (
-                foreign_must,
-                foreign_nice,
-                foreign_hash,
-            ) = __tab_cols__(foreign_tab)
-            must_cols += foreign_must
-            nice_cols += foreign_nice
-            hash_dic.update(foreign_hash)
-            hash_dic[col] = foreign_hash[foreign_col]
-
-            (
-                foreign_must,
-                foreign_nice,
-                foreign_hash,
-            ) = __tab_cols__(foreign_tab)
-            must_cols += foreign_must
-            nice_cols += foreign_nice
-            hash_dic.update(foreign_hash)
-            hash_dic[col] = list(foreign_hash.values())[0]
-
-    # remove duplicates
-    must_cols = list(set(must_cols))
-    nice_cols = list(set(nice_cols))
-
-    # remove COMMANDS and ['id', 'hash] column
-    nice_cols = [
-        c
-        for c in nice_cols
-        if c
-        not in [
-            "FOREIGN",
-            "UNIQUE",
-            "HASH_COLS",
-            "id",
-            "hash",
-        ]
-    ]
-    must_cols = [
-        c
-        for c in must_cols
-        if c
-        not in [
-            "id",
-            "hash",
-        ]
-    ]
-    return (
-        must_cols,
-        nice_cols,
-        hash_dic,
-    )
 
 
 def __columns_align__(

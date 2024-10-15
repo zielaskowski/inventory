@@ -2,9 +2,10 @@ import os
 import argparse
 
 from app.bom import bom_import
-from app.shop import chart_import
+from app.shop import cart_import
 from app.transaction import trans
 from app.commit import commit
+from app.admin import admin
 from app.sql import sql_check
 from app.error import sql_checkError, sql_createError
 from conf.config import import_format
@@ -89,19 +90,19 @@ if __name__ == "__main__":
     )
     cli_import_bom.set_defaults(func=bom_import)
 
-    cli_import_chart = command_parser.add_parser(
+    cli_import_cart = command_parser.add_parser(
         "chart_import",
         allow_abbrev=True,
         help="Scan for xls files and import shopping chart",
     )
-    cli_import_chart.add_argument(
+    cli_import_cart.add_argument(
         "-d",
         "--dir",
         default=os.getcwd(),  # for jupyter: os.path.dirname(os.path.abspath(__file__))
         help="Directory to start scan with. If omitted, current directory is used",
         required=False,
     )
-    cli_import_chart.add_argument(
+    cli_import_cart.add_argument(
         "-f",
         "--file",
         help="""
@@ -110,14 +111,14 @@ if __name__ == "__main__":
         """,
         required=False,
     )
-    cli_import_chart.add_argument(
+    cli_import_cart.add_argument(
         "-F",
         "--format",
         help=f"format of file to import, possible values: {list(import_format.keys())}. Defoult is {list(import_format.keys())[0]}",
         required=False,
         default=list(import_format.keys())[0],  # LCSC
     )
-    cli_import_chart.set_defaults(func=chart_import)
+    cli_import_cart.set_defaults(func=cart_import)
 
     cli_transact = command_parser.add_parser(
         "transact",
@@ -154,6 +155,32 @@ if __name__ == "__main__":
         "-p", "--project", help="project name to commit", required=True
     )
     cli_commit.set_defaults(func=commit)
+
+    cli_admin = command_parser.add_parser(
+        "admin", help="Admin functions. Be responsible."
+    )
+    admin_group = cli_admin.add_mutually_exclusive_group(required=True)
+    admin_group.add_argument(
+        "--remove_dev_id",
+        nargs="+",
+        action="store",
+        help="""Clean all devices from list using device part number. Also from all other tables except project.
+                Use force to remove also projects.""",
+    )
+    admin_group.add_argument(
+        "--remove_hash_id",
+        nargs="+",
+        action="store",
+        help="""Clean all devices from list using device hash. Also from all other tables except project.
+                Use force to remove also projects.""",
+    )
+    cli_admin.add_argument(
+        "-F",
+        "--force",
+        action="store_true",
+        help="Force remove all devices from list. Including project tables.",
+    )
+    cli_admin.set_defaults(func=admin)
 
     args = cli.parse_args()
     # may happen (for sure in vscode when debuging) that args have some spaces

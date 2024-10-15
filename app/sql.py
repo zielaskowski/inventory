@@ -6,6 +6,7 @@ from typing import Dict, List, Union, Set
 
 import pandas as pd
 
+from app.common import __tab_cols__
 from app.common import read_json, unpack_foreign
 from conf.config import db_file, SQL_scheme, SQL_keywords
 from app.error import (
@@ -13,6 +14,7 @@ from app.error import (
     sql_createError,
     read_jsonError,
     sql_executeError,
+    sql_getError,
 )
 from app.error import messageHandler, sql_tabError
 
@@ -280,7 +282,7 @@ def get(
     search: Union[List[str], Set] = ["%"],
     where: Union[List[str], Set] = ["%"],
     follow: bool = False,
-) -> Dict[str, pd.DataFrame]:  # sourcery skip: default-mutable-arg
+) -> Dict[str, pd.DataFrame]:
     """get info from table
     return as Dict:
     - each key for column searched,
@@ -294,29 +296,49 @@ def get(
         where: columns used for searching (defoult '%' for everything)
         follow: if True, search in all FOREIGN subtables
     """
+    # check if tab exists!
+    tab_exists(tab)
+    search = __escape_quote__(search)
     sql_scheme = read_json(SQL_scheme)
+
     if "FOREIGN" not in sql_scheme[tab].keys():
         follow = False
 
-    resp = __get_tab__(tab=tab, get=get, search=search, where=where)
+    all_cols = tab_columns(tab)
+
+    if where[0] == "%":
+        where = all_cols
+    if get[0] == "%":
+        get = all_cols
+
     if follow:
+        resp = __get_tab__(tab=tab, get=all_cols,search=search, where=where)
         for r in resp:
             base_tab = resp[r]
-            for F in sql_scheme[tab]["FOREIGN"]:
-                col, f_tab, f_col = unpack_foreign(F)
-                f_DF = getDF(tab=f_tab)
-                base_tab = base_tab.merge(f_DF, left_on=col, right_on=f_col)
-                resp[r] = base_tab
+            if not base_tab.empty:
+                for F in sql_scheme[tab]["FOREIGN"]:
+                    col, f_tab, f_col = unpack_foreign(F)
+                    f_DF = getDF(tab=f_tab)
+                    base_tab = base_tab.merge(f_DF, left_on=col, right_on=f_col)
+                    if any(c not in base_tab.columns for c in get):
+                        raise sql_getError(get, base_tab.columns)
+                    resp[r] = base_tab[get]
+                
+
+    else:
+        if any(g not in all_cols for g in get):
+            raise sql_getError(get, all_cols)
+        resp = __get_tab__(tab=tab, get=get, search=search, where=where)
 
     return resp
 
 
 def __get_tab__(
     tab: str,
-    get: Union[List[str], Set] = ["%"],
-    search: Union[List[str], Set] = ["%"],
-    where: Union[List[str], Set] = ["%"],
-) -> Dict[str, pd.DataFrame]:  # sourcery skip: default-mutable-arg
+    get: Union[List[str], Set],
+    search: Union[List[str], Set],
+    where: Union[List[str], Set],
+) -> Dict[str, pd.DataFrame]:
     """get info from table
     return as Dict:
     - each key for column searched,
@@ -329,24 +351,7 @@ def __get_tab__(
         search: what to get (defoult '%' for everything)
         where: columns used for searching (defoult '%' for everything)
     """
-    search = __escape_quote__(search)
     resp = {}
-    all_cols = tab_columns(tab=tab)
-    tab = tab.upper()
-    search = [s.upper() for s in search]
-    get = [g.lower() for g in get]
-    where = [c.lower() for c in where]
-    if where[0] == "%":
-        where = all_cols
-    if get[0] == "%":
-        get = all_cols
-    if any(g not in all_cols for g in get):
-        print(f"Not correct get='{get}' argument.")
-        print(f"possible options: {all_cols}")
-        return {}
-
-    # check if tab exists!
-    tab_exists(tab)
 
     for c in where:
         cmd = f"SELECT {','.join(get)} FROM {tab} WHERE "
@@ -409,40 +414,13 @@ def __split_list__(lst: str, nel: int) -> list:
     return cmd_split
 
 
-def rm(tab: str, value: str='%', column: str='%') -> None:
+def rm(tab: str, value: str = "%", column: str = "%") -> None:
     """Remove all instances of value from column in tab"""
-    cmd = f"DELETE FROM {tab}"
+    # improve by removing with lists
+    cmd = f"DELETE FROM {tab} "
     if column != "%":
-        cmd += f"WHERE {column}='{value}'"
+        cmd += f" WHERE {column}='{value}'"
     __sql_execute__([cmd])
-
-
-def rm_all(
-    tab: str, symbol: str, db_file: str
-) -> Union[None, Dict[str, pd.DataFrame]]:
-    """
-    Remove all instances to asset
-    remove from given tab, from tab+_DESC and from COMPONENTS
-    (so don't use tab='TAB_DESC'!)
-    """
-    symbol = symbol.upper()
-    tab = tab.upper()
-    # check if tab exists!
-    if not tab_exists(tab):
-        return
-    hashes = getL(
-        tab=f"{tab}_DESC",
-        get=["hash"],
-        search=[symbol],
-        where=["symbol"],
-        db_file=db_file,
-    )[0]
-
-    cmd = [f"DELETE FROM {tab} WHERE hash='{hashes}'"]
-    cmd += [f"DELETE FROM COMPONENTS WHERE stock_hash='{hashes}'"]
-    cmd += [f"DELETE FROM {tab}_DESC WHERE hash='{hashes}'"]
-
-    return __sql_execute__(cmd, db_file)
 
 
 def tab_columns(tab: str) -> List[str]:

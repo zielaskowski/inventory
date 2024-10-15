@@ -77,6 +77,7 @@ def bom_import(
         )
 
         # write data to SQL
+        # need to start from DEVICE becouse other tables refer to it
         try:
             write_tab(
                 dat=new_stock.copy(),

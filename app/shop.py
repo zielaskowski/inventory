@@ -10,7 +10,7 @@ from pandas.errors import ParserError
 msg = messageHandler()
 
 
-def chart_import(args: Namespace) -> None:
+def cart_import(args: Namespace) -> None:
     xls_files = check_dir_file(args)
     new_stock = pd.DataFrame()
     imported_files = []

@@ -1,6 +1,15 @@
 import os
 import pandas as pd
 
+class sql_getError(Exception):
+    def __init__(self, col: list[str],all_cols:list[str], *args: object) -> None:
+        self.message=f"Not correct get='{col}' argument."
+        self.message =f"possible options: {all_cols}"
+        super().__init__(*args)
+
+    def __str__(self) -> str:
+        return f"SQL get error: {self.message}"
+
 
 class write_bomError(Exception):
     def __init__(self, msg: str, *args: object) -> None:

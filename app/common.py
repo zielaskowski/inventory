@@ -8,6 +8,7 @@ import pandas as pd
 
 from json import JSONDecodeError
 
+from conf.config import SQL_scheme, SQL_keywords
 from app.error import read_jsonError, check_dirError, hashError
 from app.error import messageHandler
 
@@ -82,3 +83,88 @@ def unpack_foreign(foreign: list[dict[str, str]]) -> tuple[str]:
     return col, f_tab, f_col
 
 
+def __tab_cols__(
+    tab: str,
+) -> list[list[str], list[str], dict[str : list[str]],]:
+    # return list of columns that are required for the given tab
+    # and list of columns that are "nice to have"
+    # follow FOREIGN key constraints to other tab
+    # and check HASH_COLS if exists in other tab
+    # hashed col is not in must_cols, as it will be created
+    sql_scheme = read_json(SQL_scheme)
+    if tab not in sql_scheme:
+        raise ValueError(f"Table {tab} does not exists in SQL_scheme")
+
+    tab_cols = list(sql_scheme.get(tab))
+    must_cols = [
+        c
+        for c in tab_cols
+        if any(cc in sql_scheme[tab][c] for cc in ["NOT NULL", "PRIMARY KEY"])
+    ]
+    # must_cols = [c for c in must_cols if "PRIMARY KEY" not in sql_scheme[tab][c]]
+    nice_cols = [c for c in tab_cols if "NOT NULL" not in sql_scheme[tab][c]]
+    nice_cols = [
+        c for c in nice_cols if "PRIMARY KEY" not in sql_scheme[tab][c]
+    ]
+    hash_dic = {}
+
+    if "HASH_COLS" in tab_cols:
+        hash_dic = sql_scheme[tab]["HASH_COLS"]
+        hashed_col = list(hash_dic.keys())
+        must_cols = [c for c in must_cols if c not in hashed_col]
+        nice_cols = [c for c in nice_cols if c not in hashed_col]
+
+    if "UNIQUE" in tab_cols:
+        for U in sql_scheme[tab]["UNIQUE"]:
+            must_cols += [U]
+            if U in nice_cols:
+                nice_cols.remove(U)
+
+    if "FOREIGN" in tab_cols:
+        for F in sql_scheme[tab]["FOREIGN"]:
+            col, foreign_tab, foreign_col = unpack_foreign(F)
+
+            nice_cols = [c for c in nice_cols if c not in col]
+            must_cols = [c for c in must_cols if c not in col]
+
+            # get foreign columns
+            (
+                foreign_must,
+                foreign_nice,
+                foreign_hash,
+            ) = __tab_cols__(foreign_tab)
+            must_cols += foreign_must
+            nice_cols += foreign_nice
+            if foreign_hash != {}:
+                hash_dic.update(foreign_hash)
+                hash_dic[col] = foreign_hash[foreign_col]
+
+    # remove duplicates
+    must_cols = list(set(must_cols))
+    nice_cols = list(set(nice_cols))
+
+    # remove COMMANDS and ['id', 'hash] column
+    nice_cols = [
+        c
+        for c in nice_cols
+        if c
+        not in SQL_keywords
+        + [
+            "id",
+            "hash",
+        ]
+    ]
+    must_cols = [
+        c
+        for c in must_cols
+        if c
+        not in [
+            "id",
+            "hash",
+        ]
+    ]
+    return (
+        must_cols,
+        nice_cols,
+        hash_dic,
+    )

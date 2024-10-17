@@ -4,13 +4,17 @@ SQL_scheme = "./conf/sql_scheme.jsonc"
 # list of keywords to be ignored during reading columns from tab
 SQL_keywords = ["FOREIGN", "UNIQUE", "HASH_COLS", "ON_CONFLICT"]
 
+# database file location and name
 db_file = "./inventory.sqlite"
-cols = (
-    []
-)  # columns, set based on stock_file or first excel to read, using shop['cols] converter
-must_cols = ["qty", "order_qty", "manufacturer#"]
 
+# directory to scan when searching for files
+# leave empty if you want to scan anything
+# not case sensitive
+#scan_dir = "BOM"
+scan_dir = ""
 
+# excel format description for imported excell
+# options for pandas csv_import + columns renaming to align with sql
 import_format = {
     "LCSC": {
         "header": 4,

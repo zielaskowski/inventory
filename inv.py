@@ -16,11 +16,12 @@ if __name__ == "__main__":
         INVentory management system.
         store information about available stock, devices info, and shop cost.
         Also store projects (list of devices).
-        All imported date are temporary stored in BOM table, allowing creation
-        of common BOM and shop list. When comited, alements from BOM table is
+        All imported data are temporary stored in BOM table, allowing creation
+        of common BOM and shop list. When comited, all ements from BOM table are
         transfered to stock table and project is created.
         
         Scan all BOMs and put into BOM table (each element into separate row).
+        Scan only files inside 'bom|BOM' folder. Can be changed in config.py.
         Always write to device table and shop table (also when not adding to stock)
         add to stock when commiting BOM
         Output is written in stock.sqldb file. If the file is not found, it will be created based on sql_scheme.jsonc file
@@ -41,16 +42,16 @@ if __name__ == "__main__":
         "-d",
         "--dir",
         default=os.getcwd(),  # for jupyter: os.path.dirname(os.path.abspath(__file__))
-        help="Directory to start scan with. If omitted, current directory is used",
+        help="""Directory to start scan with. 
+                If omitted, current directory is used. 
+                Scan only in 'BOM' folder (can be change in config.py)""",
         required=False,
     )
     cli_import_bom.add_argument(
         "-f",
         "--file",
-        help="""
-        xls/xlsx file name to add/replace in stock.csv.
-        Will import only files where this FILE is within file name. Case sensitive
-        """,
+        help="""xls/xlsx file to import. Select proper format (can be extendeed in config.py).
+                Will import only files where this FILE is within file name. Case sensitive.""",
         required=False,
     )
     cli_import_bom.add_argument(
@@ -99,16 +100,16 @@ if __name__ == "__main__":
         "-d",
         "--dir",
         default=os.getcwd(),  # for jupyter: os.path.dirname(os.path.abspath(__file__))
-        help="Directory to start scan with. If omitted, current directory is used",
+        help="""Directory to start scan with. 
+                If omitted, current directory is used. 
+                Scan only in 'BOM' folder (can be change in config.py)""",
         required=False,
     )
     cli_import_cart.add_argument(
         "-f",
         "--file",
-        help="""
-        xls/xlsx file name to add/replace in stock.csv.
-        Will import only files where this FILE is within file name. Case sensitive
-        """,
+        help="""xls/xlsx file to import. Select proper format (can be extendeed in config.py).
+                Will import only files where this FILE is within file name. Case sensitive.""",
         required=False,
     )
     cli_import_cart.add_argument(
@@ -160,6 +161,12 @@ if __name__ == "__main__":
         "admin", help="Admin functions. Be responsible."
     )
     admin_group = cli_admin.add_mutually_exclusive_group(required=True)
+    admin_group.add_argument(
+        "-c",
+        "--config",
+        action="store_true",
+        help="Show current config",
+    )
     admin_group.add_argument(
         "--remove_dev_id",
         nargs="+",

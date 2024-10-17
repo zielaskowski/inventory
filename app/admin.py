@@ -3,10 +3,12 @@ from argparse import Namespace
 from app.sql import rm, getDF, getL
 from app.tabs import __tab_cols__
 from conf.config import SQL_scheme
-from app.common import read_json
+from app.common import read_json, print_file
 
 
 def admin(args: Namespace) -> None:
+    if args.config:
+        print_file('./conf/config.py')
     if args.remove_dev_id:
         remove_dev(args.remove_dev_id, "device_id", args.force)
         exit(1)
@@ -16,6 +18,8 @@ def admin(args: Namespace) -> None:
 
 
 def remove_dev(dev: list[str], by: str, force: bool) -> None:
+    # remove device based on hash or device_id
+    # include all other tablec where device is used
     sql_scheme = read_json(SQL_scheme)
 
     # do not delete device if present in PROJECT table

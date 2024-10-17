@@ -7,7 +7,7 @@ from app.sql import getL, getDF, rm
 from app.common import check_dir_file
 from app.tabs import __columns_align__, write_tab
 from conf.config import import_format
-from app.error import messageHandler, write_bomError
+from app.error import messageHandler, write_bomError, check_dirError
 
 msg = messageHandler()
 
@@ -22,7 +22,11 @@ def bom_import(
         return
 
     if not args.reimport:
-        xls_files = check_dir_file(args)
+        try:
+            xls_files = check_dir_file(args)
+        except check_dirError as e:
+            print(e)
+            exit(1)
     else:
         xls_files = getDF(tab="BOM", get=["dir", "file"])
         xls_files["path"] = xls_files["dir"] + "/" + xls_files["file"]

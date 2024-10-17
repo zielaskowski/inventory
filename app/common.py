@@ -8,7 +8,7 @@ import pandas as pd
 
 from json import JSONDecodeError
 
-from conf.config import SQL_scheme, SQL_keywords
+from conf.config import SQL_scheme, SQL_keywords, scan_dir
 from app.error import read_jsonError, check_dirError, hashError
 from app.error import messageHandler
 
@@ -37,9 +37,16 @@ def find_xlsx_files(directory: str) -> list:
     # search for any xlsx or xls file, only in BOM folder
     # return a list of full path+file_name
     xlsx_files = []
+    s_dir = scan_dir
     for dir, _, files in os.walk(directory):
         for file in files:
-            if dir.split("/")[-1].upper() == "BOM":
+            # drop last '/' in directory with regex
+            # change defoult behaviour but nobody understand these niuanses
+            cur_dir = re.sub("/$", "", dir)
+            cur_dir = cur_dir.split("/")[-1].upper()
+            if s_dir == "":
+                s_dir = cur_dir
+            if cur_dir == s_dir.upper():
                 if file.endswith(".xlsx") or file.endswith(".xls"):
                     xlsx_files.append(os.path.join(dir, file))
     return xlsx_files
@@ -48,14 +55,14 @@ def find_xlsx_files(directory: str) -> list:
 def check_dir_file(args: Namespace) -> list[str]:
     # check search directory
     if not os.path.exists(args.dir):
-        raise check_dirError(args.dir)
+        raise check_dirError(args.file, args.dir, scan_dir)
     xlsx_files = find_xlsx_files(args.dir)
 
     # filter by file name
     if args.file is not None:
         xlsx_files = [f for f in xlsx_files if args.file in f]
         if xlsx_files == []:
-            raise check_dirError(args.file)
+            raise check_dirError(args.file, args.dir, scan_dir)
     return xlsx_files
 
 
@@ -168,3 +175,11 @@ def __tab_cols__(
         nice_cols,
         hash_dic,
     )
+
+
+def print_file(file: str):
+    try:
+        with open(file, "r") as f:
+            print(f.read())
+    except FileNotFoundError:
+        print(f"File {file} not found")

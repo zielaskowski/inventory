@@ -1,10 +1,13 @@
 import os
 import pandas as pd
 
+
 class sql_getError(Exception):
-    def __init__(self, col: list[str],all_cols:list[str], *args: object) -> None:
-        self.message=f"Not correct get='{col}' argument."
-        self.message =f"possible options: {all_cols}"
+    def __init__(
+        self, col: list[str], all_cols: list[str], *args: object
+    ) -> None:
+        self.message = f"Not correct get='{col}' argument."
+        self.message = f"possible options: {all_cols}"
         super().__init__(*args)
 
     def __str__(self) -> str:
@@ -31,8 +34,10 @@ class sql_tabError(Exception):
 
 
 class check_dirError(Exception):
-    def __init__(self, message: str, *args: object) -> None:
-        self.message = message + " is missing or corrupted."
+    def __init__(
+        self, file: str, dir: str, scan_dir: str, *args: object
+    ) -> None:
+        self.message =f"{file} is missing or corrupted,\nor no {scan_dir} folder in {dir} directory"
         super().__init__(*args)
 
     def __str__(self) -> str:
@@ -130,7 +135,9 @@ class messageHandler:
             df_hash = float(pd.util.hash_pandas_object(rows).sum())
             if self.df_hash != df_hash:
                 self.df_hash = df_hash
-                self.message.append("These rows have NAs in NON essential columns:")
+                self.message.append(
+                    "These rows have NAs in NON essential columns:"
+                )
                 self.message.append(rows.__str__())
 
         self.__exec__()
@@ -138,21 +145,25 @@ class messageHandler:
     def file_already_imported(self, file: str) -> bool:
         self.message.append(f"File {file} was already imported.")
         self.message.append("Consider using option --replace.")
-        self.message.append("Are you sure you want to add this file again? (y/n)")
+        self.message.append(
+            "Are you sure you want to add this file again? (y/n)"
+        )
         self.__exec__()
         if input() == "y":
             return True
         else:
             return False
 
-    def BOM_import_summary(self, files:list[str], dat:pd.DataFrame) -> None:
+    def BOM_import_summary(self, files: list[str], dat: pd.DataFrame) -> None:
         self.message.append("")
         self.message.append("______SUMMARY_______")
         self.message.append("*******************")
         if dat.empty:
             self.message.append("No devices were added to BOM table.")
         else:
-            self.message.append(f"{len(files)} files were imported to BOM table:")
+            self.message.append(
+                f"{len(files)} files were imported to BOM table:"
+            )
             self.message.append(str(files))
             if "device_id" in dat.columns:
                 devs = len(dat["device_id"].unique())

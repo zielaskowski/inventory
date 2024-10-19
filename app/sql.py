@@ -6,7 +6,7 @@ from typing import Dict, List, Union, Set
 
 import pandas as pd
 
-from app.common import __tab_cols__
+from app.common import tab_cols
 from app.common import read_json, unpack_foreign
 from conf.config import db_file, SQL_scheme, SQL_keywords
 from app.error import (

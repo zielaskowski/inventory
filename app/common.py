@@ -66,7 +66,7 @@ def check_dir_file(args: Namespace) -> list[str]:
     return xlsx_files
 
 
-def hash_table(tab: str, dat: pd.Series, cols: list[str]) -> pd.Series:
+def hash_table(dat: pd.Series, cols: list[str]) -> pd.Series:
     if not all(c in dat for c in cols):
         raise hashError(cols)
 
@@ -90,7 +90,7 @@ def unpack_foreign(foreign: list[dict[str, str]]) -> tuple[str]:
     return col, f_tab, f_col
 
 
-def __tab_cols__(
+def tab_cols(
     tab: str,
 ) -> list[list[str], list[str], dict[str : list[str]],]:
     # return list of columns that are required for the given tab
@@ -102,32 +102,32 @@ def __tab_cols__(
     if tab not in sql_scheme:
         raise ValueError(f"Table {tab} does not exists in SQL_scheme")
 
-    tab_cols = list(sql_scheme.get(tab))
+    cols = list(sql_scheme.get(tab))
     must_cols = [
         c
-        for c in tab_cols
+        for c in cols
         if any(cc in sql_scheme[tab][c] for cc in ["NOT NULL", "PRIMARY KEY"])
     ]
     # must_cols = [c for c in must_cols if "PRIMARY KEY" not in sql_scheme[tab][c]]
-    nice_cols = [c for c in tab_cols if "NOT NULL" not in sql_scheme[tab][c]]
+    nice_cols = [c for c in cols if "NOT NULL" not in sql_scheme[tab][c]]
     nice_cols = [
         c for c in nice_cols if "PRIMARY KEY" not in sql_scheme[tab][c]
     ]
     hash_dic = {}
 
-    if "HASH_COLS" in tab_cols:
+    if "HASH_COLS" in cols:
         hash_dic = sql_scheme[tab]["HASH_COLS"]
         hashed_col = list(hash_dic.keys())
         must_cols = [c for c in must_cols if c not in hashed_col]
         nice_cols = [c for c in nice_cols if c not in hashed_col]
 
-    if "UNIQUE" in tab_cols:
+    if "UNIQUE" in cols:
         for U in sql_scheme[tab]["UNIQUE"]:
             must_cols += [U]
             if U in nice_cols:
                 nice_cols.remove(U)
 
-    if "FOREIGN" in tab_cols:
+    if "FOREIGN" in cols:
         for F in sql_scheme[tab]["FOREIGN"]:
             col, foreign_tab, foreign_col = unpack_foreign(F)
 
@@ -139,7 +139,7 @@ def __tab_cols__(
                 foreign_must,
                 foreign_nice,
                 foreign_hash,
-            ) = __tab_cols__(foreign_tab)
+            ) = tab_cols(foreign_tab)
             must_cols += foreign_must
             nice_cols += foreign_nice
             if foreign_hash != {}:

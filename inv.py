@@ -51,7 +51,7 @@ if __name__ == "__main__":
         "-f",
         "--file",
         help="""xls/xlsx file to import. Select proper format (can be extendeed in config.py).
-                Will import only files where this FILE is within file name. Case sensitive.""",
+                Will import only files where FILE is within file name. Case sensitive.""",
         required=False,
     )
     cli_import_bom.add_argument(
@@ -171,15 +171,20 @@ if __name__ == "__main__":
         "--remove_dev_id",
         nargs="+",
         action="store",
-        help="""Clean all devices from list using device part number. Also from all other tables except project.
-                Use force to remove also projects.""",
+        help="""Clean all devices from list using device part number. Also from all other tables.
+                Refuse to remove devices used in project; use force to overcome.""",
     )
     admin_group.add_argument(
         "--remove_hash_id",
         nargs="+",
         action="store",
-        help="""Clean all devices from list using device hash. Also from all other tables except project.
-                Use force to remove also projects.""",
+        help="""Clean all devices from list using device hash. Also from all other tables.
+                Refuse to remove devices used in project; use force to overcome.""",
+    )
+    admin_group.add_argument(
+        "--align_manufacturer",
+        action="store_true",
+        help="""Align manufacturer names in database with manufacturer names from file."""
     )
     cli_admin.add_argument(
         "-F",

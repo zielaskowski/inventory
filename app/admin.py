@@ -1,23 +1,48 @@
 from argparse import Namespace
+import pandas as pd
 
-from app.sql import rm, getDF, getL
-from app.tabs import __tab_cols__
+from app.sql import rm, getDF, getL, put
+from app.tabs import tab_cols, align_manufacturer
 from conf.config import SQL_scheme
 from app.common import read_json, print_file
 
 
 def admin(args: Namespace) -> None:
+    sql_scheme = read_json(SQL_scheme)
+
     if args.config:
         print_file('./conf/config.py')
+
     if args.remove_dev_id:
         remove_dev(args.remove_dev_id, "device_id", args.force)
         exit(1)
+
     if args.remove_hash_id:
         remove_dev(args.remove_hash_id, "hash", args.force)
         exit(1)
 
+    if args.align_manufacturer:
+        # take all data from DEVICES table
+        dev = getDF(tab="DEVICE",follow=True)
+        # group by device_id, select only groups with more then one row 
+        # and take the first
+        dev_double = (dev.
+                      groupby("device_id").
+                      filter(lambda x: len(x) > 1).
+                      groupby("device_id").
+                      nth(1))
+        dev_double = remove_dev(dev=dev_double["hash"].tolist(), 
+                                by="hash", 
+                                force=False)
+        dev_double = align_manufacturer(dev_double)
+        for tab in ['DEVICE','SHOP']:
+            put(dat=dev_double,
+                tab=tab,
+                on_conflict=sql_scheme[tab]["ON_CONFLICT"])
+        exit(1)
 
-def remove_dev(dev: list[str], by: str, force: bool) -> None:
+
+def remove_dev(dev: list[str], by: str, force: bool) -> pd.DataFrame:
     # remove device based on hash or device_id
     # include all other tablec where device is used
     sql_scheme = read_json(SQL_scheme)
@@ -44,10 +69,11 @@ def remove_dev(dev: list[str], by: str, force: bool) -> None:
     all_tabs.remove("DEVICE")
     all_tabs.append("DEVICE")
     for t in all_tabs:
-        _, _, hash_cols = __tab_cols__(t)
+        _, _, hash_cols = tab_cols(t)
         hashed_col = [
             k
             for k, v in hash_cols.items()
             if "device_id" in v and k in sql_scheme[t]
         ]
         rm(tab=t, value=hash_id, column=hashed_col)
+    return dev

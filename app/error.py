@@ -14,9 +14,9 @@ class sql_getError(Exception):
         return f"SQL get error: {self.message}"
 
 
-class write_bomError(Exception):
-    def __init__(self, msg: str, *args: object) -> None:
-        self.message = msg
+class prepare_tabError(Exception):
+    def __init__(self, tab: str, missing_cols: list[str] ,*args: object) -> None:
+        self.message = f"For table {tab} missing mandatory columns: {missing_cols}"
         super().__init__(*args)
 
     def __str__(self) -> str:
@@ -107,15 +107,15 @@ class messageHandler:
     def SQL_file_miss(self, db_file: str) -> None:
         self.message.append(f"SQL file {db_file} is missing!")
         self.message.append(f"Creating new DB: {db_file}")
-        self.__exec__()
+        self.__exec__(warning=True)
 
-    def column_miss(self, miss_cols: list[str], file: str) -> None:
-        self.message.append(
-            f"File {file} does not have all necessary columns.\n"
-            + "Missing columns: "
-            + str(miss_cols)
-        )
-        self.__exec__()
+    def column_miss(self, miss_cols: list[str], file: str, tab: str="") -> None:
+        self.message.append(f"File {file} does not have all necessary columns ")
+        if tab != "":
+            self.message.append(f"in table {tab}.")
+        self.message.append(f"Missing columns: {str(miss_cols)}")
+        self.message.append(f"Not importing to table {tab}.")
+        self.__exec__(warning=True)
 
     def import_file(self, file: str) -> None:
         self.message.append("")
@@ -131,6 +131,7 @@ class messageHandler:
             self.message.append(
                 f"Missing necessery data in rows: {row_id}. Skiping these rows."
             )
+            self.__exec__(warning=True)
         elif not rows.empty:
             df_hash = float(pd.util.hash_pandas_object(rows).sum())
             if self.df_hash != df_hash:
@@ -139,16 +140,16 @@ class messageHandler:
                     "These rows have NAs in NON essential columns:"
                 )
                 self.message.append(rows.__str__())
+                self.__exec__(warning=True)
 
-        self.__exec__()
 
     def file_already_imported(self, file: str) -> bool:
         self.message.append(f"File {file} was already imported.")
-        self.message.append("Consider using option --replace.")
+        self.message.append("Consider using option --overwrite.")
         self.message.append(
             "Are you sure you want to add this file again? (y/n)"
         )
-        self.__exec__()
+        self.__exec__(warning=True)
         if input() == "y":
             return True
         else:
@@ -176,7 +177,27 @@ class messageHandler:
                 self.message.append(f"{devs} With cost of {cost} in total.")
         self.__exec__()
 
-    def __exec__(self) -> None:
+    def dev_manufacturer_align(self, df: pd.DataFrame) -> str:
+        # device_id | device_manufacturer1 | device_description1
+        # device_id | device_manufacturer2 | device_description2
+        # etc
+        self.message.append("You are about to add device with existing ID but different manufacturer.")
+        self.message.append("However possible, it's rather unusall. Choose the option.")
+        self.message.append("_________________________")
+        self.message.append(df.__str__())
+
+        # 4. ask user for decision: merge, keep, iterate
+        self.message.append("_________________________")
+        self.message.append("[m]erge will use existing manufacturer (the first existing)")
+        self.message.append("[k]eep will add new device_manufacturer")
+        self.__exec__(warning=True)
+        i = input("What to do? (m)erge, (k)eep: ")
+        return i
+
+    def __exec__(self,warning: bool = False) -> None:
+        if warning:
+            print("")
+            print('WARNING:')
         for msg in self.message:
             print(msg)
         self.message = []

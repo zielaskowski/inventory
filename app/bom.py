@@ -3,11 +3,11 @@ import pandas as pd
 from pandas.errors import ParserError
 from argparse import Namespace
 
-from app.sql import getL, getDF, rm
-from app.common import check_dir_file
-from app.tabs import __columns_align__, write_tab
-from conf.config import import_format
-from app.error import messageHandler, write_bomError, check_dirError
+from app.sql import getL, getDF, rm, put
+from app.common import check_dir_file, read_json
+from app.tabs import columns_align, prepare_tab
+from conf.config import import_format, SQL_scheme
+from app.error import messageHandler, prepare_tabError, check_dirError
 
 msg = messageHandler()
 
@@ -74,7 +74,7 @@ def bom_import(
                     continue
 
         # rename (and tidy) columns according to format of imported file
-        new_stock = __columns_align__(
+        new_stock = columns_align(
             new_stock.copy(),
             file=file,
             supplier=args.format,
@@ -83,28 +83,23 @@ def bom_import(
         # write data to SQL
         # need to start from DEVICE becouse other tables refer to it
         try:
-            write_tab(
-                dat=new_stock.copy(),
-                tab="DEVICE",
-                qty=args.qty,
-                file=file,
-                row_shift=import_format[args.format]["header"],
-            )
-            write_tab(
-                dat=new_stock.copy(),
-                tab="BOM",
-                qty=args.qty,
-                file=file,
-                row_shift=import_format[args.format]["header"],
-            )
-            write_tab(
-                dat=new_stock.copy(),
-                tab="SHOP",
-                qty=args.qty,
-                file=file,
-                row_shift=import_format[args.format]["header"],
-            )
-        except write_bomError as e:
+            tabs, dat = prepare_tab(
+                        dat=new_stock.copy(),
+                        tabs=["DEVICE",'BOM','SHOP'],
+                        qty=args.qty,
+                        file=file,
+                        row_shift=import_format[args.format]["header"],
+                        )
+            
+            # put into SQL
+            sql_scheme = read_json(SQL_scheme)
+            for tab in tabs:
+                put(
+                    dat=dat,
+                    tab=tab,
+                    on_conflict=sql_scheme[tab]["ON_CONFLICT"],
+                )
+        except prepare_tabError as e:
             print(e)
             continue
         imported_files.append(file)

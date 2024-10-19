@@ -1,4 +1,5 @@
 import os
+import sys
 import pandas as pd
 from pandas.errors import ParserError
 from argparse import Namespace
@@ -15,10 +16,14 @@ msg = messageHandler()
 def bom_import(
     args: Namespace,
 ) -> None:
-    if args.clean:
-        # remove all old data
-        rm(tab="BOM")
-        print("Removed all data from BOM table")
+    if args.remove:
+        bom = getDF(tab="BOM")
+        if not bom.empty:
+            if args.file is not None:
+                bom = bom[bom["file"].str.contains(args.file)]
+
+            rm(tab="BOM", value=bom["device_id"].tolist(), column=["device_id"])
+            msg.BOM_remove(args.file)
         return
 
     if not args.reimport:
@@ -63,7 +68,10 @@ def bom_import(
         except FileNotFoundError as e:
             print(e)
             continue
-
+        except:
+            print("Unexpected error:", sys.exc_info()[0])
+            continue
+    
         old_files = getL(tab="BOM", get=["file"])
         if args.overwrite:
             # remove all old data
@@ -79,14 +87,18 @@ def bom_import(
             file=file,
             supplier=args.format,
         )
+        # if 'price' in columns and device_id
+        if 'price' in new_stock.columns:
+            print('Add shop cart with "cart" command.')
+            print('skiping this file.')
+            continue
 
         # write data to SQL
         # need to start from DEVICE becouse other tables refer to it
         try:
             tabs, dat = prepare_tab(
                         dat=new_stock.copy(),
-                        tabs=["DEVICE",'BOM','SHOP'],
-                        qty=args.qty,
+                        tabs=["DEVICE",'BOM'],
                         file=file,
                         row_shift=import_format[args.format]["header"],
                         )
@@ -105,4 +117,8 @@ def bom_import(
         imported_files.append(file)
 
     # summary
-    msg.BOM_import_summary(imported_files, new_stock)
+    if imported_files != []:
+        ex_devs = new_stock[new_stock["device_id"].isin(getL(tab='BOM', get=['device_id']))]
+        msg.BOM_import_summary(imported_files, 
+                            new_stock, 
+                            len(ex_devs))

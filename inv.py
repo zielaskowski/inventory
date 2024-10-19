@@ -74,29 +74,23 @@ if __name__ == "__main__":
         required=False,
     )
     cli_import_bom.add_argument(
-        "-r",
+        "-i",
         "--reimport",
         action="store_true",
         help="""Import again (and replace) items in BOM table.""",
     )
     cli_import_bom.add_argument(
-        "-c",
-        "--clean",
+        "-r",
+        "--remove",
         action="store_true",
-        help="""Clean BOM table: remove all items. Do not touch any ather table in DB.
-                Ignores all other arguments.""",
-    )
-    cli_import_bom.add_argument(
-        "-q",
-        "--qty",
-        help="multiply 'Order Qty.' by this value. If omitted, no multiplication is done, if q=-1 will ask for value for each BOM",
-        required=False,
-        default=1,
+        help="""Remove fromBOM table: remove all items. 
+                Filter with --file if given
+                Do not touch any ather table in DB.""",
     )
     cli_import_bom.set_defaults(func=bom_import)
 
     cli_import_cart = command_parser.add_parser(
-        "chart_import",
+        "cart_import",
         allow_abbrev=True,
         help="Scan for xls files and import shopping chart",
     )
@@ -151,6 +145,13 @@ if __name__ == "__main__":
         help="project name used to prepare shoping list",
         required=False,
     )
+    cli_transact.add_argument(
+        "-q",
+        "--qty",
+        help="multiply 'Order Qty.' by this value. If omitted, no multiplication is done, if q=-1 will ask for value for each BOM",
+        required=False,
+        default=1,
+    )
     cli_transact.set_defaults(func=trans)
 
     cli_commit = command_parser.add_parser(
@@ -179,19 +180,6 @@ if __name__ == "__main__":
         help="""Clean all devices from list using device part number. Also from all other tables.
                 Refuse to remove devices used in project; use force to overcome.""",
     )
-    admin_group.add_argument(
-        "--remove_hash_id",
-        nargs="+",
-        default=False,
-        help="""Clean all devices from list using device hash. Also from all other tables.
-                Refuse to remove devices used in project; use force to overcome.""",
-    )
-    admin_group.add_argument(
-        "--align_manufacturer",
-        action="store_true",
-        default=False,
-        help="""Align manufacturer names in database with manufacturer names from file."""
-    )
     cli_admin.add_argument(
         "-F",
         "--force",
@@ -202,13 +190,6 @@ if __name__ == "__main__":
 
     args = cli.parse_args()
     log(sys.argv[1:])
-
-    # may happen (for sure in vscode when debuging) that args have some spaces
-    # for attr_name in dir(args):
-    #     if not attr_name.startswith("__"):
-    #         attr_val = getattr(args, attr_name)
-    #         if isinstance(attr_val, str):
-    #             setattr(args, attr_name, attr_val.strip())
 
     # check if we have proper sql file
     try:

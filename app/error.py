@@ -89,15 +89,6 @@ class sql_executeError(Exception):
         return f"SQL execution error: {self.message}"
 
 
-class hashError(Exception):
-    def __init__(self, cols: list[str], *args: object) -> None:
-        self.message = f"hash columns {cols} missing in dataFarame"
-        super().__init__(*args)
-
-    def __str__(self) -> str:
-        return f"Hash error: {self.message}"
-
-
 class messageHandler:
     def __init__(self) -> None:
         self.message = []
@@ -155,7 +146,13 @@ class messageHandler:
         else:
             return False
 
-    def BOM_import_summary(self, files: list[str], dat: pd.DataFrame) -> None:
+    def BOM_remove(self, file: str) -> None:
+        self.message.append("Removed data from BOM table")
+        if file is not None:
+            self.message.append(f"where file within {file}")
+        self.__exec__()
+
+    def BOM_import_summary(self, files: list[str], dat: pd.DataFrame, ex_devs:int=0) -> None:
         self.message.append("")
         self.message.append("______SUMMARY_______")
         self.message.append("*******************")
@@ -167,32 +164,17 @@ class messageHandler:
             )
             self.message.append(str(files))
             if "device_id" in dat.columns:
-                devs = len(dat["device_id"].unique())
-                self.message.append(f"{devs} devices were added to BOM table.")
+                new_devs = len(dat) - ex_devs
+                self.message.append(f"{new_devs} new devices were added to BOM table.")
+                self.message.append(f"{ex_devs} existing devices were added to BOM table.")
             if "price" in dat.columns:
                 if "qty" not in dat.columns:
                     dat["qty"] = 1
                 dat["tot_cost"] = dat["price"] * dat["qty"]
                 cost = dat["tot_cost"].sum()
-                self.message.append(f"{devs} With cost of {cost}$ in total.")
+                self.message.append(f"{len(dat)} With cost of {cost}$ in total.")
         self.__exec__()
 
-    def dev_manufacturer_align(self, df: pd.DataFrame) -> str:
-        # device_id | device_manufacturer1 | device_description1
-        # device_id | device_manufacturer2 | device_description2
-        # etc
-        self.message.append("You are about to add device with existing ID but different manufacturer.")
-        self.message.append("However possible, it's rather unusall. Choose the option.")
-        self.message.append("_________________________")
-        self.message.append(df.__str__())
-
-        # 4. ask user for decision: merge, keep, iterate
-        self.message.append("_________________________")
-        self.message.append("[m]erge will use existing manufacturer (the first existing)")
-        self.message.append("[k]eep will add new device_manufacturer")
-        self.__exec__(warning=True)
-        i = input("What to do? (m)erge, (k)eep: ")
-        return i
 
     def __exec__(self,warning: bool = False) -> None:
         if warning:

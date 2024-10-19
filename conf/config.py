@@ -2,7 +2,7 @@
 SQL_scheme = "./conf/sql_scheme.jsonc"
 
 # list of keywords to be ignored during reading columns from tab
-SQL_keywords = ["FOREIGN", "UNIQUE", "HASH_COLS", "ON_CONFLICT"]
+SQL_keywords = ["FOREIGN", "UNIQUE", "ON_CONFLICT"]
 
 # database file location and name
 db_file = "./inventory.sqlite"
@@ -14,7 +14,7 @@ log_file = "./conf/log.txt"
 # leave empty if you want to scan anything
 # not case sensitive
 scan_dir = "BOM"
-#scan_dir = ""
+# scan_dir = ""
 
 # excel format description for imported excell
 # options for pandas csv_import + columns renaming to align with sql
@@ -43,7 +43,7 @@ import_format = {
     "easyEDA": {
         "header": 0,
         "index_col": None,
-        "usecols": list(range(0,20)),
+        "usecols": list(range(0, 20)),
         "na_values": "-",
         "cols": {  # lower case only, align with sql_scheme.jsonc
             "quantity": "qty",
@@ -52,8 +52,24 @@ import_format = {
             "supplier footprint": "package",
             "description": "device_description",
         },
-        "dtype": {  # lower case only, after cols rename!
-            "qty": int
+        "dtype": {"qty": int},  # lower case only, after cols rename!
+    },
+    "mouser": {
+        "header": 7,
+        'index_col': None,
+        "usecols": list(range(0, 9)),
+        "na_values": "-",
+        "cols": {  # lower case only, align with sql_scheme.jsonc
+           'mouser no' : "shop_id",
+            "order qty.": "qty",
+            "mfr. no": "device_id",
+            "manufacturer": "device_manufacturer",
+            "description ": "device_description",
+            "price (usd)": "price",
         },
+        "dtype": {  # lower case only, after cols rename!
+            "qty": int,
+            "price": float,
+        }
     },
 }

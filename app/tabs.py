@@ -14,6 +14,7 @@ msg = messageHandler()
 DEV_ID = "device_id"
 DEV_MAN = "device_manufacturer"
 DEV_DESC = "device_description"
+DEV_HASH = 'hash'
 cols = [DEV_ID, DEV_MAN, DEV_DESC]
 
 def prepare_tab(
@@ -65,7 +66,9 @@ def prepare_tab(
         dat["qty"] = dat["qty"] * qty
 
     # align manufacturer for common device_id
-    dat = align_manufacturer(dat)
+    all_dat = getDF(tab="DEVICE")
+    if not all_dat.empty:
+        dat = align_manufacturer(dat, all_dat)
 
     # hash rows
     for hashed_col in hash_cols:
@@ -153,7 +156,8 @@ def ASCII_txt(txt: str) -> str:
     return txt
 
 
-def align_manufacturer(new_tab: pd.DataFrame) -> pd.DataFrame:
+def align_manufacturer(new_tab: pd.DataFrame, 
+                       dat: pd.DataFrame) -> pd.DataFrame:
     # AVOID DUPLICATES OF DEVICE_ID BECOUSE OF DIFFERENT MANUFACTURERS
     # group by device_id
     # report all cases when are more manufacturers for the same device_id
@@ -161,9 +165,6 @@ def align_manufacturer(new_tab: pd.DataFrame) -> pd.DataFrame:
     # - keep new manufacturer
     # aditionally take longest description whenever possible
 
-    dat = getDF(tab="DEVICE")
-    if dat.empty:
-        return new_tab
     # 1. split new_tab into three parts:
     # 1.1. new_tab with device_id not in dat = mod_tab
     mod_tab = new_tab[~new_tab[DEV_ID].isin(dat[DEV_ID])]
@@ -216,10 +217,10 @@ def long_description(
     tab = pd.concat([tab1st, tab2nd], ignore_index=True)
     tab = (tab.
            groupby(DEV_ID).
-           filter(lambda x: len(x) > 1)
-           )
-    tab = tab.groupby(DEV_ID)
+           filter(lambda x: len(x) > 1).
+           groupby(DEV_ID))
 
+    ret_tab = pd.DataFrame()
     for name, group in tab:
         # take the longest description
         row = group.loc[
@@ -229,4 +230,11 @@ def long_description(
                     ]
         group[DEV_DESC] = row[DEV_DESC]
         group[DEV_MAN] = row[DEV_MAN]
-    return tab.nth(1)
+        ret_tab = pd.concat(
+            [
+            ret_tab, 
+            group.iloc[1].to_frame().T
+            ], 
+            ignore_index=True
+             )
+    return ret_tab

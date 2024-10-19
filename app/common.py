@@ -1,18 +1,38 @@
 import json
 import hashlib
 from typing import Dict
-from argparse import Namespace
+import argparse
 import re
 import os
+import sys
 import pandas as pd
 
 from json import JSONDecodeError
 
-from conf.config import SQL_scheme, SQL_keywords, scan_dir
+from conf.config import SQL_scheme, SQL_keywords, scan_dir, log_file
 from app.error import read_jsonError, check_dirError, hashError
 from app.error import messageHandler
 
+
 msg = messageHandler()
+
+
+def log(args) -> None:
+    # log command in ./conf/log.txt
+    # skip  -h and --help commands
+    #check if attribute 'help' exists in com namespac
+    if any(a for a in args if a in ["--help", "-h"]):
+        return
+    
+    cmd = ['python -m inv'] + args
+    
+    # check if path exists, if not create
+    path = os.path.dirname(log_file)
+    if not os.path.exists(path):
+        os.makedirs(path)
+    
+    with open(log_file, "a") as f:
+        f.write(f"{' '.join(cmd)}\n")
 
 
 def read_json(file: str) -> Dict:
@@ -52,7 +72,7 @@ def find_xlsx_files(directory: str) -> list:
     return xlsx_files
 
 
-def check_dir_file(args: Namespace) -> list[str]:
+def check_dir_file(args: argparse.Namespace) -> list[str]:
     # check search directory
     if not os.path.exists(args.dir):
         raise check_dirError(args.file, args.dir, scan_dir)
@@ -183,3 +203,26 @@ def print_file(file: str):
             print(f.read())
     except FileNotFoundError:
         print(f"File {file} not found")
+
+
+class AbbreviationParser(argparse.ArgumentParser):
+    def _get_abbreviation(self, cmd, choices):
+        matches = [choice for choice in choices if choice.startswith(cmd)]
+        if len(matches) == 1:
+            return matches[0]
+        elif len(matches) > 1:
+            self.error(f"Ambiguous abbreviation '{cmd}', match: {matches}.")
+        else:
+            self.error(f"No match found for abbreviation '{cmd}'.")
+
+    def parse_args(self, args=None, namespace=None):
+        if args is None:
+            args = sys.argv[1:]    
+        # Check if the first positional argument is an abbreviation of a subcommand
+        if args and args[0] in self._subparsers._actions[1].choices:
+            return super().parse_args(args, namespace)
+
+        if args and args[0]:
+            full_cmd = self._get_abbreviation(args[0], self._subparsers._actions[1].choices)
+            args[0] = full_cmd
+        return super().parse_args(args, namespace)

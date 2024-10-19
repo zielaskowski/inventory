@@ -174,7 +174,7 @@ class messageHandler:
                     dat["qty"] = 1
                 dat["tot_cost"] = dat["price"] * dat["qty"]
                 cost = dat["tot_cost"].sum()
-                self.message.append(f"{devs} With cost of {cost} in total.")
+                self.message.append(f"{devs} With cost of {cost}$ in total.")
         self.__exec__()
 
     def dev_manufacturer_align(self, df: pd.DataFrame) -> str:

@@ -1,4 +1,5 @@
 import os
+import sys
 import argparse
 
 from app.bom import bom_import
@@ -7,11 +8,12 @@ from app.transaction import trans
 from app.commit import commit
 from app.admin import admin
 from app.sql import sql_check
+from app.common import log, AbbreviationParser
 from app.error import sql_checkError, sql_createError
 from conf.config import import_format
 
 if __name__ == "__main__":
-    cli = argparse.ArgumentParser(
+    cli = AbbreviationParser(
         description="""
         INVentory management system.
         store information about available stock, devices info, and shop cost.
@@ -31,7 +33,9 @@ if __name__ == "__main__":
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    command_parser = cli.add_subparsers(title="commands", dest="command")
+    command_parser = cli.add_subparsers(
+        title="commands", 
+        dest="command")
 
     cli_import_bom = command_parser.add_parser(
         "bom_import",
@@ -150,7 +154,8 @@ if __name__ == "__main__":
     cli_transact.set_defaults(func=trans)
 
     cli_commit = command_parser.add_parser(
-        "commit", help="commit BOM table and update stock. Write new project"
+        "commit", 
+        help="commit BOM table and update stock. Write new project"
     )
     cli_commit.add_argument(
         "-p", "--project", help="project name to commit", required=True
@@ -170,20 +175,21 @@ if __name__ == "__main__":
     admin_group.add_argument(
         "--remove_dev_id",
         nargs="+",
-        action="store",
+        default=False,
         help="""Clean all devices from list using device part number. Also from all other tables.
                 Refuse to remove devices used in project; use force to overcome.""",
     )
     admin_group.add_argument(
         "--remove_hash_id",
         nargs="+",
-        action="store",
+        default=False,
         help="""Clean all devices from list using device hash. Also from all other tables.
                 Refuse to remove devices used in project; use force to overcome.""",
     )
     admin_group.add_argument(
         "--align_manufacturer",
         action="store_true",
+        default=False,
         help="""Align manufacturer names in database with manufacturer names from file."""
     )
     cli_admin.add_argument(
@@ -195,12 +201,14 @@ if __name__ == "__main__":
     cli_admin.set_defaults(func=admin)
 
     args = cli.parse_args()
+    log(sys.argv[1:])
+
     # may happen (for sure in vscode when debuging) that args have some spaces
-    for attr_name in dir(args):
-        if not attr_name.startswith("__"):
-            attr_val = getattr(args, attr_name)
-            if isinstance(attr_val, str):
-                setattr(args, attr_name, attr_val.strip())
+    # for attr_name in dir(args):
+    #     if not attr_name.startswith("__"):
+    #         attr_val = getattr(args, attr_name)
+    #         if isinstance(attr_val, str):
+    #             setattr(args, attr_name, attr_val.strip())
 
     # check if we have proper sql file
     try:

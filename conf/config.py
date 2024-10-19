@@ -7,11 +7,14 @@ SQL_keywords = ["FOREIGN", "UNIQUE", "HASH_COLS", "ON_CONFLICT"]
 # database file location and name
 db_file = "./inventory.sqlite"
 
+# log file location and name
+log_file = "./conf/log.txt"
+
 # directory to scan when searching for files
 # leave empty if you want to scan anything
 # not case sensitive
-#scan_dir = "BOM"
-scan_dir = ""
+scan_dir = "BOM"
+#scan_dir = ""
 
 # excel format description for imported excell
 # options for pandas csv_import + columns renaming to align with sql

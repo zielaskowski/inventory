@@ -12,5 +12,7 @@ App developed with followin workflow in mind:
 3. export merged BOM to use as import file for web_shop
 4. possible (and advised) to import shop cart.
 5. when shop data available, BOM export consider best cost shop, and split shopping lists by shop
+
 NOT IMPLEMENTED
+
 6. BOM can be comited to write a project, and fill stock table based on ordered quantity

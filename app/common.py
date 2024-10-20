@@ -4,7 +4,6 @@ import argparse
 import re
 import os
 import sys
-import pandas as pd
 
 from json import JSONDecodeError
 
@@ -175,6 +174,8 @@ def print_file(file: str):
 
 class AbbreviationParser(argparse.ArgumentParser):
     def _get_abbreviation(self, cmd, choices):
+        if cmd in ['-h','--help']:
+            return cmd
         matches = [choice for choice in choices if choice.startswith(cmd)]
         if len(matches) == 1:
             return matches[0]

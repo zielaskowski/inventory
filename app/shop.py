@@ -14,7 +14,6 @@ msg = messageHandler()
 def cart_import(args: Namespace) -> None:
     xls_files = check_dir_file(args)
     new_stock = pd.DataFrame()
-    imported_files = []
 
     # import all xlsx files
     for file in xls_files:
@@ -30,6 +29,7 @@ def cart_import(args: Namespace) -> None:
                     not in [
                         "cols",
                         "dtype",
+                        "func"
                     ]
                 },
             )
@@ -56,6 +56,8 @@ def cart_import(args: Namespace) -> None:
                             file=file,
                             row_shift=import_format[args.format]["header"],
                         )
+            # existing device for summary reasons
+            ex_devs = getL(tab='BOM', get=['device_id'])
             # put into SQL
             sql_scheme = read_json(SQL_scheme)
             for tab in tabs:
@@ -67,11 +69,7 @@ def cart_import(args: Namespace) -> None:
         except prepare_tabError as e:
             print(e)
             continue
-        imported_files.append(file)
     
-    # summary
-    if imported_files != []:
-        ex_devs = new_stock[new_stock["device_id"].isin(getL(tab='BOM', get=['device_id']))]
-        msg.BOM_import_summary(imported_files, 
-                            new_stock, 
-                            len(ex_devs))
+        # SUMMARY
+        msg.BOM_import_summary(new_stock, 
+                            len(new_stock[new_stock["device_id"].isin(ex_devs)]))

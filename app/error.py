@@ -110,8 +110,8 @@ class messageHandler:
 
     def import_file(self, file: str) -> None:
         self.message.append("")
+        self.message.append("*********************************************************")
         self.message.append("______Import_______")
-        self.message.append("*******************")
         self.message.append(f"Importing file: {os.path.basename(file)}")
         self.__exec__()
 
@@ -133,7 +133,6 @@ class messageHandler:
                 self.message.append(rows.__str__())
                 self.__exec__(warning=True)
 
-
     def file_already_imported(self, file: str) -> bool:
         self.message.append(f"File {file} was already imported.")
         self.message.append("Consider using option --overwrite.")
@@ -152,29 +151,29 @@ class messageHandler:
             self.message.append(f"where file within {file}")
         self.__exec__()
 
-    def BOM_import_summary(self, files: list[str], dat: pd.DataFrame, ex_devs:int=0) -> None:
+    def BOM_import_summary(self, dat: pd.DataFrame, ex_devs:int=0) -> None:
         self.message.append("")
         self.message.append("______SUMMARY_______")
-        self.message.append("*******************")
         if dat.empty:
-            self.message.append("No devices were added to BOM table.")
+            self.message.append("No devices were added to the table.")
         else:
-            self.message.append(
-                f"{len(files)} files were imported to BOM table:"
-            )
-            self.message.append(str(files))
             if "device_id" in dat.columns:
                 new_devs = len(dat) - ex_devs
-                self.message.append(f"{new_devs} new devices were added to BOM table.")
-                self.message.append(f"{ex_devs} existing devices were added to BOM table.")
+                self.message.append(f"{new_devs} new devices were added to the table.")
+                self.message.append(f"{ex_devs} existing devices were added to the table.")
             if "price" in dat.columns:
                 if "qty" not in dat.columns:
                     dat["qty"] = 1
                 dat["tot_cost"] = dat["price"] * dat["qty"]
-                cost = dat["tot_cost"].sum()
+                cost = round(dat["tot_cost"].sum(), 2)
                 self.message.append(f"{len(dat)} With cost of {cost}$ in total.")
+        self.message.append("*********************************************************")
         self.__exec__()
 
+    def unknown_import(self, er: str) -> None:
+        self.message.append(f"Unexpected error: {er}")
+        self.message.append("Possibly wrong excel format (different shop?)")
+        self.__exec__()
 
     def __exec__(self,warning: bool = False) -> None:
         if warning:

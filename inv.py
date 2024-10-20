@@ -1,3 +1,6 @@
+#!/home/mi/docs/prog/python/inventory/.venv/bin/python
+
+
 import os
 import sys
 import argparse
@@ -130,7 +133,7 @@ if __name__ == "__main__":
         "--file",
         help="File name to save shoping list, defoult is 'shopping list.csv'",
         required=False,
-        default="shopping_list.csv",
+        default="shopping_list",
     )
     cli_transact.add_argument(
         "-d",
@@ -148,9 +151,17 @@ if __name__ == "__main__":
     cli_transact.add_argument(
         "-q",
         "--qty",
+        type=int,
         help="multiply 'Order Qty.' by this value. If omitted, no multiplication is done, if q=-1 will ask for value for each BOM",
         required=False,
         default=1,
+    )
+    cli_transact.add_argument(
+        "-s",
+        "--dont_split_shop",
+        action="store_true",
+        default=False,
+        help="Do not split shopping list by supplier",
     )
     cli_transact.set_defaults(func=trans)
 

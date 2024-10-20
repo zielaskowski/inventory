@@ -36,9 +36,9 @@ def bom_import(
         xls_files = getDF(tab="BOM", get=["dir", "file"])
         xls_files["path"] = xls_files["dir"] + "/" + xls_files["file"]
         xls_files = xls_files["path"].tolist()
+        args.overwrite = True
 
     new_stock = pd.DataFrame()
-    imported_files = []
 
     # import all xlsx files
     for file in xls_files:
@@ -54,12 +54,12 @@ def bom_import(
                     not in [
                         "cols",
                         "dtype",
+                        "func"
                     ]
                 },
             )
         except ParserError as e:
-            print("Possibly wrong excel format (different shop?)")
-            print(e)
+            msg.unknown_import(e)
             continue
         except ValueError as e:
             print("Possibly 'no matched' row.")
@@ -69,7 +69,7 @@ def bom_import(
             print(e)
             continue
         except:
-            print("Unexpected error:", sys.exc_info()[0])
+            msg.unknown_import(sys.exc_info()[0])
             continue
     
         old_files = getL(tab="BOM", get=["file"])
@@ -102,7 +102,8 @@ def bom_import(
                         file=file,
                         row_shift=import_format[args.format]["header"],
                         )
-            
+            # existing device for summary reasons
+            ex_devs = getL(tab='BOM', get=['device_id'])
             # put into SQL
             sql_scheme = read_json(SQL_scheme)
             for tab in tabs:
@@ -114,11 +115,7 @@ def bom_import(
         except prepare_tabError as e:
             print(e)
             continue
-        imported_files.append(file)
 
-    # summary
-    if imported_files != []:
-        ex_devs = new_stock[new_stock["device_id"].isin(getL(tab='BOM', get=['device_id']))]
-        msg.BOM_import_summary(imported_files, 
-                            new_stock, 
-                            len(ex_devs))
+        # SUMMARY
+        msg.BOM_import_summary(new_stock, 
+                            len(new_stock[new_stock["device_id"].isin(ex_devs)]))

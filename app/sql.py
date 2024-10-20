@@ -143,7 +143,7 @@ def get(
 
     if where[0] == "%":
         where = all_cols
-    if get[0] == "%":
+    if get[0] == "%" and not follow:
         get = all_cols
 
     if follow:
@@ -155,9 +155,11 @@ def get(
                     col, f_tab, f_col = unpack_foreign(F)
                     f_DF = getDF(tab=f_tab)
                     base_tab = base_tab.merge(f_DF, left_on=col, right_on=f_col)
-                    if any(c not in base_tab.columns for c in get):
-                        raise sql_getError(get, base_tab.columns)
-                    resp[r] = base_tab[get]
+                    if get != ["%"]:
+                        if any(c not in base_tab.columns for c in get):
+                            raise sql_getError(get, base_tab.columns)
+                        base_tab = base_tab[get]
+                    resp[r] = base_tab
 
     else:
         if any(g not in all_cols for g in get):

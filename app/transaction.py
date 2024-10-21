@@ -1,7 +1,11 @@
 import os
-from argparse import Namespace
-from app.sql import getDF
 import pandas as pd
+from argparse import Namespace
+
+from app.sql import getDF
+from app.error import messageHandler
+
+msg = messageHandler()
 
 
 def trans(args: Namespace):
@@ -14,7 +18,7 @@ def trans(args: Namespace):
     BOM = BOM.groupby("device_id", as_index=False).agg(agg_cols)
     dev_list = BOM["device_id"].tolist()
 
-    BOM['qty'] = BOM['qty'] * args.qty
+    BOM["qty"] = BOM["qty"] * args.qty
 
     # read STOCK table from sql
     STOCK = getDF(tab="STOCK", search=[dev_list], where=["device_id"])
@@ -62,17 +66,26 @@ def trans(args: Namespace):
         ]
         if c in BOM.columns
     ]
+    info = []
     if not args.dont_split_shop:
         for shop in BOM["shop"].unique():
             file_csv = os.path.join(args.dir, args.file) + "_" + shop + ".csv"
             BOM.loc[BOM["shop"] == shop, cols].to_csv(file_csv, index=False)
-            print(
-                f"Shopping cart for shop {shop} saved in {args.file}_{shop} in {args.dir}"
-            )
+            info += [
+                {'shop':shop,
+                 'file':args.file,
+                 'dir':args.dir,
+                 'price': BOM.loc[BOM["shop"] == shop, 'shop_price'].sum()
+                 }
+            ]
+
     else:
         file_csv = os.path.join(args.dir, args.file) + ".csv"
         BOM[cols].to_csv(file_csv, index=False)
-        print(
-            f"Shopping cart saved in {args.file} in {args.dir}"
-        )
-
+        info += [
+                {'shop':None,
+                 'file':args.file,
+                 'dir':args.dir
+                 }
+            ]
+    msg.trans_summary(info)

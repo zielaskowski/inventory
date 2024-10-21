@@ -64,9 +64,9 @@ if __name__ == "__main__":
     cli_import_bom.add_argument(
         "-F",
         "--format",
-        help=f"format of file to import, possible values: {list(import_format.keys())}. Defoult is {list(import_format.keys())[0]}",
+        help=f"format of file to import, possible values: {list(import_format.keys())}. Defoult is {list(import_format.keys())[1]}",
         required=False,
-        default=list(import_format.keys())[0],  # LCSC
+        default=list(import_format.keys())[1],  # easyEDA
     )
     cli_import_bom.add_argument(
         "-o",

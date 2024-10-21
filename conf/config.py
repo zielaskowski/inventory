@@ -25,15 +25,19 @@ def mouser(*args, **kwargs) -> list:
     if col_name == "order_qty":
         col = 1
     elif col_name == "price":
-        col = float(col.replace("$", ""))
+        try:
+            col = float(col.replace("$", ""))
+        except:
+            # there are some summary rows at end, causing strings in price col
+            col = 0
     return col
 
 
 import_format = {
     "LCSC": {
+        "engine":'xlrd',
         "header": 4,
         "index_col": None,
-        "usecols": [7] + list(range(11, 25)),
         "na_values": "-",
         "cols": {  # lower case only, align with sql_scheme.jsonc
             "lcsc#.1": "shop_id",
@@ -53,9 +57,9 @@ import_format = {
         "func": None,
     },
     "easyEDA": {
+        "engine":'xlrd',
         "header": 0,
         "index_col": None,
-        "usecols": list(range(0, 20)),
         "na_values": "-",
         "cols": {  # lower case only, align with sql_scheme.jsonc
             "quantity": "qty",
@@ -68,9 +72,9 @@ import_format = {
         "func": None,
     },
     "mouser": {
-        "header": 6,
+        "engine":'xlrd',
+        "header": 8,
         "index_col": None,
-        "usecols": list(range(0, 9)),
         "na_values": "-",
         "cols": {  # lower case only, align with sql_scheme.jsonc
             "mouser no": "shop_id",

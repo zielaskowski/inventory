@@ -15,8 +15,12 @@ class sql_getError(Exception):
 
 
 class prepare_tabError(Exception):
-    def __init__(self, tab: str, missing_cols: list[str] ,*args: object) -> None:
-        self.message = f"For table {tab} missing mandatory columns: {missing_cols}"
+    def __init__(
+        self, tab: str, missing_cols: list[str], *args: object
+    ) -> None:
+        self.message = (
+            f"For table {tab} missing mandatory columns: {missing_cols}"
+        )
         super().__init__(*args)
 
     def __str__(self) -> str:
@@ -37,7 +41,7 @@ class check_dirError(Exception):
     def __init__(
         self, file: str, dir: str, scan_dir: str, *args: object
     ) -> None:
-        self.message =f"{file} is missing or corrupted,\nor no {scan_dir} folder in {dir} directory"
+        self.message = f"{file} is missing or corrupted,\nor no {scan_dir} folder in {dir} directory"
         super().__init__(*args)
 
     def __str__(self) -> str:
@@ -100,7 +104,9 @@ class messageHandler:
         self.message.append(f"Creating new DB: {db_file}")
         self.__exec__(warning=True)
 
-    def column_miss(self, miss_cols: list[str], file: str, tab: str="") -> None:
+    def column_miss(
+        self, miss_cols: list[str], file: str, tab: str = ""
+    ) -> None:
         self.message.append(f"File {file} does not have all necessary columns ")
         if tab != "":
             self.message.append(f"in table {tab}.")
@@ -110,7 +116,9 @@ class messageHandler:
 
     def import_file(self, file: str) -> None:
         self.message.append("")
-        self.message.append("*********************************************************")
+        self.message.append(
+            "*********************************************************"
+        )
         self.message.append("______Import_______")
         self.message.append(f"Importing file: {os.path.basename(file)}")
         self.__exec__()
@@ -151,7 +159,7 @@ class messageHandler:
             self.message.append(f"where file within {file}")
         self.__exec__()
 
-    def BOM_import_summary(self, dat: pd.DataFrame, ex_devs:int=0) -> None:
+    def BOM_import_summary(self, dat: pd.DataFrame, ex_devs: int = 0) -> None:
         self.message.append("")
         self.message.append("______SUMMARY_______")
         if dat.empty:
@@ -159,15 +167,46 @@ class messageHandler:
         else:
             if "device_id" in dat.columns:
                 new_devs = len(dat) - ex_devs
-                self.message.append(f"{new_devs} new devices were added to the table.")
-                self.message.append(f"{ex_devs} existing devices were added to the table.")
+                self.message.append(
+                    f"{new_devs} new devices were added to the table."
+                )
+                self.message.append(
+                    f"{ex_devs} existing devices were added to the table."
+                )
             if "price" in dat.columns:
                 if "qty" not in dat.columns:
                     dat["qty"] = 1
                 dat["tot_cost"] = dat["price"] * dat["qty"]
                 cost = round(dat["tot_cost"].sum(), 2)
-                self.message.append(f"{len(dat)} With cost of {cost}$ in total.")
-        self.message.append("*********************************************************")
+                self.message.append(
+                    f"{len(dat)} With cost of {cost}$ in total."
+                )
+        self.message.append(
+            "*********************************************************"
+        )
+        self.__exec__()
+
+    def trans_summary(self, txt: list[dict]) -> None:
+        self.message.append("")
+        self.message.append(
+            "*********************************************************"
+        )
+        self.message.append("______TRANSACTION_______")
+        for d in txt:
+            if d['shop']:
+                self.message.append(
+                    f"Shopping cart for shop '{d['shop']}' saved in '{d['file']}_{d['shop']}' in '{d['dir']}'"
+                )
+                self.message.append(
+                    f"Shopping cart value: '{d['price']}'$"
+                )
+            else:
+                self.message.append(
+                    f"Shopping cart saved in '{d['file']}' in '{d['dir']}'"
+                )
+        self.message.append(
+            "*********************************************************"
+        )
         self.__exec__()
 
     def unknown_import(self, er: str) -> None:
@@ -175,10 +214,10 @@ class messageHandler:
         self.message.append("Possibly wrong excel format (different shop?)")
         self.__exec__()
 
-    def __exec__(self,warning: bool = False) -> None:
+    def __exec__(self, warning: bool = False) -> None:
         if warning:
             print("")
-            print('WARNING:')
+            print("WARNING:")
         for msg in self.message:
             print(msg)
         self.message = []

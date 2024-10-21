@@ -105,6 +105,17 @@ def columns_align(
         columns={c: str(c).lower() for c in n_stock.columns},
         inplace=True,
     )
+    # drop columns if any col in values so to avoid duplication
+    n_stock.drop(
+        [
+            v
+            for _, v in import_format[supplier]["cols"].items()
+            if v in n_stock.columns
+        ],
+        axis="columns",
+        inplace=True,
+    )
+    # then rename
     n_stock.rename(
         columns=import_format[supplier]["cols"],
         inplace=True,

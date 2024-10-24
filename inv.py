@@ -86,7 +86,7 @@ if __name__ == "__main__":
         "-r",
         "--remove",
         action="store_true",
-        help="""Remove fromBOM table: remove all items. 
+        help="""Remove from BOM table: remove all items. 
                 Filter with --file if given
                 Do not touch any ather table in DB.""",
     )
@@ -191,11 +191,37 @@ if __name__ == "__main__":
         help="""Clean all devices from list using device part number. Also from all other tables.
                 Refuse to remove devices used in project; use force to overcome.""",
     )
+    admin_group.add_argument(
+        "--remove_shop_id",
+        nargs="*",
+        default=False,
+        help="""Remove shop part number from shop table. 
+                Usefull when item not in stock in shop any more""",
+    )
     cli_admin.add_argument(
         "-F",
         "--force",
         action="store_true",
         help="Force remove all devices from list. Including project tables.",
+    )
+    cli_admin.add_argument(
+        "--csv",
+        help="read item list from csv file.",
+    )
+    cli_admin.add_argument(
+        "-w",
+        "--what_col",
+        help="Which column to read from csv file.",
+    )
+    cli_admin.add_argument(
+        "-f",
+        "--filter_col",
+        help="Which column to use for filtering in csv file.",
+    )
+    cli_admin.add_argument(
+        "-v",
+        "--filter_val",
+        help="What value use to filter in filter_col in csv file.",
     )
     cli_admin.set_defaults(func=admin)
 

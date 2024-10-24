@@ -8,13 +8,43 @@ from app.common import read_json, print_file
 
 def admin(args: Namespace) -> None:
 
+    ids = []
+    
     if args.config:
         print_file('./conf/config.py')
 
+    if args.csv:
+        try:
+            df = pd.read_csv(args.csv)
+            df = df[df[args.filter_col]==args.filter_val]
+            ids = df[args.what_col].tolist()
+        except FileNotFoundError as e:
+            print(e)
+            exit(1)
+        except KeyError as e:
+            print(e)
+            exit(1)
+
     if args.remove_dev_id:
-        dev = remove_dev(args.remove_dev_id, "device_id", args.force)
+        if not ids:
+            ids = args.remove_dev_id
+        dev = remove_dev(ids, "device_id", args.force)
         print(f"removed {len(dev)} devices")
         exit(1)
+
+    if args.remove_shop_id is not False:
+        if not ids:
+            ids = args.remove_shop_id
+        if ids == []:
+            print('No items to remove.')
+            exit(1)
+        rm(tab='SHOP', value=ids, column=['shop_id'])
+        print(f"removed {len(ids)} devices")
+        exit(1)
+
+# def remove_shop(dev: list[str], by: str, force: bool) -> None:
+#     # remove device from shop based shop_id
+#     rm(tab='SHOP', value=dev, column=['shop_id'])
 
   
 def remove_dev(dev: list[str], by: str, force: bool) -> pd.DataFrame:

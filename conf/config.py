@@ -35,7 +35,6 @@ def mouser(*args, **kwargs) -> list:
 
 import_format = {
     "LCSC": {
-        "engine":'xlrd',
         "header": 4,
         "index_col": None,
         "na_values": "-",
@@ -57,7 +56,6 @@ import_format = {
         "func": None,
     },
     "easyEDA": {
-        "engine":'xlrd',
         "header": 0,
         "index_col": None,
         "na_values": "-",
@@ -72,7 +70,6 @@ import_format = {
         "func": None,
     },
     "mouser": {
-        "engine":'xlrd',
         "header": 8,
         "index_col": None,
         "na_values": "-",

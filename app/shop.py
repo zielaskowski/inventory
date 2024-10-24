@@ -1,3 +1,4 @@
+import sys
 from argparse import Namespace
 import pandas as pd
 
@@ -40,6 +41,12 @@ def cart_import(args: Namespace) -> None:
         except ValueError as e:
             print("Possibly 'no matched' row.")
             print(e)
+            continue
+        except FileNotFoundError as e:
+            print(e)
+            continue
+        except:
+            msg.unknown_import(sys.exc_info()[0])
             continue
 
         # rename (and tidy) columns according to format of imported file

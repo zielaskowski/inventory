@@ -1,44 +1,45 @@
 #!/home/mi/docs/prog/python/inventory/.venv/bin/python
+"""INVentory management system"""
 
-
+import argparse
 import os
 import sys
-import argparse
 
-from app.bom import bom_import
-from app.shop import cart_import
-from app.transaction import trans
-from app.commit import commit
 from app.admin import admin
-from app.sql import sql_check
-from app.common import log, AbbreviationParser
+from app.bom import bom_import
+from app.commit import commit
+from app.common import AbbreviationParser, log
 from app.error import sql_checkError, sql_createError
+from app.shop import cart_import
+from app.sql import sql_check
+from app.transaction import trans
 from conf.config import import_format
 
 if __name__ == "__main__":
     cli = AbbreviationParser(
         description="""
         INVentory management system.
-        store information about available stock, devices info, and shop cost.
-        Also store projects (list of devices).
-        All imported data are temporary stored in BOM table, allowing creation
-        of common BOM and shop list. When comited, all ements from BOM table are
-        transfered to stock table and project is created.
+        Store information about available stock, devices info, and shop cost.
+        Also store BOM projects (list of devices).
         
-        Scan all BOMs and put into BOM table (each element into separate row).
-        Scan only files inside 'bom|BOM' folder. Can be changed in config.py.
-        Always write to device table and shop table (also when not adding to stock)
-        add to stock when commiting BOM
-        Output is written in stock.sqldb file. If the file is not found, it will be created based on sql_scheme.jsonc file
-        If found BOM file which is already present in stock.sqldb, it will overwrite this BOM only if commited.
-        Comitting the transaction will freze it (not possible to remove) and move all not confirmed transaction to end of tab
-        from not commited transaction create common BOM considering the stock
-        """,
+        Typical workflow can be:
+        Scan all BOM files from location (including subfolders) and put 
+        into BOM table (each element into separate row). Scan only files 
+        inside 'bom|BOM' folder. Can be changed in config.py. Each imported file 
+        will be treated as project. You can combine multiple project and export to
+        file suitable for importing into shop cart. There is also a function to 
+        import Shoping cart with prices. If you import shop cart from many shops,
+        BOM can export separate file for each shop considering best cost combination.
+        Finaly, you can commit the selected projects, which will store the
+        devices in the STOCK table.
+
+        Output is written in stock.sqldb file. If the file is not found, it will be
+        created based on sql_scheme.jsonc file.
+        Application can import exccel files in different formats (from different)
+        shops. Format description is in config file. Should be easy to extend.""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    command_parser = cli.add_subparsers(
-        title="commands", 
-        dest="command")
+    command_parser = cli.add_subparsers(title="commands", dest="command")
 
     cli_import_bom = command_parser.add_parser(
         "bom_import",
@@ -49,8 +50,8 @@ if __name__ == "__main__":
         "-d",
         "--dir",
         default=os.getcwd(),  # for jupyter: os.path.dirname(os.path.abspath(__file__))
-        help="""Directory to start scan with. 
-                If omitted, current directory is used. 
+        help="""Directory to start scan with.
+                If omitted, current directory is used.
                 Scan only in 'BOM' folder (can be change in config.py)""",
         required=False,
     )
@@ -64,7 +65,8 @@ if __name__ == "__main__":
     cli_import_bom.add_argument(
         "-F",
         "--format",
-        help=f"format of file to import, possible values: {list(import_format.keys())}. Defoult is {list(import_format.keys())[1]}",
+        help=f"format of file to import, possible values: {list(import_format.keys())}.\
+                Defoult is {list(import_format.keys())[1]}",
         required=False,
         default=list(import_format.keys())[1],  # easyEDA
     )
@@ -86,7 +88,7 @@ if __name__ == "__main__":
         "-r",
         "--remove",
         action="store_true",
-        help="""Remove from BOM table: remove all items. 
+        help="""Remove from BOM table: remove all items.
                 Filter with --file if given
                 Do not touch any ather table in DB.""",
     )
@@ -95,14 +97,14 @@ if __name__ == "__main__":
     cli_import_cart = command_parser.add_parser(
         "cart_import",
         allow_abbrev=True,
-        help="Scan for xls files and import shopping chart",
+        help="Scan for xls files and import shopping cart",
     )
     cli_import_cart.add_argument(
         "-d",
         "--dir",
         default=os.getcwd(),  # for jupyter: os.path.dirname(os.path.abspath(__file__))
-        help="""Directory to start scan with. 
-                If omitted, current directory is used. 
+        help="""Directory to start scan with.
+                If omitted, current directory is used.
                 Scan only in 'BOM' folder (can be change in config.py)""",
         required=False,
     )
@@ -116,7 +118,8 @@ if __name__ == "__main__":
     cli_import_cart.add_argument(
         "-F",
         "--format",
-        help=f"format of file to import, possible values: {list(import_format.keys())}. Defoult is {list(import_format.keys())[0]}",
+        help=f"format of file to import, possible values: {list(import_format.keys())}.\
+                Defoult is {list(import_format.keys())[0]}",
         required=False,
         default=list(import_format.keys())[0],  # LCSC
     )
@@ -125,8 +128,8 @@ if __name__ == "__main__":
     cli_transact = command_parser.add_parser(
         "transact",
         allow_abbrev=True,
-        help="""Prepare 'shopping list' file from previously imported BOM considering stock.
-        Can also prepare file based on project name""",
+        help="""Prepare 'shopping list' file for selected projects considering stock,
+        if available.""",
     )
     cli_transact.add_argument(
         "-f",
@@ -152,7 +155,8 @@ if __name__ == "__main__":
         "-q",
         "--qty",
         type=int,
-        help="multiply 'Order Qty.' by this value. If omitted, no multiplication is done, if q=-1 will ask for value for each BOM",
+        help="multiply 'Order Qty.' by this value. If omitted, no multiplication is done,\
+                if q=-1 will ask for value for each BOM",
         required=False,
         default=1,
     )
@@ -166,8 +170,8 @@ if __name__ == "__main__":
     cli_transact.set_defaults(func=trans)
 
     cli_commit = command_parser.add_parser(
-        "commit", 
-        help="commit BOM table and update stock. Write new project"
+        "commit",
+        help="""commit selected projects and update stock.""",
     )
     cli_commit.add_argument(
         "-p", "--project", help="project name to commit", required=True
@@ -195,7 +199,7 @@ if __name__ == "__main__":
         "--remove_shop_id",
         nargs="*",
         default=False,
-        help="""Remove shop part number from shop table. 
+        help="""Remove shop part number from shop table.
                 Usefull when item not in stock in shop any more""",
     )
     cli_admin.add_argument(
@@ -233,10 +237,10 @@ if __name__ == "__main__":
         sql_check()
     except sql_checkError as e:
         print(e)
-        exit(1)
+        sys.exit(1)
     except sql_createError as e:
         print(e)
-        exit(1)
+        sys.exit(1)
 
     if "func" in args:
         args.func(args)

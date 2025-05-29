@@ -1,38 +1,45 @@
+"""configuration file"""
+
 # configuration globals
-SQL_scheme = "/home/mi/docs/prog/python/inventory/conf/sql_scheme.jsonc"
+SQL_SCHEME = "/home/mi/docs/prog/python/inventory/conf/sql_scheme.jsonc"
 
 # list of keywords to be ignored during reading columns from tab
-SQL_keywords = ["FOREIGN", "UNIQUE", "ON_CONFLICT"]
+SQL_KEYWORDS = ["FOREIGN", "UNIQUE", "ON_CONFLICT"]
 
 # database file location and name
-db_file = "/home/mi/docs/prog/MCU/inventory.sqlite"
+DB_FILE = "/home/mi/docs/prog/MCU/inventory.sqlite"
 
 # log file location and name
-log_file = "/home/mi/docs/prog/python/inventory/conf/log.txt"
+LOG_FILE = "/home/mi/docs/prog/python/inventory/conf/log.txt"
 
 # directory to scan when searching for files
 # leave empty if you want to scan anything
 # not case sensitive
-scan_dir = "BOM"
+SCAN_DIR = "BOM"
 # scan_dir = ""
 
 
-# excel format description for imported excell
-# options for pandas csv_import + columns renaming to align with sql
-def mouser(*args, **kwargs) -> list:
+def mouser(*args, **kwargs) -> float | str:
+    """
+    function passed to pandas apply() on Dataframe columns
+    so Series basically. Format values in columns
+    Used during file import, see import foramtter below
+    """
     col_name = kwargs.get("col_name")
     col = args[0]
     if col_name == "order_qty":
-        col = 1
-    elif col_name == "price":
+        return 1
+    if col_name == "price":
         try:
-            col = float(col.replace("$", ""))
-        except:
+            val = float(col.replace("$", ""))
+            return val
+        except ValueError:
             # there are some summary rows at end, causing strings in price col
-            col = 0
+            return 0
     return col
 
 
+# pased to pandas read_excel() function as args and kwargs
 import_format = {
     "LCSC": {
         "header": 4,

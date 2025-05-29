@@ -13,55 +13,65 @@
     //** PRIMARY columns are indexed automatically
     //** HASH_COLS is not SQL! it's aditional info to allow hashing automation
     //** ON_CONFLICT describes action to perform on conflict
-    //** preparing BOM for project
-    //** import DEVICE with bom_qty and shop_qty and cost from file
-    //** do not affect stock untill not commited,
-    //** write all data about DEVICE and shop (cost)
+
+    //** list of devices, not necessery in stock
+    "DEVICE": {
+        "device_hash": "TEXT PRIMARY KEY",
+	"device_id": "TEXT NOT NULL",
+        "device_manufacturer": "TEXT NOT NULL",
+        "device_description": "TEXT",
+        "package": "TEXT",
+	"category1": "TEXT",
+	"category2": "TEXT",
+        "ON_CONFLICT": [
+            {
+                "action": "REPLACE"
+            }
+        ],
+	"HASH_COLS":[
+		"device_id",
+		"device_manufacturer"
+	]
+    },
+
+    //** BOM for project
+    //** file and device_id are unique to not mix BOMs
+    //** from different project, this allow reimport and other
     "BOM": {
         "id": "INTEGER PRIMARY KEY",
         "qty": "INTEGER NOT NULL",
-        "device_id": "TEXT NOT NULL",
+        "device_hash": "TEXT NOT NULL",
         "dir": "TEXT",
-        "file": "TEXT NOT NULL",
+        "file": "TEXT",
+	"project": "TEXT NOT NULL",
         "FOREIGN": [
             {
-                "device_id": "DEVICE(device_id)"
+                "device_hash": "DEVICE(device_hash)"
             }
         ],
         "UNIQUE": [
-            "device_id",
-            "file"
+            "device_hash",
+            "project"
         ],
         "ON_CONFLICT": [
             {
                 "action": "UPDATE SET",
                 "unique_col": [
                     "device_id",
-                    "file"
+                    "project"
                 ],
                 "add_col": [
                     "qty"
                 ]
-                //**# UPDATE will add new value to existing valu in add_col
-            }
-        ]
-    },
-    //** list of devices, not necessery in stock
-    "DEVICE": {
-        "device_id": "TEXT PRIMARY KEY",
-        "device_manufacturer": "TEXT NOT NULL",
-        "device_description": "TEXT",
-        "package": "TEXT",
-        "ON_CONFLICT": [
-            {
-                "action": "REPLACE"
+                //** UPDATE will add new value to existing value in add_col
+		//** if any of unique_col conflict
             }
         ]
     },
     //** shop list, with cost and order_qty and date
     "SHOP": {
         "id": "INTEGER PRIMARY KEY",
-        "device_id": "TEXT",
+        "device_hash": "TEXT",
         "date": "DATE NOT NULL",
         "shop": "TEXT NOT NULL",
         "shop_id": "TEXT NOT NULL",
@@ -69,11 +79,11 @@
         "order_qty": "INTEGER NOT NULL",
         "FOREIGN": [
             {
-                "device_id": "DEVICE(device_id)"
+                "device_hash": "DEVICE(device_hash)"
             }
         ],
         "UNIQUE": [
-            "device_id",
+            "device_hash",
             "date",
             "shop"
         ],
@@ -85,52 +95,21 @@
     },
     //** what we have in stock
     "STOCK": {
-        "device_id": "TEXT PRIMARY KEY",
+        "device_hash": "TEXT PRIMARY KEY",
         "stock_qty": "INTEGER NOT NULL",
         "FOREIGN": [
             {
-                "device_id": "DEVICE(device_id)"
+                "device_hash": "DEVICE(device_hash)"
             }
         ],
         "ON_CONFLICT": [
             {
                 "action": "UPDATE SET",
                 "unique_col": [
-                    "device_id"
+                    "device_hash"
                 ],
                 "add_col": [
                     "stock_qty"
-                ]
-            }
-        ]
-    },
-    //** projects, with list of devices and qty
-    "PROJECT": {
-        "id": "INTEGER PRIMARY KEY",
-        "proj_name": "TEXT NOT NULL",
-        "device_id": "TEXT NOT NULL",
-        "qty": "INTEGER NOT NULL",
-        "FOREIGN": [
-            {
-                "device_id": "DEVICE(device_id)"
-            },
-            {
-                "proj_name": "PROJECT_INFO(project_name)"
-            }
-        ],
-        "UNIQUE": [
-            "proj_name",
-            "device_id"
-        ],
-        "ON_CONFLICT": [
-            {
-                "action": "UPDATE SET",
-                "unique_col": [
-                    "proj_name",
-                    "device_id"
-                ],
-                "add_col": [
-                    "qty"
                 ]
             }
         ]

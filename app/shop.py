@@ -1,13 +1,14 @@
 import sys
 from argparse import Namespace
+
 import pandas as pd
+from pandas.errors import ParserError
 
 from app.common import check_dir_file, read_json
-from app.sql import put, getL
-from app.tabs import columns_align, prepare_tab
-from conf.config import import_format, SQL_scheme
 from app.error import messageHandler, prepare_tabError
-from pandas.errors import ParserError
+from app.sql import getL, put
+from app.tabs import columns_align, prepare_tab
+from conf.config import SQL_SCHEME, import_format
 
 msg = messageHandler()
 
@@ -26,12 +27,7 @@ def cart_import(args: Namespace) -> None:
                 **{
                     k: v
                     for k, v in import_format[args.format].items()
-                    if k
-                    not in [
-                        "cols",
-                        "dtype",
-                        "func"
-                    ]
+                    if k not in ["cols", "dtype", "func"]
                 },
             )
         except ParserError as e:
@@ -58,15 +54,15 @@ def cart_import(args: Namespace) -> None:
         # write data to SQL
         try:
             tabs, dat = prepare_tab(
-                            dat=new_stock.copy(),
-                            tabs=["DEVICE", "SHOP"],
-                            file=file,
-                            row_shift=import_format[args.format]["header"],
-                        )
+                dat=new_stock.copy(),
+                tabs=["DEVICE", "SHOP"],
+                file=file,
+                row_shift=import_format[args.format]["header"],
+            )
             # existing device for summary reasons
-            ex_devs = getL(tab='BOM', get=['device_id'])
+            ex_devs = getL(tab="BOM", get=["device_id"])
             # put into SQL
-            sql_scheme = read_json(SQL_scheme)
+            sql_scheme = read_json(SQL_SCHEME)
             for tab in tabs:
                 put(
                     dat=dat,
@@ -76,7 +72,9 @@ def cart_import(args: Namespace) -> None:
         except prepare_tabError as e:
             print(e)
             continue
-    
+
         # SUMMARY
-        msg.BOM_import_summary(new_stock, 
-                            len(new_stock[new_stock["device_id"].isin(ex_devs)]))
+        msg.BOM_import_summary(
+            new_stock, len(new_stock[new_stock["device_id"].isin(ex_devs)])
+        )
+

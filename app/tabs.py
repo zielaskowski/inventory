@@ -1,12 +1,12 @@
 import os
 import re
 from datetime import date
+
 import pandas as pd
 
-from app.sql import getDF
-from app.error import prepare_tabError
-from app.error import messageHandler
 from app.common import tab_cols
+from app.error import messageHandler, prepare_tabError
+from app.sql import getDF
 from conf.config import import_format
 
 msg = messageHandler()
@@ -21,14 +21,17 @@ cols = [DEV_MAN, DEV_DESC, DEV_PACK]
 def prepare_tab(
     dat: pd.DataFrame, tabs: list[str], file: str, row_shift: int
 ) -> tuple[list[str], pd.DataFrame]:
-    # prepares and check if data aligned with table.
-    # iterate through tabs and check if mandatory columns present
-    # return only tables with all mandatory columns
-    # and sanitazed data
+    """
+    prepares and check if data aligned with table.
+    iterate through tabs and check if mandatory columns present
+    return only tables with all mandatory columns
+    and sanitazed data
 
-    # check columns: mandatary, nice to have
-    # and hash, also from foreign tables
-    must_cols, nice_cols = [], []
+    check columns: mandatary, nice to have
+    and hash, also from foreign tables
+    """
+    must_cols, nice_cols, missing_cols = [], [], []
+    wrong_tab = []
     for tab in tabs:
         mc, nc = tab_cols(tab)
 
@@ -38,6 +41,7 @@ def prepare_tab(
             if tab != "DEVICE":
                 # error on DEVICE will be catched by prepare_tabError()
                 msg.column_miss(missing_cols, file, tab)
+            wrong_tab.append(tab)
             tabs.remove(tab)
             continue
         must_cols += mc
@@ -47,15 +51,10 @@ def prepare_tab(
     nice_cols = list(set(nice_cols))
 
     if tabs == [] or "DEVICE" not in tabs:
-        raise prepare_tabError(tab, missing_cols)
+        raise prepare_tabError(wrong_tab, missing_cols)
 
     # remove rows with NA in must_cols
-    dat = NA_rows(
-        dat,
-        must_cols,
-        nice_cols,
-        row_shift=row_shift + 2,  # one for header, and one to start from zero
-    )
+    dat = NA_rows(dat, must_cols, nice_cols, row_shift)
 
     # clean text, leave only ASCII
     # i.e. easyEDM writes manufactuere in Chinese in parenthesis
@@ -78,20 +77,21 @@ def NA_rows(
     nice_cols: list[str],
     row_shift: int,
 ) -> pd.DataFrame:
-    # check rows with any NA
+    """
+    check rows with any NA
 
-    # inform user and remove from data,
-    # remove only when must rows missing
-    na_rows = df[df.loc[:, must_cols].isna().any(axis=1)]
+    inform user and remove from data,
+    remove only when NA in must rows
+    """
+    row_shift = +2  # one for header, and one to start from zero
+    na_rows = df.loc[df.loc[:, must_cols].isna().any(axis=1)]
     na_rows_id: list[int] = [int(c) + row_shift for c in na_rows.index.values]
-    msg.na_rows(row_id=na_rows_id)
-    df = df[~df.index.isin(na_rows.index)]
+    df = df.loc[~df.index.isin(na_rows.index)]
 
     # check for nice cols
     nicer_cols = [c for c in nice_cols if c in df.columns]
-    na_rows = df[df.loc[:, nicer_cols].isna().any(axis=1)]
-    msg.na_rows(rows=na_rows)
-
+    na_rows = df.loc[df.loc[:, nicer_cols].isna().any(axis=1)]
+    msg.na_rows(rows=na_rows, row_id=na_rows_id)
     return df
 
 
@@ -100,18 +100,14 @@ def columns_align(
     file: str,
     supplier: str,
 ) -> pd.DataFrame:
-    # rename columns (and lower)
+    # lower columns
     n_stock.rename(
         columns={c: str(c).lower() for c in n_stock.columns},
         inplace=True,
     )
     # drop columns if any col in values so to avoid duplication
     n_stock.drop(
-        [
-            v
-            for _, v in import_format[supplier]["cols"].items()
-            if v in n_stock.columns
-        ],
+        [v for _, v in import_format[supplier]["cols"].items() if v in n_stock.columns],
         axis="columns",
         inplace=True,
     )
@@ -128,13 +124,9 @@ def columns_align(
 
     # change columns type
     # only for existing cols
-    exist_col = [
-        c in n_stock.columns for c in import_format[supplier]["dtype"].keys()
-    ]
+    exist_col = [c in n_stock.columns for c in import_format[supplier]["dtype"].keys()]
     exist_col_dtypes = {
-        k: v
-        for k, v in import_format[supplier]["dtype"].items()
-        if k in exist_col
+        k: v for k, v in import_format[supplier]["dtype"].items() if k in exist_col
     }
     n_stock = n_stock.astype(exist_col_dtypes)
 
@@ -156,9 +148,7 @@ def ASCII_txt(txt: str) -> str:
     return txt
 
 
-def align_manufacturer(
-    new_tab: pd.DataFrame, dat: pd.DataFrame
-) -> pd.DataFrame:
+def align_manufacturer(new_tab: pd.DataFrame, dat: pd.DataFrame) -> pd.DataFrame:
     # For device_id duplication, choose longer manufacturer name
     # and longer description
     # group by device_id
@@ -196,13 +186,9 @@ def long_description(
         for col in cols:
             if col in group.columns:
                 row_desc = group.loc[
-                    group[col]
-                    .apply(lambda x: len(x) if pd.notnull(x) else 0)
-                    .idxmax(),
+                    group[col].apply(lambda x: len(x) if pd.notnull(x) else 0).idxmax(),
                     col,
                 ]
                 group[col] = row_desc
-        ret_tab = pd.concat(
-            [ret_tab, group.iloc[1].to_frame().T], ignore_index=True
-        )
+        ret_tab = pd.concat([ret_tab, group.iloc[1].to_frame().T], ignore_index=True)
     return ret_tab

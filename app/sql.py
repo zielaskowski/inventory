@@ -1,21 +1,22 @@
 import os
 import re
 import sqlite3
-from typing import Dict, List, Union, Set
+from typing import Dict, List, Set, Union
 
 import pandas as pd
 
 from app.common import read_json, unpack_foreign
-from conf.config import db_file, SQL_scheme, SQL_keywords
 from app.error import (
+    check_dirError,
+    messageHandler,
+    read_jsonError,
     sql_checkError,
     sql_createError,
-    read_jsonError,
     sql_executeError,
     sql_getError,
+    sql_tabError,
 )
-from app.error import messageHandler, sql_tabError
-
+from conf.config import DB_FILE, SQL_KEYWORDS, SQL_SCHEME
 
 msg = messageHandler()
 
@@ -26,7 +27,7 @@ DB structure is described in ./conf/sql_scheme.json
 
 def tab_exists(tab: str) -> None:
     # check if tab exists!
-    sql_scheme = read_json(SQL_scheme)
+    sql_scheme = read_json(SQL_SCHEME)
     if tab not in sql_scheme.keys():
         raise sql_tabError(tab, sql_scheme.keys())
 
@@ -134,7 +135,7 @@ def get(
     # check if tab exists!
     tab_exists(tab)
     search = __escape_quote__(search)
-    sql_scheme = read_json(SQL_scheme)
+    sql_scheme = read_json(SQL_SCHEME)
 
     if "FOREIGN" not in sql_scheme[tab].keys():
         follow = False
@@ -280,19 +281,19 @@ def sql_check() -> None:
     DB location and name taken from ./conf/configuration/py
     """
     # make sure if exists
-    if not os.path.isfile(db_file):
-        msg.SQL_file_miss(db_file)
+    if not os.path.isfile(DB_FILE):
+        msg.SQL_file_miss(DB_FILE)
         sql_create()
 
     # check if correct sql
-    sql_scheme = read_json(SQL_scheme)
+    sql_scheme = read_json(SQL_SCHEME)
     for i in range(len(sql_scheme)):
         tab = list(sql_scheme.keys())[i]
         scheme_cols = [
-            k for k in sql_scheme[tab].keys() if k not in SQL_keywords
+            k for k in sql_scheme[tab].keys() if k not in SQL_KEYWORDS
         ]
         if tab_columns(tab) != scheme_cols:
-            raise sql_checkError(db_file, tab)
+            raise sql_checkError(DB_FILE, tab)
 
 
 def __sql_execute__(script: list) -> Dict[str, pd.DataFrame]:
@@ -326,7 +327,7 @@ def __sql_execute__(script: list) -> Dict[str, pd.DataFrame]:
     script_split = __split_cmd__(script)
     try:
         con = sqlite3.connect(
-            db_file,
+            DB_FILE,
             detect_types=sqlite3.PARSE_COLNAMES | sqlite3.PARSE_DECLTYPES,
         )
         cur = con.cursor()
@@ -364,22 +365,26 @@ def sql_create() -> None:
     """Creates sql query based on sql_scheme.json and send to db.
     Perform check if created DB is aligned with scheme from sql.json file.
     """
-    if os.path.isfile(db_file):
+    if os.path.isfile(DB_FILE):
         # just in case the file exists
-        os.remove(db_file)
+        os.remove(DB_FILE)
+
+    path = os.path.dirname(DB_FILE)
+    if not os.path.isdir(path):
+        raise check_dirError(directory=path)
 
     try:
-        sql_scheme = read_json(SQL_scheme)
+        sql_scheme = read_json(SQL_SCHEME)
     except read_jsonError as err:
         print(err)
-        raise sql_createError(SQL_scheme)
+        raise sql_createError(SQL_SCHEME) from err
 
     # create tables query for db
     sql_cmd = []
     for tab in sql_scheme:
         tab_cmd = f"CREATE TABLE {tab} ("
         for col in sql_scheme[tab]:
-            if col not in SQL_keywords:
+            if col not in SQL_KEYWORDS:
                 tab_cmd += f"{col} {sql_scheme[tab][col]}, "
             elif col == "FOREIGN":  # FOREIGN
                 for foreign in sql_scheme[tab][col]:
@@ -413,16 +418,16 @@ def sql_create() -> None:
     try:
         status = __sql_execute__(sql_cmd)
     except sql_executeError as err:
-        os.remove(db_file)
+        os.remove(DB_FILE)
         print(err)
-        raise sql_createError(SQL_scheme)
+        raise sql_createError(SQL_SCHEME)
 
     if sorted(status[sql_cmd[-1][0:100]]["tbl_name"].to_list()) != sorted(
         list(sql_scheme.keys())
     ):
-        if os.path.isfile(db_file):
-            os.remove(db_file)
-        raise sql_createError(SQL_scheme)
+        if os.path.isfile(DB_FILE):
+            os.remove(DB_FILE)
+        raise sql_createError(SQL_SCHEME)
 
 
 def __escape_quote__(txt: Union[List[str], set]) -> List[str]:

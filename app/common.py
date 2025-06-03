@@ -8,8 +8,36 @@ import sys
 from json import JSONDecodeError
 from typing import Dict
 
-from app.error import check_dirError, messageHandler, read_jsonError
-from conf.config import LOG_FILE, SCAN_DIR, SQL_KEYWORDS, SQL_SCHEME
+from app.error import (
+    check_dirError,
+    messageHandler,
+    read_jsonError,
+    scan_dir_permissionError,
+    sql_tabError,
+)
+from conf.config import LOG_FILE, SCAN_DIR, SQL_KEYWORDS, SQL_SCHEME, import_format
+
+DEV_ID = "device_id"
+DEV_MAN = "device_manufacturer"
+DEV_DESC = "device_description"
+DEV_PACK = "package"
+BOM_FILE = "import_file"
+BOM_DIR = "project_dir"
+BOM_COMMITED = "commited"
+BOM_PROJECT = "project"
+BOM_HASH = "device_hash"
+BOM_FORMAT = "file_format"
+TAKE_LONGER_COLS = [DEV_MAN, DEV_DESC, DEV_PACK]
+HIDDEN_COLS = [
+    BOM_DIR,
+    BOM_FILE,
+    BOM_COMMITED,
+    BOM_FORMAT,
+    "id",
+    "hash",
+]  # columns automatically filled, no need to import
+
+IMPORT_FORMAT_SPECIAL_KEYS = ["cols", "dtype", "func", "file_ext"]
 
 msg = messageHandler()
 
@@ -20,6 +48,8 @@ def log(args) -> None:
     skip  -h and --help commands
     check if attribute 'help' exists in com namespac
     """
+    if LOG_FILE == "":
+        return
     if any(a for a in args if a in ["--help", "-h"]):
         return
 
@@ -28,10 +58,18 @@ def log(args) -> None:
     # check if path exists, if not create
     path = os.path.dirname(LOG_FILE)
     if not os.path.exists(path):
-        os.makedirs(path)
+        try:
+            os.makedirs(path)
+        except PermissionError as e:
+            msg.log_path_error(str(e))
+            return
 
-    with open(LOG_FILE, "a", encoding="UTF8") as f:
-        f.write(f"{' '.join(cmd)}\n")
+    try:
+        with open(LOG_FILE, "a", encoding="UTF8") as f:
+            f.write(f"{' '.join(cmd)}\n")
+    except IsADirectoryError as e:
+        msg.log_path_error(str(e) + ". missing filename.")
+        return
 
 
 def read_json(file: str) -> Dict[str, dict]:
@@ -51,26 +89,34 @@ def read_json(file: str) -> Dict[str, dict]:
         raise read_jsonError(file) from err
 
 
-def find_xlsx_files(directory: str) -> list:
+def find_files(directory: str, file_format: str) -> list:
     """
     scan all subdirectories (starting from 'directory')
     search for any xlsx or xls file, only in BOM folder
+    in case format=='csv', search for *.csv files
     return a list of full path+file_name
     """
-    xlsx_files = []
+    if not os.access(directory, os.W_OK):
+        raise scan_dir_permissionError(directory=directory)
+
+    match_files = []
+    file_ext = import_format[file_format]["file_ext"]
     s_dir = SCAN_DIR
+    msg.msg(f"searching for *.{file_ext} files in {s_dir} folder:")
     for folder, _, files in os.walk(directory):
         for file in files:
+            print("Searching... " + folder, end="\r")
             # drop last '/' in directory with regex
-            # change defoult behaviour but nobody understand these niuanses
+            # change default behaviour but nobody understand these niuanses
             cur_dir = re.sub("/$", "", folder)
             cur_dir = cur_dir.split("/")[-1].upper()
             if s_dir == "":
                 s_dir = cur_dir
             if cur_dir == s_dir.upper():
-                if file.endswith(".xlsx") or file.endswith(".xls"):
-                    xlsx_files.append(os.path.join(folder, file))
-    return xlsx_files
+                if any(file.endswith(e) for e in file_ext):
+                    match_files.append(os.path.join(folder, file))
+    print(" " * 200, end="\r")
+    return match_files
 
 
 def check_dir_file(args: argparse.Namespace) -> list[str]:
@@ -81,19 +127,19 @@ def check_dir_file(args: argparse.Namespace) -> list[str]:
     """
     if not os.path.exists(args.dir):
         raise check_dirError(file=args.file, directory=args.dir, scan_dir=SCAN_DIR)
-    xlsx_files = find_xlsx_files(args.dir)
+    files = find_files(args.dir, args.format)
 
     # filter by file name
     if args.file is not None:
-        xlsx_files = [f for f in xlsx_files if args.file in f]
-        if xlsx_files == []:
+        files = [f for f in files if args.file in f]
+        if files == []:
             raise check_dirError(file=args.file, directory=args.dir, scan_dir=SCAN_DIR)
-    return xlsx_files
+    return files
 
 
 def unpack_foreign(foreign: dict[str, str]) -> tuple[str, str, str]:
     """
-    read foreign key from sqk_scheme
+    read foreign key from sql_scheme
     returns col which is connected and destination table and column
     """
     col = list(foreign.keys())[0]
@@ -109,6 +155,16 @@ def unpack_foreign(foreign: dict[str, str]) -> tuple[str, str, str]:
     return col, f_tab, f_col
 
 
+def tab_exists(tab: str) -> None:
+    """
+    check if tab exists
+    raises sql_tabError if not
+    """
+    sql_scheme = read_json(SQL_SCHEME)
+    if tab not in sql_scheme.keys():
+        raise sql_tabError(tab, sql_scheme.keys())
+
+
 def tab_cols(
     tab: str,
 ) -> tuple[list[str], list[str]]:
@@ -118,8 +174,7 @@ def tab_cols(
     follow FOREIGN key constraints to other tab
     """
     sql_scheme = read_json(SQL_SCHEME)
-    if tab not in sql_scheme:
-        raise ValueError(f"Table {tab} does not exists in SQL_scheme")
+    tab_exists(tab)  # will raise sql_tabError if not
 
     cols = list(sql_scheme.get(tab, ""))
     must_cols = [
@@ -156,9 +211,21 @@ def tab_cols(
     nice_cols = list(set(nice_cols))
 
     # remove COMMANDS and ['id', 'hash] column
-    nice_cols = [c for c in nice_cols if c not in SQL_KEYWORDS + ["id", "hash"]]
-    must_cols = [c for c in must_cols if c not in ["id", "hash"]]
+    nice_cols = [c for c in nice_cols if c not in SQL_KEYWORDS + HIDDEN_COLS]
+    must_cols = [c for c in must_cols if c not in HIDDEN_COLS]
     return (must_cols, nice_cols)
+
+
+def foreign_tabs(tab: str) -> list[str]:
+    """return list of tables refrenced in FOREIGN key"""
+    tab_exists(tab)  # will raise sql_tabError if not
+    sql_scheme = read_json(SQL_SCHEME)
+    tabs = []
+    f_keys = sql_scheme[tab].get("FOREIGN", [])
+    for k in f_keys:
+        _, f_tab, _ = unpack_foreign(k)
+        tabs += [f_tab]
+    return tabs
 
 
 def print_file(file: str):
@@ -184,7 +251,7 @@ class AbbreviationParser(argparse.ArgumentParser):
         else:
             self.error(f"No match found for abbreviation '{cmd}'.")
 
-    def parse_args(self, args=None, namespace=None):  # pyright: ignore
+    def parse_args(self, args: list | None = None, namespace=None):  # type: ignore
         if args is None:
             args = sys.argv[1:]
         # in case choices are None

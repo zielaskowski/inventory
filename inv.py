@@ -9,15 +9,19 @@ from app.admin import admin
 from app.bom import bom_import
 from app.commit import commit
 from app.common import AbbreviationParser, log
-from app.error import sql_checkError, sql_createError
+from app.error import messageHandler, sql_checkError, sql_createError, sql_tabError
 from app.shop import cart_import
 from app.sql import sql_check
 from app.transaction import trans
-from conf.config import import_format
+from conf.config import config_file, import_format
 
-if __name__ == "__main__":
+msg = messageHandler()
+
+
+def cli_parser() -> AbbreviationParser:
+    """command line parser definition"""
     cli = AbbreviationParser(
-        description="""
+        description=f"""
         INVentory management system.
         Store information about available stock, devices info, and shop cost.
         Also store BOM projects (list of devices).
@@ -33,10 +37,12 @@ if __name__ == "__main__":
         Finaly, you can commit the selected projects, which will store the
         devices in the STOCK table.
 
-        Output is written in stock.sqldb file. If the file is not found, it will be
+        Output is written in stock.sql db file. If the file is not found, it will be
         created based on sql_scheme.jsonc file.
         Application can import exccel files in different formats (from different)
-        shops. Format description is in config file. Should be easy to extend.""",
+        shops. Format description is in config file. Should be easy to extend.
+        Each execution of app is writing used arguments into log file. You cen setup 
+        in {config_file()} file.""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     command_parser = cli.add_subparsers(title="commands", dest="command")
@@ -59,16 +65,32 @@ if __name__ == "__main__":
         "-f",
         "--file",
         help="""xls/xlsx file to import. Select proper format (can be extendeed in config.py).
-                Will import only files where FILE is within file name. Case sensitive.""",
+                Will import only files where FILE is within file name. Case sensitive.
+                Default: all files.""",
         required=False,
     )
     cli_import_bom.add_argument(
         "-F",
         "--format",
         help=f"format of file to import, possible values: {list(import_format.keys())}.\
-                Defoult is {list(import_format.keys())[1]}",
+                Default is {list(import_format.keys())[1]}",
         required=False,
         default=list(import_format.keys())[1],  # easyEDA
+    )
+    cli_import_bom.add_argument(
+        "-e",
+        "--export",
+        help="""Print data from BOM table. If --file is given, write to file as csv
+            in --dir folder. Can filter with --project option""",
+        required=False,
+        action="store_true",
+    )
+    cli_import_bom.add_argument(
+        "-p",
+        "--project",
+        required=False,
+        help="Limit exported data to PROJECT, also used by --remove function.",
+        default=None,
     )
     cli_import_bom.add_argument(
         "-o",
@@ -79,18 +101,31 @@ if __name__ == "__main__":
         required=False,
     )
     cli_import_bom.add_argument(
-        "-i",
+        "-r",
         "--reimport",
         action="store_true",
-        help="""Import again (and replace) items in BOM table.""",
+        help="""Import again (and replace) items in BOM table if not yet commited.""",
     )
     cli_import_bom.add_argument(
-        "-r",
         "--remove",
         action="store_true",
-        help="""Remove from BOM table: remove all items.
-                Filter with --file if given
-                Do not touch any ather table in DB.""",
+        help="""Remove from BOM table all items filetred by --project, which are not commited.
+                Use '%%' if you want to remove all not commited projects.
+                Do not touch any other table in DB.""",
+    )
+    cli_import_bom.add_argument(
+        "--info",
+        help="""Display info about necessery and acceptable columns for BOM table.""",
+        required=False,
+        action="store_true",
+    )
+    cli_import_bom.add_argument(
+        "--csv_template",
+        help="Save template csv with all columns to a file. Default is './template.csv'",
+        required=False,
+        nargs="?",
+        const="./template.csv",
+        default=None,
     )
     cli_import_bom.set_defaults(func=bom_import)
 
@@ -229,20 +264,25 @@ if __name__ == "__main__":
     )
     cli_admin.set_defaults(func=admin)
 
-    args = cli.parse_args()
+    return cli
+
+
+if __name__ == "__main__":
+    parser = cli_parser()
+    args = parser.parse_args()
     log(sys.argv[1:])
 
     # check if we have proper sql file
     try:
         sql_check()
     except sql_checkError as e:
-        print(e)
+        msg.msg(str(e))
         sys.exit(1)
     except sql_createError as e:
-        print(e)
+        msg.msg(str(e))
         sys.exit(1)
 
     if "func" in args:
         args.func(args)
     else:
-        cli.print_help()
+        parser.print_help()

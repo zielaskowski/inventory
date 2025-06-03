@@ -1,26 +1,37 @@
+import hashlib
 import os
 import re
+from argparse import Namespace
 from datetime import date
 
 import pandas as pd
 
-from app.common import tab_cols
+from app import sql
+from app.common import (
+    BOM_COMMITED,
+    BOM_DIR,
+    BOM_FILE,
+    BOM_FORMAT,
+    BOM_PROJECT,
+    DEV_ID,
+    TAKE_LONGER_COLS,
+    foreign_tabs,
+    read_json,
+    tab_cols,
+    unpack_foreign,
+)
 from app.error import messageHandler, prepare_tabError
-from app.sql import getDF
-from conf.config import import_format
+from conf.config import SQL_SCHEME, import_format
 
 msg = messageHandler()
 
-DEV_ID = "device_id"
-DEV_MAN = "device_manufacturer"
-DEV_DESC = "device_description"
-DEV_PACK = "package"
-cols = [DEV_MAN, DEV_DESC, DEV_PACK]
-
 
 def prepare_tab(
-    dat: pd.DataFrame, tabs: list[str], file: str, row_shift: int
-) -> tuple[list[str], pd.DataFrame]:
+    dat: pd.DataFrame,
+    tab: str,
+    file: str,
+    row_shift: int,
+) -> pd.DataFrame:
     """
     prepares and check if data aligned with table.
     iterate through tabs and check if mandatory columns present
@@ -30,29 +41,18 @@ def prepare_tab(
     check columns: mandatary, nice to have
     and hash, also from foreign tables
     """
-    must_cols, nice_cols, missing_cols = [], [], []
-    wrong_tab = []
-    for tab in tabs:
-        mc, nc = tab_cols(tab)
+    must_cols, nice_cols = tab_cols(tab)
 
-        # check if all required columns are in new_stock
-        missing_cols = [c for c in mc if c not in dat.columns]
-        if any(missing_cols):
-            if tab != "DEVICE":
-                # error on DEVICE will be catched by prepare_tabError()
-                msg.column_miss(missing_cols, file, tab)
-            wrong_tab.append(tab)
-            tabs.remove(tab)
-            continue
-        must_cols += mc
-        nice_cols += nc
-
-    must_cols = list(set(must_cols))
-    nice_cols = list(set(nice_cols))
-
-    if tabs == [] or "DEVICE" not in tabs:
-        raise prepare_tabError(wrong_tab, missing_cols)
-
+    # check if all required columns are in new_stock
+    missing_cols = [c for c in must_cols if c not in dat.columns]
+    # if 'project' column is missing, take file name col, inform user
+    if BOM_PROJECT in missing_cols:
+        dat[BOM_PROJECT] = dat[BOM_FILE].apply(lambda cell: cell.split(".")[0])
+        missing_cols = [c for c in missing_cols if c != BOM_PROJECT]
+        msg.project_as_filename()
+    if any(missing_cols):
+        msg.column_miss(missing_cols, file, tab)
+        raise prepare_tabError(tab, missing_cols)
     # remove rows with NA in must_cols
     dat = NA_rows(dat, must_cols, nice_cols, row_shift)
 
@@ -63,12 +63,31 @@ def prepare_tab(
         if dat[c].dtype == "object":
             dat[c] = dat[c].apply(ASCII_txt)
 
-    # align manufacturer for common device_id
-    all_dat = getDF(tab="DEVICE")
-    if not all_dat.empty:
-        dat = align_manufacturer(dat, all_dat)
+    sql_scheme = read_json(SQL_SCHEME)
+    tabs = ["BOM"] + foreign_tabs("BOM")
 
-    return tabs, dat
+    # hash
+    def apply_hash(row: pd.Series, cols: list[str]) -> str:
+        combined = "".join(str(row[c]) for c in cols)
+        return hashlib.sha256(combined.encode()).hexdigest()
+
+    def hash_tab(t):
+        hash_cols = sql_scheme[t].get("HASH_COLS", [])
+        if hash_cols:
+            dat["hash"] = dat.apply(lambda row: apply_hash(row, hash_cols), axis=1)
+
+    for t in tabs:
+        hash_tab(t)
+
+    # add foreign col in case it's not present yet
+    # for example if we have FOREIGN:[{'dev_hash':'dev(hash)'}]
+    # col hash exists, but now we need to copy hash to dev_hash
+    for t in tabs:
+        for f in sql_scheme[t].get("FOREIGN", []):
+            to_col, _, from_col = unpack_foreign(f)
+            dat[to_col] = dat[from_col]
+
+    return dat
 
 
 def NA_rows(
@@ -95,48 +114,43 @@ def NA_rows(
     return df
 
 
-def columns_align(
-    n_stock: pd.DataFrame,
-    file: str,
-    supplier: str,
-) -> pd.DataFrame:
+def columns_align(n_stock: pd.DataFrame, file: str, args: Namespace) -> pd.DataFrame:
+    supplier = args.format
     # lower columns
     n_stock.rename(
         columns={c: str(c).lower() for c in n_stock.columns},
         inplace=True,
     )
     # drop columns if any col in values so to avoid duplication
-    n_stock.drop(
-        [v for _, v in import_format[supplier]["cols"].items() if v in n_stock.columns],
-        axis="columns",
-        inplace=True,
-    )
-    # then rename
-    n_stock.rename(
-        columns=import_format[supplier]["cols"],
-        inplace=True,
-    )
+    if cols := import_format[supplier].get("cols"):
+        n_stock.drop(
+            [v for _, v in cols.items() if v in n_stock.columns],
+            axis="columns",
+            inplace=True,
+        )
+        # then rename
+        n_stock.rename(
+            columns=cols,
+            inplace=True,
+        )
 
     # apply formatter functions
-    if f := import_format[supplier]["func"]:
-        for c in n_stock.columns:
-            n_stock[c] = n_stock[c].apply(f, axis=1, col_name=c)
+    if f := import_format[supplier].get("func"):
+        n_stock = n_stock.apply(f, axis=1, result_type="broadcast")  # type: ignore
 
     # change columns type
     # only for existing cols
-    exist_col = [c in n_stock.columns for c in import_format[supplier]["dtype"].keys()]
-    exist_col_dtypes = {
-        k: v for k, v in import_format[supplier]["dtype"].items() if k in exist_col
-    }
-    n_stock = n_stock.astype(exist_col_dtypes)
+    if dtype := import_format[supplier].get("dtype"):
+        exist_col = [c in n_stock.columns for c in dtype.keys()]
+        exist_col_dtypes = {k: v for k, v in dtype.items() if k in exist_col}
+        n_stock = n_stock.astype(exist_col_dtypes)
 
     # add column with path and file name and supplier
-    file = os.path.abspath(file)
-    n_stock["dir"] = os.path.dirname(file)
-    n_stock["file"] = os.path.basename(file)
-    n_stock["shop"] = supplier
+    n_stock[BOM_COMMITED] = False
+    n_stock[BOM_DIR] = args.dir
+    n_stock[BOM_FILE] = os.path.basename(file)
+    n_stock[BOM_FORMAT] = args.format
     n_stock["date"] = date.today().strftime("%Y-%m-%d")
-
     return n_stock
 
 
@@ -181,9 +195,9 @@ def long_description(
     tab = tab.groupby(DEV_ID).filter(lambda x: len(x) > 1).groupby(DEV_ID)
 
     ret_tab = pd.DataFrame()
-    for name, group in tab:
+    for _, group in tab:
         # take the longest description
-        for col in cols:
+        for col in TAKE_LONGER_COLS:
             if col in group.columns:
                 row_desc = group.loc[
                     group[col].apply(lambda x: len(x) if pd.notnull(x) else 0).idxmax(),
@@ -192,3 +206,28 @@ def long_description(
                 group[col] = row_desc
         ret_tab = pd.concat([ret_tab, group.iloc[1].to_frame().T], ignore_index=True)
     return ret_tab
+
+
+def check_existing_data(dat: pd.DataFrame, args: Namespace, file: str) -> bool:
+    """
+    check if data already present in sql
+    if -overwrite, remove existing data
+    other way ask for confirmation
+    return True if we can continue
+    """
+    file_name = os.path.basename(file)
+    old_files = sql.getL(tab="BOM", get=[BOM_FILE])
+    old_project = sql.getL(tab="BOM", get=[BOM_PROJECT])
+    if args.overwrite:
+        # remove all old data
+        sql.rm(
+            tab="BOM",
+            value=dat[BOM_PROJECT].to_list(),
+            column=[BOM_PROJECT],
+        )
+        return True
+    # warn about adding qty
+    if file_name in old_files or dat[BOM_PROJECT].unique() in old_project:
+        if not msg.file_already_imported(file_name):
+            return False
+    return True

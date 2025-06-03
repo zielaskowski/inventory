@@ -1,15 +1,19 @@
 """configuration file"""
 
+import pandas as pd
+
 # configuration globals
 SQL_SCHEME = "/home/mi/docs/prog/python/inventory/conf/sql_scheme.jsonc"
 
 # list of keywords to be ignored during reading columns from tab
-SQL_KEYWORDS = ["FOREIGN", "UNIQUE", "ON_CONFLICT"]
+SQL_KEYWORDS = ["FOREIGN", "UNIQUE", "ON_CONFLICT", "HASH_COLS"]
 
 # database file location and name
-DB_FILE = "/home/mi/docs/prog/MCU/inventory.sqlite"
+# DB_FILE = "/home/mi/docs/prog/MCU/inventory.sqlite"
+DB_FILE = "/home/mi/docs/prog/python/inventory/inventory.sqlite"
 
 # log file location and name
+# set LOG_FILE = '' to turn off
 LOG_FILE = "/home/mi/docs/prog/python/inventory/conf/log.txt"
 
 # directory to scan when searching for files
@@ -19,29 +23,47 @@ SCAN_DIR = "BOM"
 # scan_dir = ""
 
 
-def mouser(*args, **kwargs) -> float | str:
+def config_file():
+    """where am I"""
+    return __file__
+
+
+def mouser(row: pd.Series) -> pd.Series:
     """
-    function passed to pandas apply() on Dataframe columns
-    so Series basically. Format values in columns
+    function passed to pandas apply() on DataFrame rows
+    (row by row). Format/change value and return new value.
     Used during file import, see import foramtter below
     """
-    col_name = kwargs.get("col_name")
-    col = args[0]
-    if col_name == "order_qty":
-        return 1
-    if col_name == "price":
+    if "order_qty" in row.index:
+        row["order_qty"] = 1
+    if "price" in row.index:
         try:
-            val = float(col.replace("$", ""))
-            return val
+            row["price"] = float(str(row["price"]).replace("$", ""))
         except ValueError:
             # there are some summary rows at end, causing strings in price col
-            return 0
-    return col
+            row["price"] = 0
+    return row
+
+
+def easyEDA(row: pd.Series) -> pd.Series:
+    """merge column 'value' with 'description'"""
+    if "value" in row.index and "device_description" in row.index:
+        row["device_description"] = (
+            str(row["value"]) + " : " + str(row["device_description"])
+        )
+    return row
 
 
 # pased to pandas read_excel() function as args and kwargs
+# csv format is passed to read_csv()
+# special keys, not passed to pandas import:
+# 'cols' - columns renaming with pandas.rename()
+# 'dtype' - columns type, passed to pandas.dtypes()
+# 'func' - function performed on each row with pandas.apply()
+# 'file_ext' - file extension for file searching functions
 import_format = {
     "LCSC": {
+        "file_ext": ["xls", "xlsx"],
         "header": 4,
         "index_col": None,
         "na_values": "-",
@@ -63,6 +85,7 @@ import_format = {
         "func": None,
     },
     "easyEDA": {
+        "file_ext": ["xls", "xlsx"],
         "header": 0,
         "index_col": None,
         "na_values": "-",
@@ -72,11 +95,14 @@ import_format = {
             "manufacturer": "device_manufacturer",
             "supplier footprint": "package",
             "description": "device_description",
+            "primary category": "dev_category1",
+            "secondary category": "dev_category2",
         },
-        "dtype": {"qty": int},  # lower case only, after cols rename!
-        "func": None,
+        "dtype": {"qty": int, "package": str},  # lower case only, after cols rename!
+        "func": easyEDA,
     },
     "mouser": {
+        "file_ext": ["xls", "xlsx"],
         "header": 8,
         "index_col": None,
         "na_values": "-",
@@ -93,5 +119,13 @@ import_format = {
             "price": float,
         },
         "func": mouser,
+    },
+    "csv": {
+        "file_ext": ["csv"],
+        "header": 0,
+        "index_col": None,
+        "na_values": "-",
+        "dtype": {"qty": int, "price": float},
+        "func": None,
     },
 }

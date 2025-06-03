@@ -9,31 +9,36 @@
     //** id columns are assumed to be INTEGER PRIMARY KEY and created automatically
     //** reference with FOREIGN key only to UNIQUE/PRIMARY columns
     //** tables with FOREIGN should follow tables they refer (order matter)
-    //** UNIQUE columns are indexed automatically
-    //** PRIMARY columns are indexed automatically
-    //** HASH_COLS is not SQL! it's aditional info to allow hashing automation
-    //** ON_CONFLICT describes action to perform on conflict
+    //** UNIQUE      columns are indexed automatically
+    //** PRIMARY     columns are indexed automatically
+    //** HASH_COLS   is not SQL! it's aditional info to allow hashing automation
+    //** ON_CONFLICT describes action to perform on conflict on table level 
+    //**             (so can be only one). If missing REAPLCE is default
+
+    //** changing columns marked NOT NULL very liekely will break the app
+    //** if realy need to change them, align with col definitions in app/common.py
+    //** other columns probably can be modified, but no quarente given
 
     //** list of devices, not necessery in stock
     "DEVICE": {
-        "device_hash": "TEXT PRIMARY KEY",
+        "hash": "TEXT PRIMARY KEY",
 	"device_id": "TEXT NOT NULL",
         "device_manufacturer": "TEXT NOT NULL",
         "device_description": "TEXT",
         "package": "TEXT",
-	"category1": "TEXT",
-	"category2": "TEXT",
-        "ON_CONFLICT": [
+	"dev_category1": "TEXT",
+	"dev_category2": "TEXT",
+        "ON_CONFLICT": 
             {
                 "action": "REPLACE"
             }
-        ],
-	"HASH_COLS":[
+        ,
+	//** 'hash' col must be present in table
+	"HASH_COLS": [
 		"device_id",
 		"device_manufacturer"
 	]
     },
-
     //** BOM for project
     //** file and device_id are unique to not mix BOMs
     //** from different project, this allow reimport and other
@@ -41,23 +46,23 @@
         "id": "INTEGER PRIMARY KEY",
         "qty": "INTEGER NOT NULL",
         "device_hash": "TEXT NOT NULL",
-        "dir": "TEXT",
-        "file": "TEXT",
+        "project_dir": "TEXT",
+        "import_file": "TEXT",
 	"project": "TEXT NOT NULL",
+	"commited": "TEXT NOT NULL",
+	"file_format": "TEXT",
         "FOREIGN": [
-            {
-                "device_hash": "DEVICE(device_hash)"
-            }
+            {"device_hash": "DEVICE(hash)"}
         ],
         "UNIQUE": [
             "device_hash",
             "project"
         ],
-        "ON_CONFLICT": [
+        "ON_CONFLICT": 
             {
                 "action": "UPDATE SET",
                 "unique_col": [
-                    "device_id",
+                    "device_hash",
                     "project"
                 ],
                 "add_col": [
@@ -66,7 +71,6 @@
                 //** UPDATE will add new value to existing value in add_col
 		//** if any of unique_col conflict
             }
-        ]
     },
     //** shop list, with cost and order_qty and date
     "SHOP": {
@@ -79,7 +83,7 @@
         "order_qty": "INTEGER NOT NULL",
         "FOREIGN": [
             {
-                "device_hash": "DEVICE(device_hash)"
+                "device_hash": "DEVICE(hash)"
             }
         ],
         "UNIQUE": [
@@ -87,11 +91,11 @@
             "date",
             "shop"
         ],
-        "ON_CONFLICT": [
+        "ON_CONFLICT": 
             {
                 "action": "REPLACE"
             }
-        ]
+        
     },
     //** what we have in stock
     "STOCK": {
@@ -99,10 +103,10 @@
         "stock_qty": "INTEGER NOT NULL",
         "FOREIGN": [
             {
-                "device_hash": "DEVICE(device_hash)"
+                "device_hash": "DEVICE(hash)"
             }
         ],
-        "ON_CONFLICT": [
+        "ON_CONFLICT": 
             {
                 "action": "UPDATE SET",
                 "unique_col": [
@@ -112,18 +116,5 @@
                     "stock_qty"
                 ]
             }
-        ]
-    },
-    //** project description and name
-    "PROJECT_INFO": {
-        "project_name": "TEXT PRIMARY KEY",
-        "description": "TEXT",
-        "dir": "TEXT",
-        "date": "DATE NOT NULL",
-        "ON_CONFLICT": [
-            {
-                "action": "REPLACE"
-            }
-        ]
     }
 }

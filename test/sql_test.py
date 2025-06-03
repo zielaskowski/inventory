@@ -1,25 +1,16 @@
 """sql functions test"""
 
-import os
+import json
 
 import pytest
 
-from app.error import check_dirError, sql_createError
+from app.error import check_dirError, sql_checkError, sql_createError, sql_schemeError
 from app.sql import sql_check, sql_create
 
-JSON_FILE = "./test/sql.json"
 
-
-def write_json(txt):
-    """write txt to a file"""
-    with open(JSON_FILE, "w", encoding="UTF8") as f:
-        f.writelines(txt)
-
-
-def test_sql_create1(monkeypatch):
+def test_sql_create1(monkeypatch, tmpdir):
     """should be fine"""
-    db_file = "./test/db_test.sql"
-    monkeypatch.setattr("app.sql.DB_FILE", db_file)
+    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
     sql_create()
     sql_check()
 
@@ -44,7 +35,7 @@ def test_sql_create3(monkeypatch):
     assert err_info.match(sql_json)
 
 
-def test_sql_create4(monkeypatch):
+def test_sql_create4(monkeypatch, tmpdir):
     """mising TABLE name"""
     json_txt = """
     //** test
@@ -53,21 +44,61 @@ def test_sql_create4(monkeypatch):
     "key2":"value"
      }
     """
-    write_json(json_txt)
-    db_file = "./test/db_test.sql"
-    sql_json = "./test/sql.json"
-    monkeypatch.setattr("app.sql.DB_FILE", db_file)
-    monkeypatch.setattr("app.sql.SQL_SCHEME", sql_json)
+    jfile = tmpdir.join("json.txt")
+    jfile.write(json_txt)
+    monkeypatch.setattr("app.sql.DB_FILE", tmpdir + "db.sql")
+    monkeypatch.setattr("app.sql.SQL_SCHEME", jfile)
+    with pytest.raises(sql_schemeError) as err_info:
+        sql_create()
+    assert err_info.match("key")
+
+
+def test_sql_create5(monkeypatch, tmpdir):
+    """misspell sql keyword"""
+    json_txt = """
+    //** test
+    "TAB":{
+    "key":"value",
+    "key2":"value"
+     }
+    """
+    jfile = tmpdir.join("json.txt")
+    jfile.write(json_txt)
+    monkeypatch.setattr("app.sql.DB_FILE", tmpdir + "db.sql")
+    monkeypatch.setattr("app.sql.SQL_SCHEME", jfile)
     with pytest.raises(sql_createError) as err_info:
         sql_create()
-    assert err_info.match(sql_json)
+    assert err_info.match(jfile.basename)
 
 
-@pytest.fixture(scope="session", autouse=True)
-def cleanup_env():
-    """remove temporary files"""
-    yield
-    if os.path.isfile("./test/db_test.sql"):
-        os.remove("./test/db_test.sql")
-    if os.path.isfile(JSON_FILE):
-        os.remove(JSON_FILE)
+def test_sql_check1(monkeypatch, tmpdir):
+    """change in FOREIGN"""
+    json_txt = {
+        "DEVICE": {
+            "device_hash": "TEXT PRIMARY KEY",
+            "device_id": "TEXT NOT NULL",
+        },
+        "PROJECT": {"project": "TEXT", "project_name": "TEXT"},
+        "BOM": {
+            "id": "INTEGER PRIMARY KEY",
+            "device_hash": "TEXT NOT NULL",
+            "project": "TEXT NOT NULL",
+            "FOREIGN": [
+                {"device_hash": "DEVICE(device_hash)"},
+                {"project": "PROJECT(project_name)"},
+            ],
+        },
+    }
+    jfile = tmpdir.join("json.txt")
+    jfile.write(json.dumps(json_txt))
+    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("app.sql.SQL_SCHEME", jfile)
+    monkeypatch.setattr("app.common.SQL_SCHEME", jfile)
+    sql_create()
+    json_txt["BOM"]["FOREIGN"].pop()
+    jfile2 = tmpdir.join("json2.txt")
+    jfile2.write(json.dumps(json_txt))
+    monkeypatch.setattr("app.sql.SQL_SCHEME", jfile2)
+    with pytest.raises(sql_checkError) as err_info:
+        sql_check()
+    assert err_info.match("db.sql")

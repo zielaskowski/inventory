@@ -1,3 +1,4 @@
+import sys
 from argparse import Namespace
 
 import pandas as pd
@@ -21,17 +22,17 @@ def admin(args: Namespace) -> None:
             ids = df[args.what_col].tolist()
         except FileNotFoundError as e:
             print(e)
-            exit(1)
+            sys.exit(1)
         except KeyError as e:
             print(e)
-            exit(1)
+            sys.exit(1)
 
     if args.remove_dev_id:
         if not ids:
             ids = args.remove_dev_id
         dev = remove_dev(ids, "device_id", args.force)
         print(f"removed {len(dev)} devices")
-        exit(1)
+        sys.exit(1)
 
     if args.remove_shop_id is not False:
         if not ids:
@@ -78,4 +79,3 @@ def remove_dev(dev: list[str], by: str, force: bool) -> pd.DataFrame:
     for t in all_tabs:
         rm(tab=t, value=dev_id, column=["device_id"])
     return dev
-

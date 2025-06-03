@@ -5,7 +5,7 @@ from typing import Dict, List, Set, Union
 
 import pandas as pd
 
-from app.common import read_json, unpack_foreign
+from app.common import read_json, tab_exists, unpack_foreign
 from app.error import (
     check_dirError,
     messageHandler,
@@ -14,6 +14,7 @@ from app.error import (
     sql_createError,
     sql_executeError,
     sql_getError,
+    sql_schemeError,
     sql_tabError,
 )
 from conf.config import DB_FILE, SQL_KEYWORDS, SQL_SCHEME
@@ -25,30 +26,21 @@ DB structure is described in ./conf/sql_scheme.json
 """
 
 
-def tab_exists(tab: str) -> None:
-    # check if tab exists!
-    sql_scheme = read_json(SQL_SCHEME)
-    if tab not in sql_scheme.keys():
-        raise sql_tabError(tab, sql_scheme.keys())
-
-
-def put(dat: pd.DataFrame, tab: str, on_conflict: list[dict]) -> Dict:
+def put(dat: pd.DataFrame, tab: str, on_conflict:dict) -> Dict:
     # put DataFrame into sql at table=tab
     # takes from DataFrame only columns present in sql table
     # check if tab exists!
     # on_conflict is a list of dictionary:
-    # [
     #  {
     #  'action': UPDATE SET|REPLACE|NOTHING|FAIL|ABORT|ROLLBACK
     #  'unique_col':[cols] //may be from UNIQUE or PRIMARY KEY
     #  'add_col':[cols] //UPDATE will add new value to existing
     #  }
-    # ]
     # put() may raise sql_executeError and sql_tabError
     tab_exists(tab)
 
     if dat.empty:
-        return
+        return {}
     # all data shall be in capital letters!
     dat = dat.apply(
         lambda x: x.str.upper() if isinstance(x, str) else x  # type: ignore
@@ -61,27 +53,25 @@ def put(dat: pd.DataFrame, tab: str, on_conflict: list[dict]) -> Dict:
 
 
 def __write_table__(
-    dat: pd.DataFrame, tab: str, on_conflict: str
+    dat: pd.DataFrame, tab: str, on_conflict:dict
 ) -> Dict[str, pd.DataFrame]:
     """writes DataFrame to SQL table 'tab'"""
     records = list(dat.astype("string").to_records(index=False))
     records = [tuple(__escape_quote__(r)) for r in records]
 
-    for conflict in on_conflict:
-        action = conflict["action"]
-        if action == "UPDATE SET":
-            unique_col = conflict["unique_col"]
-            cmd_action = f"""ON CONFLICT ({','.join(unique_col)})
-                        DO {action}
-                    """
-            cmd_action += ",".join(
-                [f"{c} = {c} + EXCLUDED.{c}" for c in conflict["add_col"]]
-            )
-            action = ""
-        else:
-            action = "OR " + action
-            cmd_action = ""
-            break
+    action = on_conflict.get("action",'REPLACE') # default is ON CONFLICT REPLACE
+    if action == "UPDATE SET":
+        unique_col = on_conflict["unique_col"]
+        cmd_action = f"""ON CONFLICT ({','.join(unique_col)})
+                    DO {action}
+                """
+        cmd_action += ",".join(
+            [f"{c} = {c} + EXCLUDED.{c}" for c in on_conflict["add_col"]]
+        )
+        action = ""
+    else:
+        action = "OR " + action
+        cmd_action = ""
 
     cmd = f"""INSERT {action} INTO {tab} {tuple(dat.columns)}
             VALUES
@@ -152,8 +142,8 @@ def get(
         for r in resp:
             base_tab = resp[r]
             if not base_tab.empty:
-                for F in sql_scheme[tab]["FOREIGN"]:
-                    col, f_tab, f_col = unpack_foreign(F)
+                for f in sql_scheme[tab]["FOREIGN"]:
+                    col, f_tab, f_col = unpack_foreign(f)
                     f_DF = getDF(tab=f_tab)
                     base_tab = base_tab.merge(f_DF, left_on=col, right_on=f_col)
                     if get != ["%"]:
@@ -243,9 +233,7 @@ def __split_list__(lst: str, nel: int) -> list:
     """
     lst_split = re.split(" OR ", lst)
     n = (len(lst_split) // nel) + 1
-    cmd_split = [
-        " OR ".join(lst_split[i * nel : (i + 1) * nel]) for i in range(n)
-    ]
+    cmd_split = [" OR ".join(lst_split[i * nel : (i + 1) * nel]) for i in range(n)]
     # make sure each part starts and ends with parenthesis
     cmd_split = ["(" + re.sub(r"[\(\)]", "", s) + ") " for s in cmd_split]
     return cmd_split
@@ -258,7 +246,7 @@ def rm(tab: str, value: list[str] = ["%"], column: list[str] = ["%"]) -> None:
     for c in column:
         cmd = f"DELETE FROM {tab} "
         if column != ["%"]:
-            cmd += 'WHERE ('
+            cmd += "WHERE ("
             cmd += " ".join([f"{c} LIKE '{s}' OR " for s in value])
             cmd += f"{c} LIKE 'none'"  # just to close last 'OR'
             cmd += ")"
@@ -269,9 +257,23 @@ def tab_columns(tab: str) -> List[str]:
     """return list of columns for table"""
     sql_cmd = f"pragma table_info({tab})"
     resp = __sql_execute__([sql_cmd])
-    if not resp or resp[sql_cmd] is None or "name" not in list(resp[sql_cmd]):
+    if not resp or resp[sql_cmd].empty:
         return []
     return resp[sql_cmd]["name"].to_list()
+
+
+def tab_foreign(tab: str) -> List[Dict[str, str]]:
+    """show FOREIGN keys for tab"""
+    sql_cmd = f"pragma foreign_key_list({tab})"
+    resp = __sql_execute__([sql_cmd])
+    if not resp or resp[sql_cmd].empty:
+        return []
+    foreign_tab = []
+    for _, r in resp[sql_cmd].iterrows():
+        key = {}
+        key[r["from"]] = r["table"] + "(" + r["to"] + ")"
+        foreign_tab.append(key)
+    return foreign_tab
 
 
 def sql_check() -> None:
@@ -285,14 +287,17 @@ def sql_check() -> None:
         msg.SQL_file_miss(DB_FILE)
         sql_create()
 
-    # check if correct sql
     sql_scheme = read_json(SQL_SCHEME)
     for i in range(len(sql_scheme)):
         tab = list(sql_scheme.keys())[i]
-        scheme_cols = [
-            k for k in sql_scheme[tab].keys() if k not in SQL_KEYWORDS
-        ]
+        scheme_cols = [k for k in sql_scheme[tab].keys() if k not in SQL_KEYWORDS]
+        # check if correct tables in sql
         if tab_columns(tab) != scheme_cols:
+            raise sql_checkError(DB_FILE, tab)
+        # check if correct foreign keys
+        from_sql_scheme = [str(c) for c in tab_foreign(tab)]
+        from_json_scheme = [str(c) for c in sql_scheme[tab].get("FOREIGN", [])]
+        if sorted(from_sql_scheme) != sorted(from_json_scheme):
             raise sql_checkError(DB_FILE, tab)
 
 
@@ -383,27 +388,39 @@ def sql_create() -> None:
     sql_cmd = []
     for tab in sql_scheme:
         tab_cmd = f"CREATE TABLE {tab} ("
-        for col in sql_scheme[tab]:
-            if col not in SQL_KEYWORDS:
+        for col in sql_scheme[tab]:  # fmt: off
+            if not any(
+                [
+                    isinstance(sql_scheme[tab], dict),
+                    isinstance(sql_scheme[tab], list),
+                ]
+            ):
+                raise sql_schemeError(tab=tab)
+            if col not in SQL_KEYWORDS:  # fmt: on
                 tab_cmd += f"{col} {sql_scheme[tab][col]}, "
             elif col == "FOREIGN":  # FOREIGN
                 for foreign in sql_scheme[tab][col]:
                     k, v = list(foreign.items())[0]
+                    # sqlite do not complain on missing foreign table
+                    # during creation
+                    try:
+                        _, f_table, _ = unpack_foreign(foreign)
+                        tab_exists(f_table)
+                    except sql_tabError as err:
+                        msg.msg(str(err))
+                        raise sql_createError(SQL_SCHEME) from err
+
                     tab_cmd += f"FOREIGN KEY({k}) REFERENCES {v}, "
         tab_cmd = re.sub(",[^,]*$", "", tab_cmd)  # remove last comma
         tab_cmd += ") "
         sql_cmd.append(tab_cmd)
         if unique_cols := str(
-            sql_scheme[tab]["UNIQUE"]
-            if "UNIQUE" in sql_scheme[tab].keys()
-            else ""
+            sql_scheme[tab]["UNIQUE"] if "UNIQUE" in sql_scheme[tab].keys() else ""
         ):
             # replace square brackets with parenthesis
             unique_cols = re.sub(r"\[", r"(", unique_cols)
             unique_cols = re.sub(r"\]", r")", unique_cols)
-            tab_cmd = (
-                f"CREATE UNIQUE INDEX uniqueRow_{tab} ON {tab} {unique_cols}"
-            )
+            tab_cmd = f"CREATE UNIQUE INDEX uniqueRow_{tab} ON {tab} {unique_cols}"
             sql_cmd.append(tab_cmd)
 
     # sort sql_cmd list (to make sure you refer to columns that already exists)
@@ -419,8 +436,8 @@ def sql_create() -> None:
         status = __sql_execute__(sql_cmd)
     except sql_executeError as err:
         os.remove(DB_FILE)
-        print(err)
-        raise sql_createError(SQL_SCHEME)
+        msg.msg(str(err))
+        raise sql_createError(SQL_SCHEME) from err
 
     if sorted(status[sql_cmd[-1][0:100]]["tbl_name"].to_list()) != sorted(
         list(sql_scheme.keys())

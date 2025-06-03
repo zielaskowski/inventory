@@ -1,7 +1,10 @@
 import os
+from typing import KeysView
 
 import pandas as pd
 from pandas.errors import ParserError
+
+from conf.config import LOG_FILE, SQL_SCHEME, config_file
 
 
 class sql_getError(Exception):
@@ -15,7 +18,7 @@ class sql_getError(Exception):
 
 
 class prepare_tabError(Exception):
-    def __init__(self, tab: list[str], missing_cols: list[str], *args: object) -> None:
+    def __init__(self, tab: str, missing_cols: list[str], *args: object) -> None:
         self.message = f"For table {tab} missing mandatory columns: {missing_cols}"
         super().__init__(*args)
 
@@ -24,7 +27,7 @@ class prepare_tabError(Exception):
 
 
 class sql_tabError(Exception):
-    def __init__(self, tab: str, tabs: list[str], *args: object) -> None:
+    def __init__(self, tab: str, tabs: KeysView[str], *args: object) -> None:
         self.message = f"Table '{tab}' is missing or corrupted.\n"
         self.message += f"Available tables are {str(tabs)}"
         super().__init__(*args)
@@ -40,8 +43,10 @@ class check_dirError(Exception):
         if not scan_dir and not file:
             self.message = f"{directory} is not existing."
         else:
-            self.message = f"""{file} is missing or corrupted,\n
-                           or no {scan_dir} folder in {directory} directory"""
+            self.message = (
+                f"{file} is missing or corrupted,\n"
+                + "or no {scan_dir} folder in {directory} directory"
+            )
         super().__init__(*args)
 
     def __str__(self) -> str:
@@ -73,6 +78,15 @@ class sql_createError(Exception):
         return f"SQL create error: {self.message}"
 
 
+class scan_dir_permissionError(Exception):
+    def __init__(self, directory: str, *args: object) -> None:
+        self.message = f"you don't have permission to '{directory}'"
+        super().__init__(*args)
+
+    def __str__(self) -> str:
+        return f"Permission error: {self.message}"
+
+
 class read_jsonError(Exception):
     def __init__(self, json_file: str, *args: object) -> None:
         self.message = f"JSON file '{json_file}' is missing or corrupted."
@@ -80,6 +94,17 @@ class read_jsonError(Exception):
 
     def __str__(self) -> str:
         return f"JSON read error: {self.message}"
+
+
+class sql_schemeError(Exception):
+    """SQL scheme wrong format in json file"""
+
+    def __init__(self, tab: str, *args: object) -> None:
+        self.message = f"wrong '{tab}' definition"
+        super().__init__(*args)
+
+    def __str__(self) -> str:
+        return f"SQL scheme format error: {self.message}. Check {SQL_SCHEME} file."
 
 
 class sql_executeError(Exception):
@@ -138,17 +163,34 @@ class messageHandler:
     def file_already_imported(self, file: str) -> bool:
         self.message.append(f"File {file} was already imported.")
         self.message.append("Consider using option --overwrite.")
-        self.message.append("Are you sure you want to add this file again? (y/n)")
+        self.message.append(
+            "Are you sure you want to add this file again (will add to qty.)? (y/n)"
+        )
         self.__exec__(warning=True)
         if input() == "y":
             return True
-        else:
-            return False
+        return False
 
-    def BOM_remove(self, file: str) -> None:
-        self.message.append("Removed data from BOM table")
-        if file is not None:
-            self.message.append(f"where file within {file}")
+    def BOM_remove(self, project: str) -> None:
+        self.message.append(f"Removed data from BOM table where project == '{project}'")
+        self.__exec__()
+
+    def BOM_nothing_to_remove(
+        self,
+        project: list[str],
+        available: list[str],
+        all_projects: list[str],
+    ) -> None:
+        if project and project[0] not in available and project[0] in all_projects:
+            self.message.append(f"Project '{project[0]}' already commited. Skipping.")
+        if not project:
+            self.message.append("No project selected.")
+        if project and project not in all_projects:
+            self.message.append(f"No project {project} in BOM.")
+        if available:
+            self.message.append(f"Available projects are: {available}.")
+        else:
+            self.message.append("No available not-commited projects.")
         self.__exec__()
 
     def BOM_import_summary(self, dat: pd.DataFrame, ex_devs: int = 0) -> None:
@@ -172,6 +214,19 @@ class messageHandler:
         self.message.append("*********************************************************")
         self.__exec__()
 
+    def BOM_info(self, must_cols: list[str], nice_cols: list[str]) -> None:
+        self.message.append("these columns MUST be present in import file:")
+        self.message.append(must_cols)
+        self.message.append(
+            "these columns are optional (but recomended) in import file:"
+        )
+        self.message.append(nice_cols)
+        self.__exec__()
+
+    def msg(self, msg: str) -> None:
+        self.message.append(msg)
+        self.__exec__()
+
     def trans_summary(self, txt: list[dict]) -> None:
         self.message.append("")
         self.message.append("*********************************************************")
@@ -191,7 +246,22 @@ class messageHandler:
 
     def unknown_import(self, er: BaseException) -> None:
         self.message.append(f"Unexpected error: {er}")
-        self.message.append("Possibly wrong excel format (different shop?)")
+        self.message.append("Possibly wrong file format (different shop?) or wrong csv")
+        self.__exec__()
+
+    def log_path_error(self, err: str) -> None:
+        self.message.append(err)
+        self.message.append(f"Provide correct path in '{config_file()}' file.")
+        self.__exec__(warning=True)
+
+    def unknown_project(self, project: str, projects: list[str]) -> None:
+        self.message.append(f"Unknown project: '{project}'.")
+        self.message.append(f"Available project are: {projects}")
+        self.__exec__()
+
+    def project_as_filename(self) -> None:
+        self.message.append("Set project name as file name.")
+        self.message.append("You can change later with admin commands.")
         self.__exec__()
 
     def __exec__(self, warning: bool = False) -> None:

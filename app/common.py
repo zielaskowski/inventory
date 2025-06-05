@@ -21,6 +21,7 @@ DEV_ID = "device_id"
 DEV_MAN = "device_manufacturer"
 DEV_DESC = "device_description"
 DEV_PACK = "package"
+DEV_HASH = "hash"
 BOM_FILE = "import_file"
 BOM_DIR = "project_dir"
 BOM_COMMITED = "commited"
@@ -34,9 +35,14 @@ HIDDEN_COLS = [
     BOM_COMMITED,
     BOM_FORMAT,
     "id",
-    "hash",
+    DEV_HASH,
+    BOM_HASH,
 ]  # columns automatically filled, no need to import
-
+NO_EXPORT_COLS = [
+    DEV_HASH,
+    BOM_HASH,
+    "id",
+]  # columns not exported
 IMPORT_FORMAT_SPECIAL_KEYS = ["cols", "dtype", "func", "file_ext"]
 
 msg = messageHandler()
@@ -254,6 +260,10 @@ class AbbreviationParser(argparse.ArgumentParser):
     def parse_args(self, args: list | None = None, namespace=None):  # type: ignore
         if args is None:
             args = sys.argv[1:]
+        # only subcommand given so show help
+        if len(args) == 1:
+            args += ["-h"]
+
         # in case choices are None
         try:
             choices: Dict = self._subparsers._actions[1].choices

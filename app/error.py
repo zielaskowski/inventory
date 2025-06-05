@@ -1,7 +1,8 @@
 import os
-from typing import KeysView
+from typing import Any, KeysView
 
 import pandas as pd
+from numpy import ndarray
 from pandas.errors import ParserError
 
 from conf.config import LOG_FILE, SQL_SCHEME, config_file
@@ -142,6 +143,24 @@ class messageHandler:
         self.message.append("*********************************************************")
         self.message.append("______Import_______")
         self.message.append(f"Importing file: {os.path.basename(file)}")
+        self.__exec__()
+
+    def reimport_missing_file(
+        self,
+        file: str|None=None,
+        project: str|None = None,
+    ) -> None:
+        if not file and not project:
+            self.message.append("No not-commited projects to reimport")
+        else:
+            self.message.append(f" File '{file}' is missing for project '{project}'")
+        self.__exec__()
+
+    def import_missing_file(self)->None:
+        self.message.append("No files found to import")
+        self.__exec__()
+    def export_missing_data(self)->None:
+        self.message.append("No data to export")
         self.__exec__()
 
     def na_rows(

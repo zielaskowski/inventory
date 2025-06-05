@@ -8,7 +8,6 @@ BOM tools:
 import os
 import sys
 from argparse import Namespace
-from re import search
 
 import pandas as pd
 from pandas.errors import EmptyDataError, ParserError
@@ -18,10 +17,11 @@ from app.common import (
     BOM_COMMITED,
     BOM_DIR,
     BOM_FILE,
-    BOM_HASH,
+    BOM_FORMAT,
     BOM_PROJECT,
     DEV_ID,
     IMPORT_FORMAT_SPECIAL_KEYS,
+    NO_EXPORT_COLS,
     check_dir_file,
     foreign_tabs,
     read_json,
@@ -58,7 +58,6 @@ def bom_import(args: Namespace) -> None:
         return
 
     files = scan_files(args)
-
     for file in files:
         new_stock = import_file(args, file)
         if new_stock.empty:
@@ -211,26 +210,38 @@ def scan_files(args) -> list[str]:
         except scan_dir_permissionError as err:
             msg.msg(str(err))
             sys.exit(1)
+        if not files:
+            msg.import_missing_file()
+            sys.exit(1)
+
     else:
         locations = sql.getDF(
             tab="BOM",
-            get=[BOM_DIR, BOM_FILE],
+            get=[BOM_DIR, BOM_FILE, BOM_PROJECT, BOM_FORMAT],
             search=["False"],
             where=[BOM_COMMITED],
         )
         if locations.empty:
-            msg.msg("No files to reimport in database")
+            msg.reimport_missing_file()
             sys.exit(1)
         files = []
         for _, r in locations.iterrows():
             args.dir = r[BOM_DIR]
             args.filter = r[BOM_FILE]
-            files.append(check_dir_file(args))
+            args.format = r[BOM_FORMAT]
+            f = check_dir_file(args)
+            if not f:
+                msg.reimport_missing_file(
+                    file=str(r[BOM_FILE]),
+                    project=str(r[BOM_PROJECT]),
+                )
+                continue
+            files += f
+        if not files:
+            msg.reimport_missing_file()
+            sys.exit(1)
         args.overwrite = True
-    if files == []:
-        msg.msg("No files found")
-        sys.exit(1)
-    return files
+    return list(set(files))
 
 
 def bom_info(silent: bool = False) -> list[str]:
@@ -266,13 +277,28 @@ def bom_export(args: Namespace) -> None:
         args.project = "%"
     else:
         # check if project exists
-        projects = sql.getL(tab="BOM", where=[BOM_PROJECT])
+        projects = sql.getL(tab="BOM", get=[BOM_PROJECT])
         if args.project not in projects:
             msg.unknown_project(args.project, projects)
             return
 
     df = sql.getDF(tab="BOM", search=[args.project], where=[BOM_PROJECT], follow=True)
+    if df.empty:
+        msg.export_missing_data()
+        return
+    df.drop(columns=NO_EXPORT_COLS, inplace=True)
+    if args.hide_columns:
+        cols = [c for c in args.hide_columns if c in df.columns]
+        df.drop(columns=cols, inplace=True)
     if not args.file:
-        print(df)
+        with pd.option_context(
+            "display.max_rows",
+            None,
+            "display.max_columns",
+            None,
+            "display.width",
+            500,
+        ):
+            print(df)
         return
     df.to_csv(os.path.join(args.dir, args.file), index=False)

@@ -55,9 +55,7 @@ def cli_parser() -> AbbreviationParser:
     cli_import_bom.add_argument(
         "-d",
         "--dir",
-        default=os.getcwd(),  # for jupyter: os.path.dirname(os.path.abspath(__file__))
-        help="""Directory to start scan with.
-                If omitted, current directory is used.
+        help="""Directory to start scaning for files to be imported.
                 Scan only in 'BOM' folder (can be change in config.py)""",
         required=False,
     )
@@ -90,6 +88,14 @@ def cli_parser() -> AbbreviationParser:
         "--project",
         required=False,
         help="Limit exported data to PROJECT, also used by --remove function.",
+        default=None,
+    )
+    cli_import_bom.add_argument(
+        "--hide_columns",
+        required=False,
+        nargs="+",
+        type=str,
+        help="hide columns during import",
         default=None,
     )
     cli_import_bom.add_argument(

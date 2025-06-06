@@ -31,7 +31,7 @@ def test_bom_import_easyEDA1(cli, monkeypatch, tmpdir):
     bom_import(args)
     exp = tmpdir.join("exp.csv")
     exp.write("")
-    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e"])
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
     bom_import(args)
     l1 = "qty,device_id,device_manufacturer,dev_category1,dev_category2,device_description,package\n"
     l2 = "3,CC0603KRX5R8BB105,YAGEO,Capacitors,Multilayer Ceramic Capacitors MLCC - SMD/SMT,1uF : Capacitance: Tolerance:10% Tolerance:10% Voltage Rated: Temperature Coefficient:,0603"

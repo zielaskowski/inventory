@@ -34,7 +34,7 @@ from app.error import (
     scan_dir_permissionError,
     sql_tabError,
 )
-from app.tabs import check_existing_data, columns_align, prepare_tab
+from app.tabs import check_existing_data, columns_align, prepare_project, prepare_tab
 from conf.config import SQL_SCHEME, import_format
 
 msg = messageHandler()
@@ -119,32 +119,10 @@ def bom_remove(args: Namespace) -> None:
     Remove from BOM table based on match on project column
     Remove only not commited projects.
     """
-    available = sql.getL(
-        tab="BOM",
-        get=[BOM_PROJECT],
-        search=["False"],
-        where=[BOM_COMMITED],
-    )
-    all_projects = sql.getL(
-        tab="BOM",
-        get=[BOM_PROJECT],
-    )
-    if args.project:
-        project = [args.project]
-    else:
-        project = []
-    if project == ["%"]:
-        project = available
-    if project == [] or not any(p in available for p in project):
-        msg.BOM_nothing_to_remove(
-            project=project,
-            available=available,
-            all_projects=all_projects,
-        )
+    if (projects := prepare_project(projects=args.remove, commited=False)) == []:
         return
-
-    sql.rm(tab="BOM", value=project, column=[BOM_PROJECT])
-    msg.BOM_remove(args.file)
+    sql.rm(tab="BOM", value=projects, column=[BOM_PROJECT])
+    msg.BOM_remove(projects)
 
 
 def import_csv(file: str) -> pd.DataFrame:
@@ -273,19 +251,9 @@ def import_file(args: Namespace, file: str) -> pd.DataFrame:
 
 def bom_export(args: Namespace) -> None:
     """print or export data in BOM table"""
-    if not args.project:
-        args.project = "%"
-    else:
-        # check if project exists
-        projects = sql.getL(tab="BOM", get=[BOM_PROJECT])
-        if args.project not in projects:
-            msg.unknown_project(args.project, projects)
-            return
-
-    df = sql.getDF(tab="BOM", search=[args.project], where=[BOM_PROJECT], follow=True)
-    if df.empty:
-        msg.export_missing_data()
+    if (projects := prepare_project(args.export, commited=False)) == []:
         return
+    df = sql.getDF(tab="BOM", search=projects, where=[BOM_PROJECT], follow=True)
     df.drop(columns=NO_EXPORT_COLS, inplace=True)
     if args.hide_columns:
         cols = [c for c in args.hide_columns if c in df.columns]

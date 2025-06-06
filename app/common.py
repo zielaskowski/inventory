@@ -9,8 +9,10 @@ from json import JSONDecodeError
 from typing import Dict
 
 from app.error import (
+    ambigous_matchError,
     check_dirError,
     messageHandler,
+    no_matchError,
     read_jsonError,
     scan_dir_permissionError,
     sql_tabError,
@@ -243,19 +245,31 @@ def print_file(file: str):
         print(f"File {file} not found")
 
 
+def match_from_list(cmd: str, choices: Dict | list) -> str:
+    """
+    try match cmd in list. Return full cmd if only one match.
+    Other way return raises no_matchError or ambiguos_matchError
+    """
+    matches = [choice for choice in choices if choice.startswith(cmd)]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise ambigous_matchError(cmd=cmd, matches=matches)
+    raise no_matchError(cmd=cmd)
+
+
 class AbbreviationParser(argparse.ArgumentParser):
     """override argparser to provide arguments abbrevation"""
 
     def _get_abbreviation(self, cmd: str, choices: Dict) -> str:
         if cmd in ["-h", "--help"]:
             return cmd
-        matches = [choice for choice in choices if choice.startswith(cmd)]
-        if len(matches) == 1:
-            return matches[0]
-        if len(matches) > 1:
-            self.error(f"Ambiguous abbreviation '{cmd}', match: {matches}.")
-        else:
-            self.error(f"No match found for abbreviation '{cmd}'.")
+        try:
+            return match_from_list(cmd=cmd, choices=choices)
+        except ambigous_matchError as err:
+            self.error(str(err))
+        except no_matchError as err:
+            self.error(str(err))
 
     def parse_args(self, args: list | None = None, namespace=None):  # type: ignore
         if args is None:

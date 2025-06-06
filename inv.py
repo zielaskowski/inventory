@@ -78,24 +78,19 @@ def cli_parser() -> AbbreviationParser:
     cli_import_bom.add_argument(
         "-e",
         "--export",
-        help="""Print data from BOM table. If --file is given, write to file as csv
-            in --dir folder. Can filter with --project option""",
-        required=False,
-        action="store_true",
-    )
-    cli_import_bom.add_argument(
-        "-p",
-        "--project",
-        required=False,
-        help="Limit exported data to PROJECT, also used by --remove function.",
+        nargs="+",
         default=None,
+        help="""Print data from BOM table. If --file is given, write to file as csv
+            in --dir folder. Use '%%' if you want to export all projects. Use '?' to 
+            list available projects.""",
+        required=False,
     )
     cli_import_bom.add_argument(
         "--hide_columns",
         required=False,
         nargs="+",
         type=str,
-        help="hide columns during import",
+        help="hide columns during export",
         default=None,
     )
     cli_import_bom.add_argument(
@@ -114,9 +109,11 @@ def cli_parser() -> AbbreviationParser:
     )
     cli_import_bom.add_argument(
         "--remove",
-        action="store_true",
-        help="""Remove from BOM table all items filetred by --project, which are not commited.
-                Use '%%' if you want to remove all not commited projects.
+        nargs="+",
+        default=None,
+        help="""Remove from BOM table all items from PROJECTs. Alowed are onyl
+                project which are not commited. Use '%%' if you want to remove 
+                all not commited projects. Use '?' to list available projects.
                 Do not touch any other table in DB.""",
     )
     cli_import_bom.add_argument(

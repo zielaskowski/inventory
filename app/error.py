@@ -119,6 +119,24 @@ class sql_executeError(Exception):
         return f"SQL execution error: {self.message}"
 
 
+class ambigous_matchError(Exception):
+    def __init__(self, cmd: str, *args: object, matches: list[str]) -> None:
+        self.message = f"Ambiguous abbreviation '{cmd}', match: {matches}."
+        super().__init__(*args)
+
+    def __str__(self) -> str:
+        return f"match error: {self.message}"
+
+
+class no_matchError(Exception):
+    def __init__(self, cmd: str, *args: object) -> None:
+        self.message = f"No match found for abbreviation '{cmd}'."
+        super().__init__(*args)
+
+    def __str__(self) -> str:
+        return f"match error: {self.message}"
+
+
 class messageHandler:
     def __init__(self) -> None:
         self.message = []
@@ -147,8 +165,8 @@ class messageHandler:
 
     def reimport_missing_file(
         self,
-        file: str|None=None,
-        project: str|None = None,
+        file: str | None = None,
+        project: str | None = None,
     ) -> None:
         if not file and not project:
             self.message.append("No not-commited projects to reimport")
@@ -156,10 +174,11 @@ class messageHandler:
             self.message.append(f" File '{file}' is missing for project '{project}'")
         self.__exec__()
 
-    def import_missing_file(self)->None:
+    def import_missing_file(self) -> None:
         self.message.append("No files found to import")
         self.__exec__()
-    def export_missing_data(self)->None:
+
+    def export_missing_data(self) -> None:
         self.message.append("No data to export")
         self.__exec__()
 
@@ -190,22 +209,26 @@ class messageHandler:
             return True
         return False
 
-    def BOM_remove(self, project: str) -> None:
+    def BOM_remove(self, project: list[str]) -> None:
         self.message.append(f"Removed data from BOM table where project == '{project}'")
         self.__exec__()
 
-    def BOM_nothing_to_remove(
+    def BOM_prepare_projects(
         self,
         project: list[str],
         available: list[str],
         all_projects: list[str],
     ) -> None:
-        if project and project[0] not in available and project[0] in all_projects:
-            self.message.append(f"Project '{project[0]}' already commited. Skipping.")
-        if not project:
-            self.message.append("No project selected.")
-        if project and project not in all_projects:
-            self.message.append(f"No project {project} in BOM.")
+        project_not_available = [
+            p for p in project if p not in available and p in all_projects
+        ]
+        project_not_exist = [p for p in project if p not in all_projects]
+        if project_not_available:
+            self.message.append(
+                f"Project '{project_not_available}' already commited. Skipping."
+            )
+        if project_not_exist:
+            self.message.append(f"No project {project_not_exist} in BOM.")
         if available:
             self.message.append(f"Available projects are: {available}.")
         else:

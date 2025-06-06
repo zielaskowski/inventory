@@ -16,11 +16,17 @@ from app.common import (
     DEV_ID,
     TAKE_LONGER_COLS,
     foreign_tabs,
+    match_from_list,
     read_json,
     tab_cols,
     unpack_foreign,
 )
-from app.error import messageHandler, prepare_tabError
+from app.error import (
+    ambigous_matchError,
+    messageHandler,
+    no_matchError,
+    prepare_tabError,
+)
 from conf.config import SQL_SCHEME, import_format
 
 msg = messageHandler()
@@ -231,3 +237,51 @@ def check_existing_data(dat: pd.DataFrame, args: Namespace, file: str) -> bool:
         if not msg.file_already_imported(file_name):
             return False
     return True
+
+
+def prepare_project(projects: list[str], commited: bool) -> list[str]:
+    """
+    prepare list of projects based on provided args:
+    - '%' all projects
+    - '?' just list projects
+    if 'commited==False', limit search to not commited projects only
+    """
+    if commited:
+        commit_search = ["%"]
+    else:
+        commit_search = ["False"]
+    available = sql.getL(
+        tab="BOM",
+        get=[BOM_PROJECT],
+        search=commit_search,
+        where=[BOM_COMMITED],
+    )
+    all_projects = sql.getL(
+        tab="BOM",
+        get=[BOM_PROJECT],
+    )
+    if projects == ["?"]:
+        msg.BOM_prepare_projects(
+            project=available,
+            available=available,
+            all_projects=all_projects,
+        )
+        return []
+    if projects == ["%"]:
+        projects = available
+    match_projects = []
+    for project in projects:
+        try:
+            match_projects += [match_from_list(project, available)]
+        except ambigous_matchError as err:
+            print(err)
+        except no_matchError as err:
+            print(err)
+
+    if not any(p in available for p in match_projects):
+        msg.BOM_prepare_projects(
+            project=match_projects,
+            available=available,
+            all_projects=all_projects,
+        )
+    return [p for p in match_projects if p in available]

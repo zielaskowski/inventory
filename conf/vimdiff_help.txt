@@ -1,0 +1,17 @@
+INVentory app
+
+During import found existing devices but with different ${COLUMN}
+Choose from which panel to use ${COLUMN}: left or right.
+What is in left panel will be saved and imported.
+
+!!DO NOT CHANGE LINE ORDER, ADD OR REMOVE LINES !! 
+if you mess up, <ESC>u undo the changes ;)
+
+1. press <SPACE>p to copy from right to left panel
+2. to select multiple lines to modify press <SHIFT>v and arrows; press <ESC> to cancel selection
+3. press 'i' for manual editing the text, then <ESC> back to normal mode
+4. press <ESC>:wqa when you are happy
+
+${MULTIPLE_MANUFACTURERS}
+
+Other VIM keys work as normal hell.

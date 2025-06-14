@@ -1,24 +1,41 @@
-"""utility functions"""
+"""
+utility functions
+do not import from other files in project (except error.py & config.py)
+as this will cause circular import
+"""
 
 import argparse
 import json
 import os
 import re
+import shutil
 import sys
 from json import JSONDecodeError
+from string import Template
 from typing import Dict
 
 from app.error import (
     ambigous_matchError,
     check_dirError,
-    messageHandler,
     no_matchError,
     read_jsonError,
     scan_dir_permissionError,
     sql_tabError,
+    write_jsonError,
 )
-from conf.config import LOG_FILE, SCAN_DIR, SQL_KEYWORDS, SQL_SCHEME, import_format
+from app.message import messageHandler
+from conf.config import (
+    LOG_FILE,
+    MAN_ALT,
+    SCAN_DIR,
+    SQL_SCHEME,
+    TEMP_DIR,
+    import_format,
+    module_path,
+)
 
+# list of keywords to be ignored during reading columns from tab
+SQL_KEYWORDS = ["FOREIGN", "UNIQUE", "ON_CONFLICT", "HASH_COLS", "COL_DESCRIPTION"]
 DEV_ID = "device_id"
 DEV_MAN = "device_manufacturer"
 DEV_DESC = "device_description"
@@ -30,6 +47,9 @@ BOM_COMMITED = "commited"
 BOM_PROJECT = "project"
 BOM_HASH = "device_hash"
 BOM_FORMAT = "file_format"
+SHOP_HASH = "device_hash"
+SHOP_SHOP = "shop"
+SHOP_DATE = "date"
 TAKE_LONGER_COLS = [DEV_MAN, DEV_DESC, DEV_PACK]
 HIDDEN_COLS = [
     BOM_DIR,
@@ -39,15 +59,125 @@ HIDDEN_COLS = [
     "id",
     DEV_HASH,
     BOM_HASH,
+    SHOP_DATE,
+    SHOP_SHOP,
 ]  # columns automatically filled, no need to import
 NO_EXPORT_COLS = [
     DEV_HASH,
     BOM_HASH,
+    SHOP_HASH,
     "id",
 ]  # columns not exported
 IMPORT_FORMAT_SPECIAL_KEYS = ["cols", "dtype", "func", "file_ext"]
 
 msg = messageHandler()
+
+# probably debugpy can be detected in inv.main()
+# and set DEBUG apropriately, also used in pytest
+# mainly used to skip user interaction parts
+DEBUG = False
+
+
+def store_alternatives(
+    alternatives: dict[str, list[str]],
+    selection: list[str],
+) -> None:
+    """
+    write selection made by user, so next time no need to choose
+    only for DEV_MAN column and only if selection was one-to-one
+    """
+    if alternatives == {}:
+        return
+    alt_keys = list(alternatives.keys())
+    alt_len = len(alternatives[alt_keys[0]])
+    alt_from = alternatives[alt_keys[0]]
+    alt_options = alternatives[alt_keys[1]]
+    try:
+        alt_exist = read_json_list(MAN_ALT)
+    except read_jsonError as e:
+        msg.msg(str(e))
+        return
+
+    for i in range(alt_len):
+        # only one-to-one alternatives and changed
+        if alt_from[i] != selection[i] and len(alt_options[i].split(" | ")) == 1:
+            # remove alternative if already exists
+            for k in alt_exist.keys():
+                if alt_from[i] in alt_exist[k]:
+                    alt_exist[k].remove(alt_from[i])
+                    if alt_exist[k] == []:
+                        alt_exist.pop(k)
+            if selection[i] in alt_exist.keys():
+                alt_exist[selection[i]].append(alt_from[i])
+                alt_exist[selection[i]] = list(set(alt_exist[selection[i]]))
+            else:
+                alt_exist[selection[i]] = [alt_from[i]]
+
+    write_json(MAN_ALT, alt_exist)
+
+
+def get_alternatives(manufacturers: list[str]) -> list[str]:
+    """check if we have match from stored alternative"""
+    try:
+        alt_exist = read_json_list(MAN_ALT)
+    except read_jsonError as e:
+        msg.msg(str(e))
+        return manufacturers
+    man_replaced = []
+    for man in manufacturers:
+        rep = [k for k, v in alt_exist.items() if man in v]
+        if rep != []:
+            man_replaced.append(rep[0])
+        else:
+            man_replaced.append(man)
+    return man_replaced
+
+
+def vimdiff_config(panel_name: list[str], column: str):
+    """
+    prepare vimdiff config from template
+    and adjust help message to column
+    expeced first key in panel name is:
+        /directory/column.txt
+    for example: /tmp/manufacturer.txt, /tmp/description.txt, etc.
+    """
+    column_file = os.path.basename(panel_name[0])
+    column = column_file.split(".")[0]
+    if "manufacturer" in column:
+        with open(
+            module_path() + "/vimdiff_help_multiple_manufacturers.txt",
+            mode="r",
+            encoding="UTF8",
+        ) as f:
+            manufacturer_help = f.read()
+    else:
+        manufacturer_help = ""
+    with open(
+        module_path() + "/vimdiff_help.txt",
+        mode="r",
+        encoding="UTF8",
+    ) as f:
+        help_temp = Template(f.read())
+    with open(
+        module_path() + "/.vimrc",
+        mode="r",
+        encoding="UTF8",
+    ) as f:
+        vimrc_temp = Template(f.read())
+
+    substitutions = {
+        "TEMP_DIR": TEMP_DIR,
+        "LEFT_NAME": panel_name[1],
+        "RIGHT_NAME": panel_name[0],
+        "COLUMN": column,
+        "MULTIPLE_MANUFACTURERS": manufacturer_help,
+    }
+    vimrc_txt = vimrc_temp.safe_substitute(substitutions)
+    help_txt = help_temp.safe_substitute(substitutions)
+    with open(TEMP_DIR + ".vimrc", mode="w", encoding="UTF8") as f:
+        f.write(vimrc_txt)
+    with open(TEMP_DIR + "vimdiff_help.txt", "w", encoding="UTF8") as f:
+        f.write(help_txt)
 
 
 def log(args) -> None:
@@ -80,9 +210,24 @@ def log(args) -> None:
         return
 
 
-def read_json(file: str) -> Dict[str, dict]:
-    """read json file
-    ignores comments: everything from '//**' to eol"""
+def write_json(file: str, content: dict[str, dict] | dict[str, list[str]]) -> None:
+    """
+    write content to afile in json format
+    overwrite existing file
+    """
+    try:
+        with open(file, mode="w", encoding="UTF8") as f:
+            json.dump(content, f)
+    except JSONDecodeError as err:
+        raise write_jsonError(file) from err
+
+
+def read_json_dict(file: str) -> Dict[str, dict]:
+    """
+    read json file where values are dictionary
+    ignores comments: everything from '//**' to eol
+    raise read_jsonError if format is wrong or file do not exists
+    """
     try:
         with open(file, "r", encoding="UTF8") as f:
             json_f = re.sub(
@@ -92,9 +237,35 @@ def read_json(file: str) -> Dict[str, dict]:
         raise read_jsonError(file) from err
 
     try:
-        return json.loads(json_f)
+        data = json.loads(json_f)
+        if not all(isinstance(v, dict) for v in data.values()):
+            raise read_jsonError(file, type_val="dictionary")
     except JSONDecodeError as err:
         raise read_jsonError(file) from err
+    return data
+
+
+def read_json_list(file: str) -> Dict[str, list[str]]:
+    """
+    read json file where values are list
+    ignores comments: everything from '//**' to eol
+    raise read_jsonError if format is wrong or file do not exists
+    """
+    try:
+        with open(file, "r", encoding="UTF8") as f:
+            json_f = re.sub(
+                "//\\*\\*.*$", "", "".join(f.readlines()), flags=re.MULTILINE
+            )
+    except FileNotFoundError as err:
+        raise read_jsonError(file) from err
+
+    try:
+        data = json.loads(json_f)
+        if not all(isinstance(v, list) for v in data.values()):
+            raise read_jsonError(file, type_val="list")
+    except JSONDecodeError as err:
+        raise read_jsonError(file) from err
+    return data
 
 
 def find_files(directory: str, file_format: str) -> list:
@@ -106,14 +277,15 @@ def find_files(directory: str, file_format: str) -> list:
     """
     if not os.access(directory, os.W_OK):
         raise scan_dir_permissionError(directory=directory)
-
+    console_width = shutil.get_terminal_size().columns
     match_files = []
     file_ext = import_format[file_format]["file_ext"]
     s_dir = SCAN_DIR
     msg.msg(f"searching for *.{file_ext} files in {s_dir} folder:")
     for folder, _, files in os.walk(directory):
         for file in files:
-            print("Searching... " + folder, end="\r")
+            txt = "Searching... " + folder
+            print(txt[-console_width:], end="\r")
             # drop last '/' in directory with regex
             # change default behaviour but nobody understand these niuanses
             cur_dir = re.sub("/$", "", folder)
@@ -139,7 +311,7 @@ def check_dir_file(args: argparse.Namespace) -> list[str]:
 
     # filter by file name
     if args.file is not None:
-        files = [f for f in files if args.file in f]
+        files = [f for f in files if args.file in os.path.basename(f)]
         if files == []:
             raise check_dirError(file=args.file, directory=args.dir, scan_dir=SCAN_DIR)
     return files
@@ -168,7 +340,7 @@ def tab_exists(tab: str) -> None:
     check if tab exists
     raises sql_tabError if not
     """
-    sql_scheme = read_json(SQL_SCHEME)
+    sql_scheme = read_json_dict(SQL_SCHEME)
     if tab not in sql_scheme.keys():
         raise sql_tabError(tab, sql_scheme.keys())
 
@@ -181,7 +353,7 @@ def tab_cols(
     and list of columns that are "nice to have"
     follow FOREIGN key constraints to other tab
     """
-    sql_scheme = read_json(SQL_SCHEME)
+    sql_scheme = read_json_dict(SQL_SCHEME)
     tab_exists(tab)  # will raise sql_tabError if not
 
     cols = list(sql_scheme.get(tab, ""))
@@ -227,7 +399,7 @@ def tab_cols(
 def foreign_tabs(tab: str) -> list[str]:
     """return list of tables refrenced in FOREIGN key"""
     tab_exists(tab)  # will raise sql_tabError if not
-    sql_scheme = read_json(SQL_SCHEME)
+    sql_scheme = read_json_dict(SQL_SCHEME)
     tabs = []
     f_keys = sql_scheme[tab].get("FOREIGN", [])
     for k in f_keys:

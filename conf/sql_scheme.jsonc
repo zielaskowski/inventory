@@ -9,11 +9,12 @@
     //** id columns are assumed to be INTEGER PRIMARY KEY and created automatically
     //** reference with FOREIGN key only to UNIQUE/PRIMARY columns
     //** tables with FOREIGN should follow tables they refer (order matter)
-    //** UNIQUE      columns are indexed automatically
-    //** PRIMARY     columns are indexed automatically
-    //** HASH_COLS   is not SQL! it's aditional info to allow hashing automation
-    //** ON_CONFLICT describes action to perform on conflict on table level 
-    //**             (so can be only one). If missing REAPLCE is default
+    //** UNIQUE      	 columns are indexed automatically
+    //** PRIMARY     	 columns are indexed automatically
+    //** HASH_COLS   	 is not SQL! it's aditional info to allow hashing automation
+    //** ON_CONFLICT 	 describes action to perform on conflict on table level 
+    //**             	 (so can be only one). If missing REAPLCE is default
+    //** COL_DESCRIPTION description of columns
 
     //** changing columns marked NOT NULL very liekely will break the app
     //** if realy need to change them, align with col definitions in app/common.py
@@ -37,7 +38,15 @@
 	"HASH_COLS": [
 		"device_id",
 		"device_manufacturer"
-	]
+	],
+	"COL_DESCRIPTION":{
+		"device_id":"device identification from manufacturer",
+		"device_manufacturer":"manufacturer of the device",
+		"device_description":"device description in no specific format, i.e. main characterisic values, function...",
+		"package":"form of item",
+		"dev_category1":"device general category, i.e. resistor, capacitor...",
+		"dev_category2":"device sub-category, i.e. ceramic SMD capacitor"
+	}
     },
     //** BOM for project
     //** file and device_id are unique to not mix BOMs
@@ -51,6 +60,14 @@
 	"project": "TEXT NOT NULL",
 	"commited": "TEXT NOT NULL",
 	"file_format": "TEXT",
+	"COL_DESCRIPTION":{
+		"qty":"number of items in BOM for a project",
+		"project_dir":"folder from which import was performed",
+		"import_file":"file name which was imported, usefull for --reimport",
+		"project":"name of the project",
+		"commited":"if items from project were added to stock. Will make hard any modifications after commit",
+		"file_format":"format of imported file: csv, easyEDA, LSCS etc."
+	},
         "FOREIGN": [
             {"device_hash": "DEVICE(hash)"}
         ],
@@ -78,9 +95,16 @@
         "device_hash": "TEXT",
         "date": "DATE NOT NULL",
         "shop": "TEXT NOT NULL",
-        "shop_id": "TEXT NOT NULL",
+        "shop_id": "TEXT",
         "price": "INTEGER NOT NULL",
         "order_qty": "INTEGER NOT NULL",
+	"COL_DESCRIPTION":{
+		"date":"date of import,for price analysis will use latest date",
+		"shop":"guessed from ile imported or provided (especially for scv imports)",
+		"shop_id":"device identification from shop, very useful when preparing transaction for particular shop",
+		"price":"keep price in one currency, app is not considering currency",
+		"order_qty":"minimum order quantity in a shop"
+	},
         "FOREIGN": [
             {
                 "device_hash": "DEVICE(hash)"
@@ -101,6 +125,9 @@
     "STOCK": {
         "device_hash": "TEXT PRIMARY KEY",
         "stock_qty": "INTEGER NOT NULL",
+	"COL_DESCRIPTION":{
+		"stock_qty":"number of items purchased and not used"
+	},
         "FOREIGN": [
             {
                 "device_hash": "DEVICE(hash)"

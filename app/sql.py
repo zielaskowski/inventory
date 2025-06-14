@@ -5,10 +5,9 @@ from typing import Dict, List, Set, Union
 
 import pandas as pd
 
-from app.common import read_json, tab_exists, unpack_foreign
+from app.common import SQL_KEYWORDS, read_json_dict, tab_exists, unpack_foreign
 from app.error import (
     check_dirError,
-    messageHandler,
     read_jsonError,
     sql_checkError,
     sql_createError,
@@ -17,7 +16,8 @@ from app.error import (
     sql_schemeError,
     sql_tabError,
 )
-from conf.config import DB_FILE, SQL_KEYWORDS, SQL_SCHEME
+from app.message import messageHandler
+from conf.config import DB_FILE, SQL_SCHEME
 
 msg = messageHandler()
 
@@ -86,6 +86,12 @@ def getDF(**kwargs) -> pd.DataFrame:
     """wraper around get() when:
     - search is on one col only
     returns dataframe, in contrast to Dict[col:pd.DataFrame]
+    Args:
+        tab: table to search
+        get: column name to extract (defoult '%' for all columns)
+        search: what to get (defoult '%' for everything)
+        where: columns used for searching (defoult '%' for everything)
+        follow: if True, search in all FOREIGN subtables
     """
     resp = get(**kwargs)
     return list(resp.values())[0] if resp else pd.DataFrame()
@@ -96,6 +102,12 @@ def getL(**kwargs) -> List:
     - search in on one col only
     - get only one column from DataFrame
     returns list, in contrast to Dict[col:pd.DataFrame]
+    Args:
+        tab: table to search
+        get: column name to extract (defoult '%' for all columns)
+        search: what to get (defoult '%' for everything)
+        where: columns used for searching (defoult '%' for everything)
+        follow: if True, search in all FOREIGN subtables
     """
     resp = get(**kwargs)
     df = list(resp.values())[0]
@@ -125,7 +137,7 @@ def get(
     # check if tab exists!
     tab_exists(tab)
     search = __escape_quote__(search)
-    sql_scheme = read_json(SQL_SCHEME)
+    sql_scheme = read_json_dict(SQL_SCHEME)
 
     if "FOREIGN" not in sql_scheme[tab].keys():
         follow = False
@@ -287,7 +299,7 @@ def sql_check() -> None:
         msg.SQL_file_miss(DB_FILE)
         sql_create()
 
-    sql_scheme = read_json(SQL_SCHEME)
+    sql_scheme = read_json_dict(SQL_SCHEME)
     for i in range(len(sql_scheme)):
         tab = list(sql_scheme.keys())[i]
         scheme_cols = [k for k in sql_scheme[tab].keys() if k not in SQL_KEYWORDS]
@@ -379,7 +391,7 @@ def sql_create() -> None:
         raise check_dirError(directory=path)
 
     try:
-        sql_scheme = read_json(SQL_SCHEME)
+        sql_scheme = read_json_dict(SQL_SCHEME)
     except read_jsonError as err:
         print(err)
         raise sql_createError(SQL_SCHEME) from err

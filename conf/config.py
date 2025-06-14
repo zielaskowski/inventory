@@ -1,12 +1,11 @@
 """configuration file"""
 
+import os
+
 import pandas as pd
 
 # configuration globals
 SQL_SCHEME = "/home/mi/docs/prog/python/inventory/conf/sql_scheme.jsonc"
-
-# list of keywords to be ignored during reading columns from tab
-SQL_KEYWORDS = ["FOREIGN", "UNIQUE", "ON_CONFLICT", "HASH_COLS"]
 
 # database file location and name
 # DB_FILE = "/home/mi/docs/prog/MCU/inventory.sqlite"
@@ -16,6 +15,9 @@ DB_FILE = "/home/mi/docs/prog/python/inventory/inventory.sqlite"
 # set LOG_FILE = '' to turn off
 LOG_FILE = "/home/mi/docs/prog/python/inventory/conf/log.txt"
 
+# file with manufacturer alternative names
+MAN_ALT = "/home/mi/docs/prog/python/inventory/conf/manufacturer_alternatives.jsonc"
+
 # directory to scan when searching for files
 # leave empty if you want to scan anything
 # not case sensitive
@@ -23,9 +25,19 @@ SCAN_DIR = "BOM"
 # scan_dir = ""
 
 
+# directory for temporary files
+TEMP_DIR = "/tmp/"
+
+
 def config_file():
     """where am I"""
     return __file__
+
+
+def module_path():
+    """absolute path to the module"""
+    abspath = os.path.abspath(__file__)
+    return os.path.dirname(abspath)
 
 
 def mouser(row: pd.Series) -> pd.Series:

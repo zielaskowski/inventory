@@ -2,15 +2,16 @@
 """INVentory management system"""
 
 import argparse
-import os
+import inspect
 import sys
 
 from app.admin import admin
 from app.bom import bom_import
 from app.commit import commit
-from app.common import AbbreviationParser, log
-from app.error import messageHandler, sql_checkError, sql_createError, sql_tabError
-from app.shop import cart_import
+from app.common import DEBUG, AbbreviationParser, log
+from app.error import sql_checkError, sql_createError, sql_tabError
+from app.message import messageHandler
+from app.shop import shop_import
 from app.sql import sql_check
 from app.transaction import trans
 from conf.config import config_file, import_format
@@ -80,9 +81,10 @@ def cli_parser() -> AbbreviationParser:
         "--export",
         nargs="+",
         default=None,
-        help="""Print data from BOM table. If --file is given, write to file as csv
-            in --dir folder. Use '%%' if you want to export all projects. Use '?' to 
-            list available projects.""",
+        help="""Print data from BOM table, you can use abbreviations.
+                If --file is given, write to file as csv in --dir folder.
+                Use '%%' if you want to export all projects. Use '?' to
+                list available projects.""",
         required=False,
     )
     cli_import_bom.add_argument(
@@ -133,14 +135,13 @@ def cli_parser() -> AbbreviationParser:
     cli_import_bom.set_defaults(func=bom_import)
 
     cli_import_cart = command_parser.add_parser(
-        "cart_import",
+        "shop_cart_import",
         allow_abbrev=True,
         help="Scan for xls files and import shopping cart",
     )
     cli_import_cart.add_argument(
         "-d",
         "--dir",
-        default=os.getcwd(),  # for jupyter: os.path.dirname(os.path.abspath(__file__))
         help="""Directory to start scan with.
                 If omitted, current directory is used.
                 Scan only in 'BOM' folder (can be change in config.py)""",
@@ -157,11 +158,25 @@ def cli_parser() -> AbbreviationParser:
         "-F",
         "--format",
         help=f"format of file to import, possible values: {list(import_format.keys())}.\
-                Defoult is {list(import_format.keys())[0]}",
+                Default is {list(import_format.keys())[0]}",
         required=False,
         default=list(import_format.keys())[0],  # LCSC
     )
-    cli_import_cart.set_defaults(func=cart_import)
+    cli_import_cart.add_argument(
+        "--info",
+        help="""Display info about necessery and acceptable columns for BOM table.""",
+        required=False,
+        action="store_true",
+    )
+    cli_import_cart.add_argument(
+        "--csv_template",
+        help="Save template csv with all columns to a file. Default is './template.csv'",
+        required=False,
+        nargs="?",
+        const="./template.csv",
+        default=None,
+    )
+    cli_import_cart.set_defaults(func=shop_import)
 
     cli_transact = command_parser.add_parser(
         "transact",
@@ -172,22 +187,24 @@ def cli_parser() -> AbbreviationParser:
     cli_transact.add_argument(
         "-f",
         "--file",
-        help="File name to save shoping list, defoult is 'shopping list.csv'",
+        help="File name to save shoping list, default is 'shopping list.csv'",
         required=False,
         default="shopping_list",
     )
     cli_transact.add_argument(
         "-d",
         "--dir",
-        default=os.getcwd(),  # for jupyter: os.path.dirname(os.path.abspath(__file__))
         help="Directory to save shoping list. If omitted, current directory is used",
         required=False,
     )
     cli_transact.add_argument(
         "-p",
         "--project",
-        help="project name used to prepare shoping list",
-        required=False,
+        nargs="+",
+        default=["%"],
+        help="""Export data from selected PROJECTS, you can use abbreviations.
+                Use '%%' if you want to export all not commited projects. 
+                Use '?' to list available projects. Default is '%%' """,
     )
     cli_transact.add_argument(
         "-q",
@@ -271,6 +288,14 @@ def cli_parser() -> AbbreviationParser:
 
 
 if __name__ == "__main__":
+    # when dubuging with debugpy, it should be somwhere in path
+    # of one of the stack frame
+    try:
+        if "debugpy" in inspect.stack()[1].filename:
+            DEBUG = True
+    except IndexError:
+        # normall call (no debug)
+        pass
     parser = cli_parser()
     args = parser.parse_args()
     log(sys.argv[1:])

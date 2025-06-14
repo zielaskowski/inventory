@@ -1,0 +1,3 @@
+If there are more monaufacturers in stock, they are showed like this:
+"man1 | man2 | man3 | end so on.."
+1. press <SPACE>pn, where 'n' is the manufacturer selected: i.e. <SPACE>p2

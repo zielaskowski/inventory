@@ -1,17 +1,32 @@
 import os
 from argparse import Namespace
+from re import search
 
 import pandas as pd
+from numpy import where
 
-from app.error import messageHandler
+from app.common import BOM_PROJECT
+from app.message import messageHandler
 from app.sql import getDF
+from app.tabs import prepare_project
 
 msg = messageHandler()
 
 
 def trans(args: Namespace):
+    """
+    prepares transaction list for selected projects.
+    Can split into available shops based on best price
+    Will inform if device_id in shop but with different manufacturer
+    """
+    project = prepare_project(args.project, commited=False)
     # read BOM table from sql
-    bom = getDF(tab="BOM", follow=True)
+    bom = getDF(
+        tab="BOM",
+        search=project,
+        where=[BOM_PROJECT],
+        follow=True,
+    )
 
     # summarize on device_hash table
     agg_cols = {c: "first" for c in bom.columns if c != "qty"}
@@ -19,7 +34,7 @@ def trans(args: Namespace):
     bom = bom.groupby("device_id", as_index=False).agg(agg_cols)
     dev_list = bom["device_id"].tolist()
 
-    bom["qty"] = bom["qty"] * args.qty
+    bom.loc[:, "qty"] = bom.loc[:, "qty"] * args.qty
 
     # read STOCK table from sql
     stock = getDF(tab="STOCK", search=[dev_list], where=["device_id"])
@@ -50,11 +65,11 @@ def trans(args: Namespace):
     # take minimum price
     cart = cart.loc[cart.groupby("device_id")["shop_price"].idxmin()]
 
-    bom["shop"] = "any"
-    bom["shop_id"] = "-"
+    bom.loc[:, "shop"] = "any"
+    bom.loc[:, "shop_id"] = "-"
     bom = bom.merge(cart, on="device_id", how="left", suffixes=("", "_2"))
-    bom["shop"] = bom["shop" + "_2"].combine_first(bom["shop"])
-    bom["shop_id"] = bom["shop_id" + "_2"].combine_first(bom["shop_id"])
+    bom["shop"] = bom["shop" + "_2"].combine_first(bom.loc[:, "shop"])
+    bom["shop_id"] = bom["shop_id" + "_2"].combine_first(bom.loc[:, "shop_id"])
     cols = [
         c
         for c in [
@@ -86,4 +101,3 @@ def trans(args: Namespace):
         bom[cols].to_csv(file_csv, index=False)
         info += [{"shop": None, "file": args.file, "dir": args.dir}]
     msg.trans_summary(info)
-

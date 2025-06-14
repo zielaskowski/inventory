@@ -1,4 +1,4 @@
-# inventory
+# INVentory app
 
 Inventory managing app. Created for tracking electronics component in home
 projects but probably usefull for any other (small) inventory.
@@ -29,14 +29,39 @@ web_shop. This allow split between shops considering best cost.
 
 6. finally all data can be stored in project table and stock table.
 
-NOT IMPLEMENTED
+## FUZZY SEARCH
+
+Exporting can work very well in pipe with FZF:
+
+```bash
+#inventory_device_copy.sh
+dev_id=$(echo "$1" | awk '{print $8}' | tr -d '\n')
+echo -n "$dev_id" | wl-copy 			# copy to clipboard, wayland only
+notify-send "Copied to clipboard:" "$dev_id"	# notify what copied KDE only
+
+#.zshrc
+fuzzy_search_inventory()
+{
+    inv bom -e % | \
+        fzf --bind "enter:execute-silent(\
+                echo {} | \
+                xargs -I{} inventory_device_copy.sh {})" \
+            --header 'press ENTER to copy to clipboard'
+}
+zle -N fuzzy_search_inventory
+bindkey '^s' fuzzy_search_inventory
+```
+
+FZF and zsh do some magic with scripts and it was not possible to define all in `.zshrc`
+So column extraction, copying to clipboard and notification is separated ino bash script.
+Clipboard coping and notification is very platform dependent, here WAYLAND and KDE.
+
+## NOT IMPLEMENTED
 
 BOM can be comited to write a project, and fill stock table based on ordered quantity
 
-WISH LIST:
+## WISH LIST
 
-1. import from csv (i.e. 'LCSC_csv')
-
-2. when preparing shipping list with transaction option, minimum order quantity
+1. when preparing shipping list with transaction option, minimum order quantity
 should be considered and it's multiplication (if ord_qty is 20, you can't
 order 23, must be 40)

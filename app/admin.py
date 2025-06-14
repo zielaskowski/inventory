@@ -3,7 +3,7 @@ from argparse import Namespace
 
 import pandas as pd
 
-from app.common import print_file, read_json
+from app.common import print_file, read_json_dict
 from app.sql import getDF, getL, rm
 from conf.config import SQL_SCHEME
 
@@ -55,7 +55,7 @@ def remove_dev(dev: list[str], by: str, force: bool) -> pd.DataFrame:
     # include all other tables where device is used
     # skip devices present in projects (unless forced)
     # return removed devices (not present in project)
-    sql_scheme = read_json(SQL_SCHEME)
+    sql_scheme = read_json_dict(SQL_SCHEME)
 
     # do not delete device if present in PROJECT table
     if not force:

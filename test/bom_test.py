@@ -21,9 +21,10 @@ def test_bom_no_dir(cli, capsys):
     out, _ = capsys.readouterr()
     assert "bom_import" in out.lower()
 
+
 def test_bom_no_args(cli, capsys):
     """no files found"""
-    args = cli.parse_args(["bom",'-d', '.'])
+    args = cli.parse_args(["bom", "-d", "."])
     with pytest.raises(SystemExit) as err_info:
         bom_import(args)
     out, _ = capsys.readouterr()
@@ -63,7 +64,7 @@ def test_bom_import_csv(cli, monkeypatch, tmpdir):
     bom_import(args)
     exp = tmpdir.join("exp.csv")
     exp.write("")
-    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", '%'])
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
     bom_import(args)
     inp = pd.read_csv(csv)
     exp = pd.read_csv(exp)
@@ -84,19 +85,27 @@ def test_bom_export(cli, monkeypatch, tmpdir):
     bom_import(args)
     exp = tmpdir.join("exp.csv")
     exp.write("")
-    args = cli.parse_args(["bom",
-                           "-d", tmpdir.strpath,
-                           "-f", "exp.csv",
-                           "-e",
-                           '%',
-                           '--hide_columns', 'col1', 'col2',
-                           ])
+    args = cli.parse_args(
+        [
+            "bom",
+            "-d",
+            tmpdir.strpath,
+            "-f",
+            "exp.csv",
+            "-e",
+            "%",
+            "--hide_columns",
+            "col1",
+            "col2",
+        ]
+    )
     bom_import(args)
     inp = pd.read_csv(csv)
     exp = pd.read_csv(exp)
     common_cols = exp.columns.intersection(inp.columns)
     exp = exp[common_cols]
     assert exp.equals(inp[common_cols])
+
 
 def test_bom_import_csv1(cli, monkeypatch, tmpdir, capsys):
     """import empty csv file
@@ -123,7 +132,7 @@ def test_bom_import_csv2(cli, monkeypatch, tmpdir, capsys):
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
     bom_import(args)
     out, _ = capsys.readouterr()
-    assert "missing mandatory columns" in out.lower()
+    assert "missing columns: ['device_id']" in out.lower()
 
 
 def test_bom_import_csv3(cli, monkeypatch, tmpdir, capsys):
@@ -143,7 +152,7 @@ def test_bom_import_csv3(cli, monkeypatch, tmpdir, capsys):
     assert "missing necessery" in out.lower()
     exp = tmpdir.join("exp.csv")
     exp.write("")
-    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", '%'])
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
     bom_import(args)
     csv.write("device_id,device_manufacturer,qty,project\n", mode="w")
     csv.write("aa,bb,2,test\n", mode="a")
@@ -169,7 +178,7 @@ def test_bom_import_csv4(cli, monkeypatch, tmpdir):
     bom_import(args)
     exp = tmpdir.join("exp.csv")
     exp.write("")
-    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e",'%'])
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
     bom_import(args)
     csv.write("device_id,device_manufacturer,qty,project\n", mode="w")
     csv.write("aa,bb,4,test\n", mode="a")
@@ -194,7 +203,7 @@ def test_bom_import_csv5(cli, monkeypatch, tmpdir):
     bom_import(args)
     exp = tmpdir.join("exp.csv")
     exp.write("")
-    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e",'%'])
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
     bom_import(args)
     inp = pd.read_csv(csv)
     exp = pd.read_csv(exp)
@@ -216,13 +225,13 @@ def test_bom_import_csv6(cli, monkeypatch, tmpdir, capsys):
     csv2.write("aa,bb,1", mode="a")
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
     bom_import(args)
-    args = cli.parse_args(["bom", "--remove",  "%"])
+    args = cli.parse_args(["bom", "--remove", "%"])
     bom_import(args)
     exp = tmpdir.join("exp.csv")
     exp.write("")
-    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e",'%'])
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
     bom_import(args)
-    out,_ = capsys.readouterr()
+    out, _ = capsys.readouterr()
     assert "no available not-commited projects." in out.lower()
 
 
@@ -239,11 +248,11 @@ def test_bom_import_csv7(cli, monkeypatch, tmpdir):
     csv2.write("aa,bb,1", mode="a")
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
     bom_import(args)
-    args = cli.parse_args(["bom", "--remove",  "test1"])
+    args = cli.parse_args(["bom", "--remove", "test1"])
     bom_import(args)
     exp = tmpdir.join("exp.csv")
     exp.write("")
-    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e",'%'])
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
     bom_import(args)
     inp = pd.read_csv(csv2)
     exp = pd.read_csv(exp)
@@ -265,11 +274,11 @@ def test_bom_import_csv9(cli, monkeypatch, tmpdir, capsys):
     csv2.write("aa,bb,1", mode="a")
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
     bom_import(args)
-    args = cli.parse_args(["bom", "--remove",  "test"])
+    args = cli.parse_args(["bom", "--remove", "test"])
     bom_import(args)
     exp = tmpdir.join("exp.csv")
     exp.write("")
-    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e",'%'])
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
     bom_import(args)
     csv = tmpdir.join("csv.csv")
     csv.write("device_id,device_manufacturer,qty\n")
@@ -351,27 +360,10 @@ def test_scan_files4(cli, monkeypatch, tmpdir):
     args = cli.parse_args(["bom", "--reimport"])
     with pytest.raises(SystemExit):
         scan_files(args)
-def test_export_show_all_projects(cli, monkeypatch,tmpdir, capsys):
-    '''show all projects possible to export'''
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
-    sql_check()
-    csv1 = tmpdir.join("test1.csv")
-    csv1.write("device_id,device_manufacturer,qty\n")
-    csv1.write("aa,bb,1", mode="a")
-    csv2 = tmpdir.join("test2.csv")
-    csv2.write("device_id,device_manufacturer,qty\n")
-    csv2.write("aa,bb,1", mode="a")
-    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
-    bom_import(args)
-    args = cli.parse_args(['bom', '--export', '?'])
-    bom_import(args)
-    out, _ = capsys.readouterr()
-    assert 'test1' in out.lower()
-    assert 'test2' in out.lower()
 
-def test_remove_show_all_projects(cli, monkeypatch,tmpdir, capsys):
-    '''show all projects possible to export'''
+
+def test_export_show_all_projects(cli, monkeypatch, tmpdir, capsys):
+    """show all projects possible to export"""
     monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
     monkeypatch.setattr("app.common.SCAN_DIR", "")
     sql_check()
@@ -383,8 +375,28 @@ def test_remove_show_all_projects(cli, monkeypatch,tmpdir, capsys):
     csv2.write("aa,bb,1", mode="a")
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
     bom_import(args)
-    args = cli.parse_args(['bom', '--remove', '?'])
+    args = cli.parse_args(["bom", "--export", "?"])
     bom_import(args)
     out, _ = capsys.readouterr()
-    assert 'test1' in out.lower()
-    assert 'test2' in out.lower()
+    assert "test1" in out.lower()
+    assert "test2" in out.lower()
+
+
+def test_remove_show_all_projects(cli, monkeypatch, tmpdir, capsys):
+    """show all projects possible to export"""
+    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    sql_check()
+    csv1 = tmpdir.join("test1.csv")
+    csv1.write("device_id,device_manufacturer,qty\n")
+    csv1.write("aa,bb,1", mode="a")
+    csv2 = tmpdir.join("test2.csv")
+    csv2.write("device_id,device_manufacturer,qty\n")
+    csv2.write("aa,bb,1", mode="a")
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
+    bom_import(args)
+    args = cli.parse_args(["bom", "--remove", "?"])
+    bom_import(args)
+    out, _ = capsys.readouterr()
+    assert "test1" in out.lower()
+    assert "test2" in out.lower()

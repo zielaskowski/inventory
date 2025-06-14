@@ -12,7 +12,7 @@ from app.tabs import NA_rows
 
 
 def test_NA_rows(capsys):
-    """example data"""
+    """NA rows in must and nice cols"""
     df = pd.DataFrame(
         {
             "id": [1, 2, 3, 4, 5, 6],
@@ -29,6 +29,27 @@ def test_NA_rows(capsys):
     out, _ = capsys.readouterr()
     assert "[5]" in out.lower()
     assert "30.0" in out.lower()
+    assert "none" in out.lower()
+
+
+def test_NA_rows1(capsys):
+    """NA rows only in nice col"""
+    df = pd.DataFrame(
+        {
+            "id": [1, 2, 3, 4, 5, 6],
+            "must": [1, 1, 10, 11, 30, 40],
+            "nice": ["a", "a", "a", "b", None, "d"],
+        }
+    )
+    expected_ids = [1, 2, 3, 4, 5, 6]
+    df = NA_rows(df, must_cols=["must"], nice_cols=["nice"], row_shift=0)
+
+    assert list(df["id"]) == expected_ids
+
+    # Capture stdout and verify that info was printed for must_col NA
+    out, _ = capsys.readouterr()
+    assert "5" in out.lower()
+    assert "30" in out.lower()
     assert "none" in out.lower()
 
 

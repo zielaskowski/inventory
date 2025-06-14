@@ -4,7 +4,13 @@ import json
 
 import pytest
 
-from app.error import check_dirError, sql_checkError, sql_createError, sql_schemeError
+from app.error import (
+    check_dirError,
+    read_jsonError,
+    sql_checkError,
+    sql_createError,
+    sql_schemeError,
+)
 from app.sql import sql_check, sql_create
 
 
@@ -36,7 +42,7 @@ def test_sql_create3(monkeypatch):
 
 
 def test_sql_create4(monkeypatch, tmpdir):
-    """mising TABLE name"""
+    """mising TABLE name - expecting dict"""
     json_txt = """
     //** test
     {
@@ -48,9 +54,9 @@ def test_sql_create4(monkeypatch, tmpdir):
     jfile.write(json_txt)
     monkeypatch.setattr("app.sql.DB_FILE", tmpdir + "db.sql")
     monkeypatch.setattr("app.sql.SQL_SCHEME", jfile)
-    with pytest.raises(sql_schemeError) as err_info:
+    with pytest.raises(sql_createError) as err_info:
         sql_create()
-    assert err_info.match("key")
+    assert err_info.match(jfile.strpath)
 
 
 def test_sql_create5(monkeypatch, tmpdir):

@@ -294,6 +294,7 @@ def test_store_alternatives3(tmpdir, monkeypatch):
     man_alts = {
         "aa": ["a1", "a2", "a3"],
         "bb": ["b1", "a1", "b3"],
+        "d": ["dd"],
     }
     alternatives = {
         "man_in": ["a1", "cc", "dd", "ee"],

@@ -1,20 +1,20 @@
 #!/home/mi/docs/prog/python/inventory/.venv/bin/python
 """INVentory management system"""
-
 import argparse
 import inspect
+import os
 import sys
 
 from app.admin import admin
 from app.bom import bom_import
 from app.commit import commit
-from app.common import DEBUG, AbbreviationParser, log
-from app.error import sql_checkError, sql_createError, sql_tabError
+from app.common import AbbreviationParser, log, write_json
+from app.error import sql_checkError, sql_createError
 from app.message import messageHandler
 from app.shop import shop_import
 from app.sql import sql_check
 from app.transaction import trans
-from conf.config import config_file, import_format
+from conf.config import MAN_ALT, config_file, import_format
 
 msg = messageHandler()
 
@@ -296,6 +296,9 @@ if __name__ == "__main__":
     except IndexError:
         # normall call (no debug)
         pass
+    # check if file with manufacturer alternatives exists
+    if not os.path.exists(MAN_ALT):
+        write_json(MAN_ALT, {"": [""]})
     parser = cli_parser()
     args = parser.parse_args()
     log(sys.argv[1:])

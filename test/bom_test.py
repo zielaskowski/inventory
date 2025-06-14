@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 from app.bom import bom_import, scan_files
+from app.error import check_dirError
 from app.sql import sql_check
 from inv import cli_parser
 
@@ -57,16 +58,45 @@ def test_bom_import_csv(cli, monkeypatch, tmpdir):
     monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
     monkeypatch.setattr("app.common.SCAN_DIR", "")
     sql_check()
-    csv = tmpdir.join("test.csv")
-    csv.write("device_id,device_manufacturer,qty,project\n")
-    csv.write("aa,bb,1,test", mode="a")
+    test = tmpdir.join("test.csv")
+    with open(test, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,qty,project\n"
+            + "aa,bb,1,test"
+        )# fmt: skip
+
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
     bom_import(args)
     exp = tmpdir.join("exp.csv")
     exp.write("")
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
     bom_import(args)
-    inp = pd.read_csv(csv)
+    inp = pd.read_csv(test)
+    exp = pd.read_csv(exp)
+    common_cols = exp.columns.intersection(inp.columns)
+    exp = exp[common_cols]
+    assert exp.equals(inp[common_cols])
+
+
+def test_bom_import_csv11(cli, monkeypatch, tmpdir):
+    """import and export without errors, strip text during import"""
+    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    sql_check()
+    test = tmpdir.join("test.csv")
+    with open(test, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,qty,project\n"
+            + " aa , bb ,1,test"
+        )# fmt: skip
+
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
+    bom_import(args)
+    exp = tmpdir.join("exp.csv")
+    exp.write("")
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
+    bom_import(args)
+    inp = pd.read_csv(test).apply(lambda x: x.str.strip() if x.dtype == object else x)
     exp = pd.read_csv(exp)
     common_cols = exp.columns.intersection(inp.columns)
     exp = exp[common_cols]
@@ -327,15 +357,23 @@ def test_scan_files3(cli, monkeypatch, tmpdir, capsys):
     monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
     monkeypatch.setattr("app.common.SCAN_DIR", "")
     sql_check()
-    csv1 = tmpdir.join("test1.csv")
-    csv1.write("device_id,device_manufacturer,qty\n")
-    csv1.write("aa,bb,1", mode="a")
-    csv2 = tmpdir.join("test2.csv")
-    csv2.write("device_id,device_manufacturer,qty\n")
-    csv2.write("aa,bb,1", mode="a")
+
+    test1 = tmpdir.join("test1.csv")
+    with open(test1, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,qty\n"
+            + "aa,bb,1"
+        )  # fmt:skip
+    test2 = tmpdir.join("test2.csv")
+    with open(test2, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,qty\n"
+            + "aa,bb,1"
+        )  # fmt:skip
+
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
     bom_import(args)
-    csv1.remove()
+    test1.remove()
     args = cli.parse_args(["bom", "--reimport"])
     scan_files(args)
     out, _ = capsys.readouterr()

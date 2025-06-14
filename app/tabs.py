@@ -150,6 +150,9 @@ def prepare_tab(
         if dat[c].dtype == "object":
             dat[c] = dat[c].apply(ASCII_txt)
 
+    # and strip text
+    dat = dat.apply(lambda x: x.str.strip() if x.dtype == object else x)  # type: ignore
+
     return dat
 
 
@@ -468,14 +471,13 @@ def scan_files(args) -> list[str]:
         files = []
         for _, r in locations.iterrows():
             args.dir = r[BOM_DIR]
-            args.filter = r[BOM_FILE]
+            args.file = r[BOM_FILE]
             args.format = r[BOM_FORMAT]
-            f = check_dir_file(args)
-            if not f:
-                msg.reimport_missing_file(
-                    file=str(r[BOM_FILE]),
-                    project=str(r[BOM_PROJECT]),
-                )
+            args.project = r[BOM_PROJECT]
+            try:
+                f = check_dir_file(args)
+            except check_dirError as e:
+                msg.msg(str(e))
                 continue
             files += f
         if not files:

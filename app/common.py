@@ -102,7 +102,7 @@ def store_alternatives(
         # only one-to-one alternatives and changed
         if alt_from[i] != selection[i] and len(alt_options[i].split(" | ")) == 1:
             # remove alternative if already exists
-            for k in alt_exist.keys():
+            for k in list(alt_exist.keys()):
                 if alt_from[i] in alt_exist[k]:
                     alt_exist[k].remove(alt_from[i])
                     if alt_exist[k] == []:
@@ -306,14 +306,18 @@ def check_dir_file(args: argparse.Namespace) -> list[str]:
     return found files
     """
     if not os.path.exists(args.dir):
-        raise check_dirError(file=args.file, directory=args.dir, scan_dir=SCAN_DIR)
+        raise check_dirError(directory=args.dir, scan_dir=SCAN_DIR)
     files = find_files(args.dir, args.format)
 
     # filter by file name
     if args.file is not None:
         files = [f for f in files if args.file in os.path.basename(f)]
         if files == []:
-            raise check_dirError(file=args.file, directory=args.dir, scan_dir=SCAN_DIR)
+            raise check_dirError(
+                file=args.file,
+                directory=args.dir,
+                project=getattr(args, "project", args.file),
+            )
     return files
 
 

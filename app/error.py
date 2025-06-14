@@ -50,15 +50,19 @@ class check_dirError(Exception):
         directory: str,
         *args: object,
         file: str = "",
+        project: str = "",
         scan_dir: str = "",
     ) -> None:
-        if not scan_dir and not file:
-            self.message = f"{directory} is not existing."
+        if not project:
+            self.message = (
+                f"{directory} is not existing."
+                + f"or no {scan_dir} folder in {directory} directory"
+            )
         else:
             self.message = (
-                f"{file} is missing or corrupted,\n"
-                + "or no {scan_dir} folder in {directory} directory"
-            )
+                f"For project '{project}', " 
+                + f"file '{file}' is missing or corrupted,\n"
+        )# fmt: skip
         super().__init__(*args)
 
     def __str__(self) -> str:

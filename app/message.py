@@ -12,6 +12,7 @@ class messageHandler:
         self.message = []
         # store dataframe hash, to avoid showing twice the same info
         self.df_hash: float = 0
+        self.msg_hash: float = 0
 
     def SQL_file_miss(self, db_file: str) -> None:
         self.message.append(f"SQL file {db_file} is missing!")
@@ -25,15 +26,8 @@ class messageHandler:
         self.message.append(f"Importing file: {os.path.basename(file)}")
         self.__exec__()
 
-    def reimport_missing_file(
-        self,
-        file: str | None = None,
-        project: str | None = None,
-    ) -> None:
-        if not file and not project:
-            self.message.append("No not-commited projects to reimport")
-        else:
-            self.message.append(f" File '{file}' is missing for project '{project}'")
+    def reimport_missing_file(self) -> None:
+        self.message.append("No not-commited projects to reimport")
         self.__exec__()
 
     def import_missing_file(self) -> None:
@@ -51,11 +45,11 @@ class messageHandler:
                 f"Missing necessery data in rows: {row_id}. Skiping these rows."
             )
         if not rows.empty:
-            df_hash = float(pd.util.hash_pandas_object(rows).sum())  # type: ignore
-            if self.df_hash != df_hash:
-                self.df_hash = df_hash
-                self.message.append("These rows have NAs in NON essential columns:")
-                self.message.append(rows)
+            # df_hash = float(pd.util.hash_pandas_object(rows).sum())  # type: ignore
+            # if self.df_hash != df_hash:
+            # self.df_hash = df_hash
+            self.message.append("These rows have NAs in NON essential columns:")
+            self.message.append(rows)
         self.__exec__(warning=True)
 
     def file_already_imported(self, file: str) -> bool:
@@ -186,6 +180,12 @@ class messageHandler:
         self.__exec__()
 
     def __exec__(self, warning: bool = False) -> None:
+        msg = [str(s) for s in self.message]  # possibly DataFrame, not only strings
+        msg_hash = hash("".join(msg))
+        if msg_hash == self.msg_hash or msg == []:
+            self.message = []
+            return
+        self.msg_hash = msg_hash
         if warning:
             print("")
             print("WARNING:")

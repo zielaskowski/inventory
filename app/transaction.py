@@ -1,9 +1,7 @@
 import os
 from argparse import Namespace
-from re import search
 
 import pandas as pd
-from numpy import where
 
 from app.common import BOM_PROJECT
 from app.message import messageHandler

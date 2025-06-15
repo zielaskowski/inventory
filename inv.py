@@ -187,7 +187,7 @@ def cli_parser() -> AbbreviationParser:
     cli_transact.add_argument(
         "-f",
         "--file",
-        help="File name to save shoping list, default is 'shopping list.csv'",
+        help="File name to save shoping list (with extension), default is 'shopping_list'",
         required=False,
         default="shopping_list",
     )
@@ -220,7 +220,7 @@ def cli_parser() -> AbbreviationParser:
         "--dont_split_shop",
         action="store_true",
         default=False,
-        help="Do not split shopping list by supplier",
+        help="Do not split shopping list by supplier, also ignore shop minimum quantity!. Split by default.",
     )
     cli_transact.set_defaults(func=trans)
 

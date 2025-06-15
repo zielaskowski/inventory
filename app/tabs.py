@@ -199,7 +199,7 @@ def NA_rows(
     inform user and remove from data,
     remove only when NA in must rows
     """
-    row_shift = +2  # one for header, and one to start from zero
+    row_shift += 2  # one for header, and one to start from zero
     na_rows = df.loc[df.loc[:, must_cols].isna().any(axis=1)]
     na_rows_id: list[int] = [int(c) + row_shift for c in na_rows.index.values]
     df = df.loc[~df.index.isin(na_rows.index)]
@@ -250,7 +250,8 @@ def columns_align(n_stock: pd.DataFrame, file: str, args: Namespace) -> pd.DataF
     n_stock[BOM_FILE] = os.path.basename(file)
     n_stock[BOM_FORMAT] = args.format
     n_stock[SHOP_DATE] = date.today().strftime("%Y-%m-%d")
-    n_stock[SHOP_SHOP] = args.format
+    if SHOP_SHOP not in n_stock.columns:
+        n_stock[SHOP_SHOP] = args.format
 
     return n_stock
 

@@ -1,5 +1,4 @@
 *.sqlite
-.vscode
 *.csv
 log.txt
 

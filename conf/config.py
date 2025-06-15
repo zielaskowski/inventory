@@ -24,6 +24,9 @@ MAN_ALT = "/home/mi/docs/prog/python/inventory/conf/manufacturer_alternatives.js
 SCAN_DIR = "BOM"
 # scan_dir = ""
 
+# display currency
+# only for display, no any conversion is made
+DISP_CURR = "$"
 
 # directory for temporary files
 TEMP_DIR = "/tmp/"

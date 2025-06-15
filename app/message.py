@@ -4,7 +4,7 @@ import os
 
 import pandas as pd
 
-from conf.config import config_file
+from conf.config import DISP_CURR, config_file
 
 
 class messageHandler:
@@ -106,7 +106,9 @@ class messageHandler:
                     dat["qty"] = 1
                 dat["tot_cost"] = dat["price"] * dat["qty"]
                 cost = round(dat["tot_cost"].sum(), 2)
-                self.message.append(f"{len(dat)} With cost of {cost}$ in total.")
+                self.message.append(
+                    f"{len(dat)} With cost of {cost}{DISP_CURR} in total."
+                )
         self.message.append("*********************************************************")
         self.__exec__()
 

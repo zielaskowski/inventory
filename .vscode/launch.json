@@ -1,0 +1,183 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Module without Arguments",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "inv",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Module with Arguments",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "inv",
+            "console": "integratedTerminal",
+            "args": ["${command:pickArgs}"]
+        },
+        {
+            "name": "shop with gps dir",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "inv",
+            "console": "integratedTerminal",
+            "args": [
+                "cart",
+                "-d","/home/mi/docs/prog/MCU/gps_chip_antena/",
+                "-f","LCSC"
+            ]
+        },
+        {
+            "name": "bom from easyEDA",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "inv",
+            "console": "integratedTerminal",
+            "args": [
+                "bom",
+                "-i"
+            ]
+        },
+        {
+            "name": "bom reimport",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "inv",
+            "console": "integratedTerminal",
+            "args": [
+                "bom_import",
+                "-r"
+            ]
+        },
+        {
+            "name": "shop list",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "inv",
+            "console": "integratedTerminal",
+            "args": [
+                "transact"
+            ]
+        },
+        {
+            "name": "remove_device_id",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "inv",
+            "console": "integratedTerminal",
+            "args": [
+                "admin",
+                "--remove_dev_id","CC0603KRX5R8BB105","CC0402JRNPO9BN101","CC0402KRX7R7BB104","CC0402KRX7R9BB471"
+            ]
+        },
+        {
+            "name": "remove from bom",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "inv",
+            "console": "integratedTerminal",
+            "args": [
+                "bom",
+                "-r",
+                "-f","NICERF"
+            ]
+        },
+        {
+            "name": "transaction",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "inv",
+            "console": "integratedTerminal",
+            "args": [
+                "trans",
+                "-q","10"
+            ]
+        },
+        {
+            "name": "rm_shop_id",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "inv",
+            "console": "integratedTerminal",
+            "args": [
+                "admin",
+                "--remove_shop_id",
+                "--csv","/home/mi/docs/prog/MCU/gps_chip_antena/bom/LCSC_Quote_Exported__20241025_020157.csv",
+                "-w","LCSC Part",
+                "-f","Statuss",
+                "-v","Not Available"
+            ]
+        },
+	{
+
+            "name": "pytest-sql",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "console": "integratedTerminal",
+            "args": ["./test/sql_test.py"],
+	    "justMyCode": true
+	},
+	{
+
+            "name": "pytest-common",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "console": "integratedTerminal",
+            "args": ["./test/common_test.py"],
+	    "justMyCode":true
+	},
+	{
+
+            "name": "pytest-bom",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "console": "integratedTerminal",
+            "args": ["./test/bom_test.py"],
+	    "justMyCode":true
+	},
+	{
+
+            "name": "pytest-bom-easyEDA",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "console": "integratedTerminal",
+            "args": ["./test/bom_easyEDA_test.py"],
+	    "justMyCode":true
+	},
+	{
+
+            "name": "pytest-shop",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "console": "integratedTerminal",
+            "args": ["./test/shop_test.py"],
+	    "justMyCode":true
+	},
+	{
+
+            "name": "pytest-tabs",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "console": "integratedTerminal",
+            "args": ["./test/tabs_test.py"],
+	    "justMyCode":true
+	},
+	{
+
+            "name": "pytest-trans",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "console": "integratedTerminal",
+            "args": ["./test/transact_test.py"],
+	    "justMyCode":true
+	}
+    ]
+}

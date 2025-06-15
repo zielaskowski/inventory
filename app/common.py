@@ -47,9 +47,15 @@ BOM_COMMITED = "commited"
 BOM_PROJECT = "project"
 BOM_HASH = "device_hash"
 BOM_FORMAT = "file_format"
+BOM_QTY = "qty"
 SHOP_HASH = "device_hash"
 SHOP_SHOP = "shop"
 SHOP_DATE = "date"
+SHOP_QTY = "order_qty"
+SHOP_PRICE = "price"
+SHOP_ID = "shop_id"
+STOCK_QTY = "stock_qty"
+STOCK_HASH = "device_hash"
 TAKE_LONGER_COLS = [DEV_MAN, DEV_DESC, DEV_PACK]
 HIDDEN_COLS = [
     BOM_DIR,
@@ -60,7 +66,6 @@ HIDDEN_COLS = [
     DEV_HASH,
     BOM_HASH,
     SHOP_DATE,
-    SHOP_SHOP,
 ]  # columns automatically filled, no need to import
 NO_EXPORT_COLS = [
     DEV_HASH,
@@ -426,6 +431,8 @@ def match_from_list(cmd: str, choices: Dict | list) -> str:
     try match cmd in list. Return full cmd if only one match.
     Other way return raises no_matchError or ambiguos_matchError
     """
+    if cmd in choices:
+        return cmd
     matches = [choice for choice in choices if choice.startswith(cmd)]
     if len(matches) == 1:
         return matches[0]

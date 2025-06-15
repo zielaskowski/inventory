@@ -100,7 +100,7 @@
         "order_qty": "INTEGER NOT NULL",
 	"COL_DESCRIPTION":{
 		"date":"date of import,for price analysis will use latest date",
-		"shop":"guessed from ile imported or provided (especially for scv imports)",
+		"shop":"guessed from file imported or provided (especially for scv imports)",
 		"shop_id":"device identification from shop, very useful when preparing transaction for particular shop",
 		"price":"keep price in one currency, app is not considering currency",
 		"order_qty":"minimum order quantity in a shop"
@@ -126,7 +126,7 @@
         "device_hash": "TEXT PRIMARY KEY",
         "stock_qty": "INTEGER NOT NULL",
 	"COL_DESCRIPTION":{
-		"stock_qty":"number of items purchased and not used"
+		"stock_qty":"stock: number of items purchased and not used"
 	},
         "FOREIGN": [
             {

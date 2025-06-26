@@ -9,14 +9,14 @@ from app.admin import admin
 from app.bom import bom_import
 from app.commit import commit
 from app.common import AbbreviationParser, log, write_json
-from app.error import sql_checkError, sql_createError
-from app.message import messageHandler
+from app.error import SqlCheckError, SqlCreateError
+from app.message import MessageHandler
 from app.shop import shop_import
 from app.sql import sql_check
 from app.transaction import trans
-from conf.config import MAN_ALT, config_file, import_format
+from conf import config as conf
 
-msg = messageHandler()
+msg = MessageHandler()
 
 
 def cli_parser() -> AbbreviationParser:
@@ -43,7 +43,7 @@ def cli_parser() -> AbbreviationParser:
         Application can import exccel files in different formats (from different)
         shops. Format description is in config file. Should be easy to extend.
         Each execution of app is writing used arguments into log file. You cen setup 
-        in {config_file()} file.""",
+        in {conf.config_file()} file.""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     command_parser = cli.add_subparsers(title="commands", dest="command")
@@ -71,10 +71,10 @@ def cli_parser() -> AbbreviationParser:
     cli_import_bom.add_argument(
         "-F",
         "--format",
-        help=f"format of file to import, possible values: {list(import_format.keys())}.\
-                Default is {list(import_format.keys())[1]}",
+        help=f"format of file to import, possible values: {list(conf.import_format.keys())}.\
+                Default is {list(conf.import_format.keys())[1]}",
         required=False,
-        default=list(import_format.keys())[1],  # easyEDA
+        default=list(conf.import_format.keys())[1],  # easyEDA
     )
     cli_import_bom.add_argument(
         "-e",
@@ -157,10 +157,10 @@ def cli_parser() -> AbbreviationParser:
     cli_import_cart.add_argument(
         "-F",
         "--format",
-        help=f"format of file to import, possible values: {list(import_format.keys())}.\
-                Default is {list(import_format.keys())[0]}",
+        help=f"format of file to import, possible values: {list(conf.import_format.keys())}.\
+                Default is {list(conf.import_format.keys())[0]}",
         required=False,
-        default=list(import_format.keys())[0],  # LCSC
+        default=list(conf.import_format.keys())[0],  # LCSC
     )
     cli_import_cart.add_argument(
         "--info",
@@ -210,8 +210,8 @@ def cli_parser() -> AbbreviationParser:
         "-q",
         "--qty",
         type=int,
-        help="multiply 'Order Qty.' by this value. If omitted, no multiplication is done,\
-                if q=-1 will ask for value for each BOM",
+        help="""Multiply 'Order Qty.' by this value. If omitted, no multiplication is done,
+                if q=-1 will ask for value for each BOM""",
         required=False,
         default=1,
     )
@@ -220,7 +220,8 @@ def cli_parser() -> AbbreviationParser:
         "--dont_split_shop",
         action="store_true",
         default=False,
-        help="Do not split shopping list by supplier, also ignore shop minimum quantity!. Split by default.",
+        help="""Do not split shopping list by supplier, also ignore shop minimum quantity!.
+                Split by default.""",
     )
     cli_transact.set_defaults(func=trans)
 
@@ -237,6 +238,12 @@ def cli_parser() -> AbbreviationParser:
         "admin", help="Admin functions. Be responsible."
     )
     admin_group = cli_admin.add_mutually_exclusive_group(required=True)
+    admin_group.add_argument(
+        "-a",
+        "--align_manufacturers",
+        action="store_true",
+        help="align manufacturers",
+    )
     admin_group.add_argument(
         "-c",
         "--config",
@@ -292,13 +299,13 @@ if __name__ == "__main__":
     # of one of the stack frame
     try:
         if "debugpy" in inspect.stack()[1].filename:
-            DEBUG = True
+            conf.DEBUG = "debugpy"
     except IndexError:
         # normall call (no debug)
         pass
     # check if file with manufacturer alternatives exists
-    if not os.path.exists(MAN_ALT):
-        write_json(MAN_ALT, {"": [""]})
+    if not os.path.exists(conf.MAN_ALT):
+        write_json(conf.MAN_ALT, {"": [""]})
     parser = cli_parser()
     args = parser.parse_args()
     log(sys.argv[1:])
@@ -306,10 +313,10 @@ if __name__ == "__main__":
     # check if we have proper sql file
     try:
         sql_check()
-    except sql_checkError as e:
+    except SqlCheckError as e:
         msg.msg(str(e))
         sys.exit(1)
-    except sql_createError as e:
+    except SqlCreateError as e:
         msg.msg(str(e))
         sys.exit(1)
 

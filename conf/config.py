@@ -31,6 +31,13 @@ DISP_CURR = "$"
 # directory for temporary files
 TEMP_DIR = "/tmp/"
 
+# handle behavior of user interctive components
+# - 'none'      normal interaction
+# - 'debugpy'   debuging with debugpy (detectd in inv.main())
+#               fire separate console and wait for it to end
+# - 'pytest'    completely ignore interactive elements
+DEBUG = "none"
+
 
 def config_file():
     """where am I"""

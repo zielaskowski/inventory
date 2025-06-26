@@ -1,10 +1,13 @@
-from os import EX_CANTCREAT
+"""Error classes"""
+
 from typing import KeysView
 
 from conf.config import SQL_SCHEME
 
 
-class sql_getError(Exception):
+class SqlGetError(Exception):
+    """exception class"""
+
     def __init__(self, col: list[str], all_cols: list[str], *args: object) -> None:
         self.message = f"Not correct get='{col}' argument."
         self.message += f"possible options: {all_cols}"
@@ -14,7 +17,9 @@ class sql_getError(Exception):
         return f"SQL get error: {self.message}"
 
 
-class prepare_tabError(Exception):
+class PrepareTabError(Exception):
+    """exception class"""
+
     def __init__(
         self,
         tab: str,
@@ -34,7 +39,9 @@ class prepare_tabError(Exception):
         return f"Write {self.tab} error: {self.message}"
 
 
-class sql_tabError(Exception):
+class SqlTabError(Exception):
+    """exception class"""
+
     def __init__(self, tab: str, tabs: KeysView[str], *args: object) -> None:
         self.message = f"Table '{tab}' is missing or corrupted.\n"
         self.message += f"Available tables are {str(tabs)}"
@@ -44,7 +51,9 @@ class sql_tabError(Exception):
         return f"SQL table error: {self.message}"
 
 
-class check_dirError(Exception):
+class CheckDirError(Exception):
+    """exception class"""
+
     def __init__(
         self,
         directory: str,
@@ -69,7 +78,9 @@ class check_dirError(Exception):
         return f"Check directory error: {self.message}"
 
 
-class sql_checkError(Exception):
+class SqlCheckError(Exception):
+    """exception class"""
+
     def __init__(self, db_file: str, tab: str, *args: object) -> None:
         self.message = (
             "Wrong DB scheme in file '"
@@ -85,7 +96,9 @@ class sql_checkError(Exception):
         return f"SQL check error: {self.message}"
 
 
-class sql_createError(Exception):
+class SqlCreateError(Exception):
+    """exception class"""
+
     def __init__(self, sql_scheme: str, *args: object) -> None:
         self.message = f"DB not created. Possibly '{sql_scheme}' file corupted."
         super().__init__(*args)
@@ -94,7 +107,9 @@ class sql_createError(Exception):
         return f"SQL create error: {self.message}"
 
 
-class scan_dir_permissionError(Exception):
+class ScanDirPermissionError(Exception):
+    """exception class"""
+
     def __init__(self, directory: str, *args: object) -> None:
         self.message = f"you don't have permission to '{directory}'"
         super().__init__(*args)
@@ -103,7 +118,9 @@ class scan_dir_permissionError(Exception):
         return f"Permission error: {self.message}"
 
 
-class write_jsonError(Exception):
+class WriteJsonError(Exception):
+    """exception class"""
+
     def __init__(self, file: str, *args: object) -> None:
         self.message = f"JSON fil '{file}' is missing or data corrupted."
         super().__init__(*args)
@@ -112,7 +129,9 @@ class write_jsonError(Exception):
         return f"JSON write error: {self.message}"
 
 
-class read_jsonError(Exception):
+class ReadJsonError(Exception):
+    """exception class"""
+
     def __init__(self, json_file: str, *args: object, type_val: str = "") -> None:
         self.message = f"JSON file '{json_file}' is missing or corrupted.\n"
         if type_val is not None:
@@ -123,7 +142,7 @@ class read_jsonError(Exception):
         return f"JSON read error: {self.message}"
 
 
-class sql_schemeError(Exception):
+class SqlSchemeError(Exception):
     """SQL scheme wrong format in json file"""
 
     def __init__(self, tab: str, *args: object) -> None:
@@ -134,7 +153,9 @@ class sql_schemeError(Exception):
         return f"SQL scheme format error: {self.message}. Check {SQL_SCHEME} file."
 
 
-class sql_executeError(Exception):
+class SqlExecuteError(Exception):
+    """exception class"""
+
     def __init__(self, err: object, cmd: str, *args: object) -> None:
         self.message = str(err) + " on cmd:\n" + cmd[0:100]
         if len(cmd) > 100:
@@ -145,7 +166,9 @@ class sql_executeError(Exception):
         return f"SQL execution error: {self.message}"
 
 
-class ambigous_matchError(Exception):
+class AmbigousMatchError(Exception):
+    """exception class"""
+
     def __init__(self, cmd: str, *args: object, matches: list[str]) -> None:
         self.message = f"Ambiguous abbreviation '{cmd}', match: {matches}."
         super().__init__(*args)
@@ -154,7 +177,9 @@ class ambigous_matchError(Exception):
         return f"match error: {self.message}"
 
 
-class no_matchError(Exception):
+class NoMatchError(Exception):
+    """exception class"""
+
     def __init__(self, cmd: str, *args: object) -> None:
         self.message = f"No match found for abbreviation '{cmd}'."
         super().__init__(*args)

@@ -8,7 +8,7 @@ import pytest
 from app.common import DEV_ID, DEV_MAN, read_json_dict
 from app.shop import shop_import
 from app.sql import getDF, put, sql_check
-from app.tabs import align_column_duplications, columns_align, foreign_tabs, prepare_tab
+from app.tabs import align_manufacturers, columns_align, foreign_tabs, prepare_tab
 from conf.config import SQL_SCHEME
 from inv import cli_parser
 
@@ -138,7 +138,7 @@ def test_shop_import_csv6(monkeypatch, tmpdir, cli):
     """6. the same device_id but different manufacturer"""
     monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
     monkeypatch.setattr("app.common.SCAN_DIR", "")
-    monkeypatch.setattr("app.common.DEBUG", True)
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
 
     test1 = tmpdir.join("test1.csv")
@@ -160,17 +160,26 @@ def test_shop_import_csv6(monkeypatch, tmpdir, cli):
             )# fmt: skip
 
     inp = pd.read_csv(test2)
-    alternatives = {DEV_MAN: ["ac"], DEV_MAN + "_stock": ["aa | ab"]}
-    with patch("app.tabs.select_column") as mock_select_column:
-        align_column_duplications(inp, merge_on=DEV_ID, duplication=DEV_MAN)
-        mock_select_column.assert_called_with(alternatives=alternatives, column=DEV_MAN)
+    alternatives = {
+        "ref_col": {"devices": ["aa"]},
+        "change_col": {DEV_MAN: ["ac"]},
+        "opt_col": {DEV_MAN + "_opts": ["aa | ab"]},
+    }
+    with patch("app.tabs.vimdiff_selection") as mock_select_column:
+        align_manufacturers(inp)
+        mock_select_column.assert_called_with(
+            ref_col=alternatives["ref_col"],
+            change_col=alternatives["change_col"],
+            opt_col=alternatives["opt_col"],
+            exit_on_change=True,
+        )
 
 
 def test_shop_import_csv7(monkeypatch, tmpdir, cli):
     """6. the same device_id but different description"""
     monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
     monkeypatch.setattr("app.common.SCAN_DIR", "")
-    monkeypatch.setattr("app.tabs.DEBUG", True)
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
 
     test1 = tmpdir.join("test1.csv")

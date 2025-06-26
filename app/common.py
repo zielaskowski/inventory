@@ -11,19 +11,20 @@ import re
 import shutil
 import sys
 from json import JSONDecodeError
-from string import Template
 from typing import Dict
 
+from jinja2 import Template
+
 from app.error import (
-    ambigous_matchError,
-    check_dirError,
-    no_matchError,
-    read_jsonError,
-    scan_dir_permissionError,
-    sql_tabError,
-    write_jsonError,
+    AmbigousMatchError,
+    CheckDirError,
+    NoMatchError,
+    ReadJsonError,
+    ScanDirPermissionError,
+    SqlTabError,
+    WriteJsonError,
 )
-from app.message import messageHandler
+from app.message import MessageHandler
 from conf.config import (
     LOG_FILE,
     MAN_ALT,
@@ -75,12 +76,7 @@ NO_EXPORT_COLS = [
 ]  # columns not exported
 IMPORT_FORMAT_SPECIAL_KEYS = ["cols", "dtype", "func", "file_ext"]
 
-msg = messageHandler()
-
-# probably debugpy can be detected in inv.main()
-# and set DEBUG apropriately, also used in pytest
-# mainly used to skip user interaction parts
-DEBUG = False
+msg = MessageHandler()
 
 
 def store_alternatives(
@@ -99,7 +95,7 @@ def store_alternatives(
     alt_options = alternatives[alt_keys[1]]
     try:
         alt_exist = read_json_list(MAN_ALT)
-    except read_jsonError as e:
+    except ReadJsonError as e:
         msg.msg(str(e))
         return
 
@@ -125,7 +121,7 @@ def get_alternatives(manufacturers: list[str]) -> list[str]:
     """check if we have match from stored alternative"""
     try:
         alt_exist = read_json_list(MAN_ALT)
-    except read_jsonError as e:
+    except ReadJsonError as e:
         msg.msg(str(e))
         return manufacturers
     man_replaced = []
@@ -138,25 +134,23 @@ def get_alternatives(manufacturers: list[str]) -> list[str]:
     return man_replaced
 
 
-def vimdiff_config(panel_name: list[str], column: str):
+def vimdiff_config(
+    ref_col: str,
+    change_col: str,
+    opt_col: str,
+    alternate_col: str,
+    exit_on_change: bool,
+):
     """
     prepare vimdiff config from template
     and adjust help message to column
-    expeced first key in panel name is:
-        /directory/column.txt
-    for example: /tmp/manufacturer.txt, /tmp/description.txt, etc.
+    ref_col, change_col, opt_col are files (without extension) which
+                                 will be displayed
+    alternate_col is the name of column, displayed in help, when
+                  equal DEV_MAN will turn on option selection help and options
+    exit_on_change if True, will exit vim after each change
+                   (to change context for exmple)
     """
-    column_file = os.path.basename(panel_name[0])
-    column = column_file.split(".")[0]
-    if "manufacturer" in column:
-        with open(
-            module_path() + "/vimdiff_help_multiple_manufacturers.txt",
-            mode="r",
-            encoding="UTF8",
-        ) as f:
-            manufacturer_help = f.read()
-    else:
-        manufacturer_help = ""
     with open(
         module_path() + "/vimdiff_help.txt",
         mode="r",
@@ -172,13 +166,15 @@ def vimdiff_config(panel_name: list[str], column: str):
 
     substitutions = {
         "TEMP_DIR": TEMP_DIR,
-        "LEFT_NAME": panel_name[1],
-        "RIGHT_NAME": panel_name[0],
-        "COLUMN": column,
-        "MULTIPLE_MANUFACTURERS": manufacturer_help,
+        "LEFT_NAME": opt_col,
+        "RIGHT_NAME": change_col,
+        "ALTERNATE_COL": alternate_col,
+        "REF_COL": ref_col,
+        "MULTIPLE_MANUFACTURERS": DEV_MAN == alternate_col,
+        "EXIT_ON_CHANGE": exit_on_change,
     }
-    vimrc_txt = vimrc_temp.safe_substitute(substitutions)
-    help_txt = help_temp.safe_substitute(substitutions)
+    vimrc_txt = vimrc_temp.render(substitutions)
+    help_txt = help_temp.render(substitutions)
     with open(TEMP_DIR + ".vimrc", mode="w", encoding="UTF8") as f:
         f.write(vimrc_txt)
     with open(TEMP_DIR + "vimdiff_help.txt", "w", encoding="UTF8") as f:
@@ -224,7 +220,7 @@ def write_json(file: str, content: dict[str, dict] | dict[str, list[str]]) -> No
         with open(file, mode="w", encoding="UTF8") as f:
             json.dump(content, f)
     except JSONDecodeError as err:
-        raise write_jsonError(file) from err
+        raise WriteJsonError(file) from err
 
 
 def read_json_dict(file: str) -> Dict[str, dict]:
@@ -239,14 +235,14 @@ def read_json_dict(file: str) -> Dict[str, dict]:
                 "//\\*\\*.*$", "", "".join(f.readlines()), flags=re.MULTILINE
             )
     except FileNotFoundError as err:
-        raise read_jsonError(file) from err
+        raise ReadJsonError(file) from err
 
     try:
         data = json.loads(json_f)
         if not all(isinstance(v, dict) for v in data.values()):
-            raise read_jsonError(file, type_val="dictionary")
+            raise ReadJsonError(file, type_val="dictionary")
     except JSONDecodeError as err:
-        raise read_jsonError(file) from err
+        raise ReadJsonError(file) from err
     return data
 
 
@@ -262,14 +258,14 @@ def read_json_list(file: str) -> Dict[str, list[str]]:
                 "//\\*\\*.*$", "", "".join(f.readlines()), flags=re.MULTILINE
             )
     except FileNotFoundError as err:
-        raise read_jsonError(file) from err
+        raise ReadJsonError(file) from err
 
     try:
         data = json.loads(json_f)
         if not all(isinstance(v, list) for v in data.values()):
-            raise read_jsonError(file, type_val="list")
+            raise ReadJsonError(file, type_val="list")
     except JSONDecodeError as err:
-        raise read_jsonError(file) from err
+        raise ReadJsonError(file) from err
     return data
 
 
@@ -281,7 +277,7 @@ def find_files(directory: str, file_format: str) -> list:
     return a list of full path+file_name
     """
     if not os.access(directory, os.W_OK):
-        raise scan_dir_permissionError(directory=directory)
+        raise ScanDirPermissionError(directory=directory)
     console_width = shutil.get_terminal_size().columns
     match_files = []
     file_ext = import_format[file_format]["file_ext"]
@@ -311,14 +307,14 @@ def check_dir_file(args: argparse.Namespace) -> list[str]:
     return found files
     """
     if not os.path.exists(args.dir):
-        raise check_dirError(directory=args.dir, scan_dir=SCAN_DIR)
+        raise CheckDirError(directory=args.dir, scan_dir=SCAN_DIR)
     files = find_files(args.dir, args.format)
 
     # filter by file name
     if args.file is not None:
         files = [f for f in files if args.file in os.path.basename(f)]
         if files == []:
-            raise check_dirError(
+            raise CheckDirError(
                 file=args.file,
                 directory=args.dir,
                 project=getattr(args, "project", args.file),
@@ -351,7 +347,7 @@ def tab_exists(tab: str) -> None:
     """
     sql_scheme = read_json_dict(SQL_SCHEME)
     if tab not in sql_scheme.keys():
-        raise sql_tabError(tab, sql_scheme.keys())
+        raise SqlTabError(tab, sql_scheme.keys())
 
 
 def tab_cols(
@@ -437,8 +433,8 @@ def match_from_list(cmd: str, choices: Dict | list) -> str:
     if len(matches) == 1:
         return matches[0]
     if len(matches) > 1:
-        raise ambigous_matchError(cmd=cmd, matches=matches)
-    raise no_matchError(cmd=cmd)
+        raise AmbigousMatchError(cmd=cmd, matches=matches)
+    raise NoMatchError(cmd=cmd)
 
 
 class AbbreviationParser(argparse.ArgumentParser):
@@ -449,9 +445,9 @@ class AbbreviationParser(argparse.ArgumentParser):
             return cmd
         try:
             return match_from_list(cmd=cmd, choices=choices)
-        except ambigous_matchError as err:
+        except AmbigousMatchError as err:
             self.error(str(err))
-        except no_matchError as err:
+        except NoMatchError as err:
             self.error(str(err))
 
     def parse_args(self, args: list | None = None, namespace=None):  # type: ignore

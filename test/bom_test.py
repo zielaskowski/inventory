@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from app.bom import bom_import, scan_files
-from app.error import check_dirError
+from app.error import CheckDirError
 from app.sql import sql_check
 from inv import cli_parser
 

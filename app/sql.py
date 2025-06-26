@@ -7,36 +7,38 @@ import pandas as pd
 
 from app.common import SQL_KEYWORDS, read_json_dict, tab_exists, unpack_foreign
 from app.error import (
-    check_dirError,
-    read_jsonError,
-    sql_checkError,
-    sql_createError,
-    sql_executeError,
-    sql_getError,
-    sql_schemeError,
-    sql_tabError,
+    CheckDirError,
+    ReadJsonError,
+    SqlCheckError,
+    SqlCreateError,
+    SqlExecuteError,
+    SqlGetError,
+    SqlSchemeError,
+    SqlTabError,
 )
-from app.message import messageHandler
+from app.message import MessageHandler
 from conf.config import DB_FILE, SQL_SCHEME
 
-msg = messageHandler()
+msg = MessageHandler()
 
 """manages SQL db.
 DB structure is described in ./conf/sql_scheme.json
 """
 
 
-def put(dat: pd.DataFrame, tab: str, on_conflict:dict) -> Dict:
-    # put DataFrame into sql at table=tab
-    # takes from DataFrame only columns present in sql table
-    # check if tab exists!
-    # on_conflict is a list of dictionary:
-    #  {
-    #  'action': UPDATE SET|REPLACE|NOTHING|FAIL|ABORT|ROLLBACK
-    #  'unique_col':[cols] //may be from UNIQUE or PRIMARY KEY
-    #  'add_col':[cols] //UPDATE will add new value to existing
-    #  }
-    # put() may raise sql_executeError and sql_tabError
+def put(dat: pd.DataFrame, tab: str, on_conflict: dict) -> Dict:
+    """
+    put DataFrame into sql at table=tab
+    takes from DataFrame only columns present in sql table
+    check if tab exists!
+    on_conflict is a list of dictionary:
+     {
+     'action': UPDATE SET|REPLACE|NOTHING|FAIL|ABORT|ROLLBACK
+     'unique_col':[cols] //may be from UNIQUE or PRIMARY KEY
+     'add_col':[cols] //UPDATE will add new value to existing
+     }
+    put() may raise sql_executeError and sql_tabError
+    """
     tab_exists(tab)
 
     if dat.empty:
@@ -53,13 +55,13 @@ def put(dat: pd.DataFrame, tab: str, on_conflict:dict) -> Dict:
 
 
 def __write_table__(
-    dat: pd.DataFrame, tab: str, on_conflict:dict
+    dat: pd.DataFrame, tab: str, on_conflict: dict
 ) -> Dict[str, pd.DataFrame]:
     """writes DataFrame to SQL table 'tab'"""
     records = list(dat.astype("string").to_records(index=False))
     records = [tuple(__escape_quote__(r)) for r in records]
 
-    action = on_conflict.get("action",'REPLACE') # default is ON CONFLICT REPLACE
+    action = on_conflict.get("action", "REPLACE")  # default is ON CONFLICT REPLACE
     if action == "UPDATE SET":
         unique_col = on_conflict["unique_col"]
         cmd_action = f"""ON CONFLICT ({','.join(unique_col)})
@@ -82,43 +84,71 @@ def __write_table__(
     return __sql_execute__([cmd])
 
 
-def getDF(**kwargs) -> pd.DataFrame:
+def getDF(
+    tab: str,
+    get_col: Union[List[str], Set[str], pd.Series, None] = None,
+    search: Union[List[str], Set[str], pd.Series, None] = None,
+    where: Union[List[str], Set[str], pd.Series, None] = None,
+    follow: bool = False,
+) -> pd.DataFrame:
     """wraper around get() when:
     - search is on one col only
     returns dataframe, in contrast to Dict[col:pd.DataFrame]
     Args:
         tab: table to search
-        get: column name to extract (defoult '%' for all columns)
-        search: what to get (defoult '%' for everything)
-        where: columns used for searching (defoult '%' for everything)
+        get: column name to extract (default '%' for all columns)
+        search: what to get (default '%' for everything)
+        where: columns used for searching (default '%' for everything)
         follow: if True, search in all FOREIGN subtables
     """
-    resp = get(**kwargs)
+    resp = get(tab=tab, get_col=get_col, search=search, where=where, follow=follow)
     return list(resp.values())[0] if resp else pd.DataFrame()
 
 
-def getL(**kwargs) -> List:
+def getL(
+    tab: str,
+    get_col: Union[List[str], Set[str], pd.Series, None] = None,
+    search: Union[List[str], Set[str], pd.Series, None] = None,
+    where: Union[List[str], Set[str], pd.Series, None] = None,
+    follow: bool = False,
+) -> List:
     """wraper around get() when:
     - search in on one col only
     - get only one column from DataFrame
     returns list, in contrast to Dict[col:pd.DataFrame]
     Args:
         tab: table to search
-        get: column name to extract (defoult '%' for all columns)
-        search: what to get (defoult '%' for everything)
-        where: columns used for searching (defoult '%' for everything)
+        get: column name to extract (default '%' for all columns)
+        search: what to get (default '%' for everything)
+        where: columns used for searching (default '%' for everything)
         follow: if True, search in all FOREIGN subtables
     """
-    resp = get(**kwargs)
+    resp = get(tab=tab, get_col=get_col, search=search, where=where, follow=follow)
     df = list(resp.values())[0]
     return [] if df.empty else list(df.to_dict(orient="list").values())[0]
 
 
+def norm_to_list_str(norm: Union[List[str], Set[str], pd.Series]) -> List[str]:
+    """
+    normalize to list of string
+    also check if all elements are str (rise ValueError)
+    """
+    if isinstance(norm, pd.Series):
+        out = norm.astype(str).to_list()
+    elif isinstance(norm, set):
+        out = list(norm)
+    else:
+        out = norm
+    if not all(isinstance(s, str) for s in out):
+        raise ValueError("all elements must be strings")
+    return out
+
+
 def get(
     tab: str,
-    get: Union[List[str], Set] = ["%"],
-    search: Union[List[str], Set] = ["%"],
-    where: Union[List[str], Set] = ["%"],
+    get_col: Union[List[str], Set[str], pd.Series, None] = None,
+    search: Union[List[str], Set[str], pd.Series, None] = None,
+    where: Union[List[str], Set[str], pd.Series, None] = None,
     follow: bool = False,
 ) -> Dict[str, pd.DataFrame]:
     """get info from table
@@ -129,52 +159,59 @@ def get(
 
     Args:
         tab: table to search
-        get: column name to extract (defoult '%' for all columns)
-        search: what to get (defoult '%' for everything)
-        where: columns used for searching (defoult '%' for everything)
+        get_col: column name to extract (default '%' for all columns)
+        search: what to get (default '%' for everything)
+        where: columns used for searching (default '%' for everything)
         follow: if True, search in all FOREIGN subtables
     """
     # check if tab exists!
     tab_exists(tab)
+    # assign values if default
+    all_cols = tab_columns(tab)
+    if where is None or where == ["%"]:
+        where = all_cols
+    if get_col is None:
+        get_col = ["%"]
+    if get_col == ["%"] and not follow:
+        get_col = all_cols
+    if search is None:
+        search = ["%"]
+    # normalize input to list
+    get_col = norm_to_list_str(get_col)
+    search = norm_to_list_str(search)
+    where = norm_to_list_str(where)
+
     search = __escape_quote__(search)
     sql_scheme = read_json_dict(SQL_SCHEME)
 
     if "FOREIGN" not in sql_scheme[tab].keys():
         follow = False
 
-    all_cols = tab_columns(tab)
-
-    if where[0] == "%":
-        where = all_cols
-    if get[0] == "%" and not follow:
-        get = all_cols
-
     if follow:
-        resp = __get_tab__(tab=tab, get=all_cols, search=search, where=where)
-        for r in resp:
-            base_tab = resp[r]
-            if not base_tab.empty:
+        resp = __get_tab__(tab=tab, get_col=all_cols, search=search, where=where)
+        for r, r_tab in resp.items():
+            if not r_tab.empty:
                 for f in sql_scheme[tab]["FOREIGN"]:
                     col, f_tab, f_col = unpack_foreign(f)
-                    f_DF = getDF(tab=f_tab)
-                    base_tab = base_tab.merge(f_DF, left_on=col, right_on=f_col)
-                    if get != ["%"]:
-                        if any(c not in base_tab.columns for c in get):
-                            raise sql_getError(get, base_tab.columns)
-                        base_tab = base_tab[get]
-                    resp[r] = base_tab
+                    f_df = getDF(tab=f_tab)
+                    r_tab = r_tab.merge(f_df, left_on=col, right_on=f_col)
+                    if get_col != ["%"]:
+                        if any(c not in r_tab.columns for c in get_col):
+                            raise SqlGetError(get_col, r_tab.columns.to_list())
+                        r_tab = r_tab[get_col]
+                    resp[r] = r_tab  # type: ignore
 
     else:
-        if any(g not in all_cols for g in get):
-            raise sql_getError(get, all_cols)
-        resp = __get_tab__(tab=tab, get=get, search=search, where=where)
+        if any(g not in all_cols for g in get_col):
+            raise SqlGetError(get_col, all_cols)
+        resp = __get_tab__(tab=tab, get_col=get_col, search=search, where=where)
 
     return resp
 
 
 def __get_tab__(
     tab: str,
-    get: Union[List[str], Set],
+    get_col: Union[List[str], Set],
     search: Union[List[str], Set],
     where: Union[List[str], Set],
 ) -> Dict[str, pd.DataFrame]:
@@ -186,14 +223,14 @@ def __get_tab__(
 
     Args:
         tab: table to search
-        get: column name to extract (defoult '%' for all columns)
-        search: what to get (defoult '%' for everything)
-        where: columns used for searching (defoult '%' for everything)
+        get: column name to extract
+        search: what to get
+        where: columns used for searching
     """
     resp = {}
 
     for c in where:
-        cmd = f"SELECT {','.join(get)} FROM {tab} WHERE "
+        cmd = f"SELECT {','.join(get_col)} FROM {tab} WHERE "
         cmd += "("
         cmd += " ".join([f"{c} LIKE '{s}' OR " for s in search])
         cmd += f"{c} LIKE 'none'"  # just to close last 'OR'
@@ -223,8 +260,7 @@ def __split_cmd__(script: list) -> List[List]:
         if lenOR > 500:
             cmd_new = [cmd1 + c + cmd3 for c in split_list(cmd2, 500)]
             return cmd_new
-        else:
-            return [cmd]
+        return [cmd]
 
     def split_list(cmd: str, n) -> list:
         lst = cmd.split(" OR ")
@@ -251,10 +287,21 @@ def __split_list__(lst: str, nel: int) -> list:
     return cmd_split
 
 
-def rm(tab: str, value: list[str] = ["%"], column: list[str] = ["%"]) -> None:
-    """Remove all instances of value from column in tab"""
-    if value == ["%"]:
+def rm(
+    tab: str,
+    value: list[str] | pd.Series | None = None,
+    column: list[str] | pd.Series | None = None,
+) -> None:
+    """
+    Remove all instances of value from column in tab.
+    if value or column is missing, default is all ['%']
+    """
+    if value is None:
+        value = ["%"]
+    if column is None:
         column = ["%"]
+    value = norm_to_list_str(value)
+    column = norm_to_list_str(column)
     for c in column:
         cmd = f"DELETE FROM {tab} "
         if column != ["%"]:
@@ -296,7 +343,7 @@ def sql_check() -> None:
     """
     # make sure if exists
     if not os.path.isfile(DB_FILE):
-        msg.SQL_file_miss(DB_FILE)
+        msg.sql_file_miss(DB_FILE)
         sql_create()
 
     sql_scheme = read_json_dict(SQL_SCHEME)
@@ -305,12 +352,12 @@ def sql_check() -> None:
         scheme_cols = [k for k in sql_scheme[tab].keys() if k not in SQL_KEYWORDS]
         # check if correct tables in sql
         if tab_columns(tab) != scheme_cols:
-            raise sql_checkError(DB_FILE, tab)
+            raise SqlCheckError(DB_FILE, tab)
         # check if correct foreign keys
         from_sql_scheme = [str(c) for c in tab_foreign(tab)]
         from_json_scheme = [str(c) for c in sql_scheme[tab].get("FOREIGN", [])]
         if sorted(from_sql_scheme) != sorted(from_json_scheme):
-            raise sql_checkError(DB_FILE, tab)
+            raise SqlCheckError(DB_FILE, tab)
 
 
 def __sql_execute__(script: list) -> Dict[str, pd.DataFrame]:
@@ -331,7 +378,7 @@ def __sql_execute__(script: list) -> Dict[str, pd.DataFrame]:
     """
     for c in script:
         if len(c) > 100e6:
-            raise sql_executeError("Command too long ", c)
+            raise SqlExecuteError("Command too long ", c)
 
     ans = {}
     cmd = ""
@@ -370,9 +417,9 @@ def __sql_execute__(script: list) -> Dict[str, pd.DataFrame]:
         con.commit()
         return ans
     except sqlite3.IntegrityError as err:
-        raise sql_executeError(err, cmd100)
+        raise SqlExecuteError(err, cmd100) from err
     except sqlite3.Error as err:
-        raise sql_executeError(err, cmd100)
+        raise SqlExecuteError(err, cmd100) from err
     finally:
         cur.close()  # type: ignore
         con.close()  # type: ignore
@@ -388,13 +435,13 @@ def sql_create() -> None:
 
     path = os.path.dirname(DB_FILE)
     if not os.path.isdir(path):
-        raise check_dirError(directory=path)
+        raise CheckDirError(directory=path)
 
     try:
         sql_scheme = read_json_dict(SQL_SCHEME)
-    except read_jsonError as err:
+    except ReadJsonError as err:
         print(err)
-        raise sql_createError(SQL_SCHEME) from err
+        raise SqlCreateError(SQL_SCHEME) from err
 
     # create tables query for db
     sql_cmd = []
@@ -407,7 +454,7 @@ def sql_create() -> None:
                     isinstance(sql_scheme[tab], list),
                 ]
             ):
-                raise sql_schemeError(tab=tab)
+                raise SqlSchemeError(tab=tab)
             if col not in SQL_KEYWORDS:  # fmt: on
                 tab_cmd += f"{col} {sql_scheme[tab][col]}, "
             elif col == "FOREIGN":  # FOREIGN
@@ -418,9 +465,9 @@ def sql_create() -> None:
                     try:
                         _, f_table, _ = unpack_foreign(foreign)
                         tab_exists(f_table)
-                    except sql_tabError as err:
+                    except SqlTabError as err:
                         msg.msg(str(err))
-                        raise sql_createError(SQL_SCHEME) from err
+                        raise SqlCreateError(SQL_SCHEME) from err
 
                     tab_cmd += f"FOREIGN KEY({k}) REFERENCES {v}, "
         tab_cmd = re.sub(",[^,]*$", "", tab_cmd)  # remove last comma
@@ -446,17 +493,17 @@ def sql_create() -> None:
 
     try:
         status = __sql_execute__(sql_cmd)
-    except sql_executeError as err:
+    except SqlExecuteError as err:
         os.remove(DB_FILE)
         msg.msg(str(err))
-        raise sql_createError(SQL_SCHEME) from err
+        raise SqlCreateError(SQL_SCHEME) from err
 
     if sorted(status[sql_cmd[-1][0:100]]["tbl_name"].to_list()) != sorted(
         list(sql_scheme.keys())
     ):
         if os.path.isfile(DB_FILE):
             os.remove(DB_FILE)
-        raise sql_createError(SQL_SCHEME)
+        raise SqlCreateError(SQL_SCHEME)
 
 
 def __escape_quote__(txt: Union[List[str], set]) -> List[str]:

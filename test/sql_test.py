@@ -5,11 +5,11 @@ import json
 import pytest
 
 from app.error import (
-    check_dirError,
-    read_jsonError,
-    sql_checkError,
-    sql_createError,
-    sql_schemeError,
+    CheckDirError,
+    ReadJsonError,
+    SqlCheckError,
+    SqlCreateError,
+    SqlSchemeError,
 )
 from app.sql import sql_check, sql_create
 
@@ -25,7 +25,7 @@ def test_sql_create2(monkeypatch):
     """wrong DB_FILE path"""
     db_file = ".test//db_test.sql"
     monkeypatch.setattr("app.sql.DB_FILE", db_file)
-    with pytest.raises(check_dirError) as err_info:
+    with pytest.raises(CheckDirError) as err_info:
         sql_create()
     assert err_info.match(".test")
 
@@ -36,7 +36,7 @@ def test_sql_create3(monkeypatch):
     sql_json = "./test/sql.json"
     monkeypatch.setattr("app.sql.DB_FILE", db_file)
     monkeypatch.setattr("app.sql.SQL_SCHEME", sql_json)
-    with pytest.raises(sql_createError) as err_info:
+    with pytest.raises(SqlCreateError) as err_info:
         sql_create()
     assert err_info.match(sql_json)
 
@@ -54,7 +54,7 @@ def test_sql_create4(monkeypatch, tmpdir):
     jfile.write(json_txt)
     monkeypatch.setattr("app.sql.DB_FILE", tmpdir + "db.sql")
     monkeypatch.setattr("app.sql.SQL_SCHEME", jfile)
-    with pytest.raises(sql_createError) as err_info:
+    with pytest.raises(SqlCreateError) as err_info:
         sql_create()
     assert err_info.match(jfile.strpath)
 
@@ -72,7 +72,7 @@ def test_sql_create5(monkeypatch, tmpdir):
     jfile.write(json_txt)
     monkeypatch.setattr("app.sql.DB_FILE", tmpdir + "db.sql")
     monkeypatch.setattr("app.sql.SQL_SCHEME", jfile)
-    with pytest.raises(sql_createError) as err_info:
+    with pytest.raises(SqlCreateError) as err_info:
         sql_create()
     assert err_info.match(jfile.basename)
 
@@ -105,6 +105,6 @@ def test_sql_check1(monkeypatch, tmpdir):
     jfile2 = tmpdir.join("json2.txt")
     jfile2.write(json.dumps(json_txt))
     monkeypatch.setattr("app.sql.SQL_SCHEME", jfile2)
-    with pytest.raises(sql_checkError) as err_info:
+    with pytest.raises(SqlCheckError) as err_info:
         sql_check()
     assert err_info.match("db.sql")

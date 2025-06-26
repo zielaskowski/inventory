@@ -1,7 +1,7 @@
 from argparse import Namespace
 
 from app.bom import import_file
-from app.message import messageHandler
+from app.message import MessageHandler
 from app.tabs import (
     bom_info,
     bom_template,
@@ -9,7 +9,7 @@ from app.tabs import (
     scan_files,
 )
 
-msg = messageHandler()
+msg = MessageHandler()
 
 
 def shop_import(args: Namespace) -> None:

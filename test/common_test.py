@@ -14,7 +14,7 @@ from app.common import (
     read_json_list,
     store_alternatives,
 )
-from app.error import check_dirError, read_jsonError, scan_dir_permissionError
+from app.error import CheckDirError, ReadJsonError, ScanDirPermissionError
 from conf.config import SQL_SCHEME
 from inv import cli_parser
 
@@ -38,7 +38,7 @@ def test_read_json1():
 
 def test_read_json2():
     """mising file"""
-    with pytest.raises(read_jsonError) as err_info:
+    with pytest.raises(ReadJsonError) as err_info:
         read_json_dict("missing_file")
     assert err_info.match("missing_file")
 
@@ -52,7 +52,7 @@ def test_read_json3(tmpdir):
     """
     f = tmpdir.join("json.txt")
     f.write(json_txt)
-    with pytest.raises(read_jsonError) as err_info:
+    with pytest.raises(ReadJsonError) as err_info:
         read_json_dict(f)
     print(err_info.value)
     assert err_info.match(f.strpath)
@@ -69,7 +69,7 @@ def test_read_json4(tmpdir):
     """
     f = tmpdir.join("json.txt")
     f.write(json_txt)
-    with pytest.raises(read_jsonError) as err_info:
+    with pytest.raises(ReadJsonError) as err_info:
         read_json_dict(f)
     assert err_info.match(f.strpath)
 
@@ -82,7 +82,7 @@ def test_read_json5(tmpdir):
     """
     f = tmpdir.join("json.txt")
     f.write(json_txt)
-    with pytest.raises(read_jsonError) as err_info:
+    with pytest.raises(ReadJsonError) as err_info:
         read_json_dict(f)
     assert err_info.match(f.strpath)
 
@@ -96,7 +96,7 @@ def test_read_json6(tmpdir):
     """
     f = tmpdir.join("json.txt")
     f.write(json_txt)
-    with pytest.raises(read_jsonError) as err_info:
+    with pytest.raises(ReadJsonError) as err_info:
         read_json_list(f)
     assert err_info.match(f.strpath)
 
@@ -128,7 +128,7 @@ def test_log4(monkeypatch, capsys):
 def test_find_files1(monkeypatch):
     """lack of permisions"""
     monkeypatch.setattr("app.common.import_format", {"csv": {"file_ext": "csv"}})
-    with pytest.raises(scan_dir_permissionError) as err_info:
+    with pytest.raises(ScanDirPermissionError) as err_info:
         find_files("/", "csv")
     assert err_info.match("/")
 
@@ -203,7 +203,7 @@ def test_check_dir_files2(monkeypatch, tmpdir, cli):
         f = d.join("file" + str(i) + ".csv")
         f.write("test")
         file_list.append(f)
-    with pytest.raises(check_dirError) as err_info:
+    with pytest.raises(CheckDirError) as err_info:
         check_dir_file(args)
     assert err_info.match("fila")
 

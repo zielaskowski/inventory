@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from app.common import tab_cols
-from app.error import sql_tabError
+from app.error import SqlTabError
 from app.tabs import NA_rows
 
 
@@ -59,7 +59,7 @@ def test_tab_cols1(monkeypatch, tmpdir):
     f = tmpdir.join("shceme.json")
     f.write(scheme)
     monkeypatch.setattr("app.common.SQL_SCHEME", f)
-    with pytest.raises(sql_tabError) as err_info:
+    with pytest.raises(SqlTabError) as err_info:
         tab_cols("test")
     assert err_info.match("test")
 
@@ -70,6 +70,6 @@ def test_tab_cols2(monkeypatch, tmpdir):
     f = tmpdir.join("shceme.json")
     f.write(scheme)
     monkeypatch.setattr("app.common.SQL_SCHEME", f)
-    with pytest.raises(sql_tabError) as err_info:
+    with pytest.raises(SqlTabError) as err_info:
         tab_cols("test")
     assert err_info.match("test")

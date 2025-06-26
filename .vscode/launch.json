@@ -2,6 +2,13 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "debug",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/mi/docs/prog/python/inventory/test/debug.py",
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Module without Arguments",
             "type": "debugpy",
             "request": "launch",
@@ -177,6 +184,16 @@
             "module": "pytest",
             "console": "integratedTerminal",
             "args": ["./test/transact_test.py"],
+	    "justMyCode":true
+	},
+	{
+
+            "name": "pytest-admin",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "console": "integratedTerminal",
+            "args": ["./test/admin_test.py"],
 	    "justMyCode":true
 	}
     ]

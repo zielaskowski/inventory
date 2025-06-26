@@ -7,19 +7,23 @@ import pandas as pd
 from conf.config import DISP_CURR, config_file
 
 
-class messageHandler:
+class MessageHandler:
+    """class methods for simplyfy messagning"""
+
     def __init__(self) -> None:
         self.message = []
         # store dataframe hash, to avoid showing twice the same info
         self.df_hash: float = 0
         self.msg_hash: float = 0
 
-    def SQL_file_miss(self, db_file: str) -> None:
+    def sql_file_miss(self, db_file: str) -> None:
+        """message method"""
         self.message.append(f"SQL file {db_file} is missing!")
         self.message.append(f"Creating new DB: {db_file}")
         self.__exec__(warning=True)
 
     def import_file(self, file: str) -> None:
+        """message method"""
         self.message.append("")
         self.message.append("*********************************************************")
         self.message.append("______Import_______")
@@ -27,14 +31,17 @@ class messageHandler:
         self.__exec__()
 
     def reimport_missing_file(self) -> None:
+        """message method"""
         self.message.append("No not-commited projects to reimport")
         self.__exec__()
 
     def import_missing_file(self) -> None:
+        """message method"""
         self.message.append("No files found to import")
         self.__exec__()
 
     def export_missing_data(self) -> None:
+        """message method"""
         self.message.append("No data to export")
         self.__exec__()
 
@@ -53,6 +60,7 @@ class messageHandler:
         self.__exec__(warning=True)
 
     def file_already_imported(self, file: str) -> bool:
+        """message method"""
         self.message.append(f"File {file} was already imported.")
         self.message.append("Consider using option --overwrite.")
         self.message.append(
@@ -63,16 +71,18 @@ class messageHandler:
             return True
         return False
 
-    def BOM_remove(self, project: list[str]) -> None:
+    def bom_remove(self, project: list[str]) -> None:
+        """message method"""
         self.message.append(f"Removed data from BOM table where project == '{project}'")
         self.__exec__()
 
-    def BOM_prepare_projects(
+    def bom_prepare_projects(
         self,
         project: list[str],
         available: list[str],
         all_projects: list[str],
     ) -> None:
+        """message method"""
         project_not_available = [
             p for p in project if p not in available and p in all_projects
         ]
@@ -89,7 +99,8 @@ class messageHandler:
             self.message.append("No available not-commited projects.")
         self.__exec__()
 
-    def BOM_import_summary(self, dat: pd.DataFrame, ex_devs: int = 0) -> None:
+    def bom_import_summary(self, dat: pd.DataFrame, ex_devs: int = 0) -> None:
+        """message method"""
         self.message.append("")
         self.message.append("______SUMMARY_______")
         if dat.empty:
@@ -125,12 +136,13 @@ class messageHandler:
             else:
                 self.message.append(c + ":-")
 
-    def BOM_info(
+    def bom_info(
         self,
         must_cols: list[str],
         nice_cols: list[str],
         col_desc: dict[str, str],
     ) -> None:
+        """message method"""
         self.message.append("these columns MUST be present in import file:")
         self.__print_col_description__(cols=must_cols, col_desc=col_desc)
         self.message.append("")
@@ -141,17 +153,20 @@ class messageHandler:
         self.__exec__()
 
     def msg(self, msg: str) -> None:
+        """message method"""
         self.message.append(msg)
         self.__exec__()
 
     def trans_summary(self, txt: list[dict]) -> None:
+        """message method"""
         self.message.append("")
         self.message.append("*********************************************************")
         self.message.append("______TRANSACTION_______")
         for d in txt:
             if d["shop"]:
                 self.message.append(
-                    f"Shopping cart for shop '{d['shop']}' saved in '{d['file']}_{d['shop']}' in '{d['dir']}'"
+                    f"Shopping cart for shop '{d['shop']}' "
+                    + f"saved in '{d['file']}_{d['shop']}' in '{d['dir']}'"
                 )
                 self.message.append(f"Shopping cart value: '{d['price']}'$")
             else:
@@ -162,26 +177,31 @@ class messageHandler:
         self.__exec__()
 
     def unknown_import(self, er: BaseException) -> None:
+        """message method"""
         self.message.append(f"Unexpected error: {er}")
         self.message.append("Possibly wrong file format (different shop?) or wrong csv")
         self.__exec__()
 
     def log_path_error(self, err: str) -> None:
+        """message method"""
         self.message.append(err)
         self.message.append(f"Provide correct path in '{config_file()}' file.")
         self.__exec__(warning=True)
 
     def unknown_project(self, project: str, projects: list[str]) -> None:
+        """message method"""
         self.message.append(f"Unknown project: '{project}'.")
         self.message.append(f"Available project are: {projects}")
         self.__exec__()
 
     def project_as_filename(self) -> None:
+        """message method"""
         self.message.append("Set project name as file name.")
         self.message.append("You can change later with admin commands.")
         self.__exec__()
 
     def __exec__(self, warning: bool = False) -> None:
+        """message method"""
         msg = [str(s) for s in self.message]  # possibly DataFrame, not only strings
         msg_hash = hash("".join(msg))
         if msg_hash == self.msg_hash or msg == []:

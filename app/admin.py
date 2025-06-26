@@ -5,13 +5,16 @@ import pandas as pd
 
 from app.common import print_file, read_json_dict
 from app.sql import getDF, getL, rm
+from app.tabs import align_data
 from conf.config import SQL_SCHEME
 
 
 def admin(args: Namespace) -> None:
 
     ids = []
-
+    if args.align_manufacturers:
+        align()
+        sys.exit(0)
     if args.config:
         print_file("./conf/config.py")
 
@@ -79,3 +82,17 @@ def remove_dev(dev: list[str], by: str, force: bool) -> pd.DataFrame:
     for t in all_tabs:
         rm(tab=t, value=dev_id, column=["device_id"])
     return dev
+
+
+def align() -> pd.DataFrame:
+    """align manufacturers"""
+    # man_grp: all DEVICES group by dev_id and collect possible manufacturers man1 | man2 | etc
+    # dat: merge DEVICES with man_grp, for each dev remove man from man_grp
+    # dat: leave only rows where man_grp != dev_man
+    # display, on each change redo above
+    # on each change for each table:
+    # - take old dev_hash lines, remove dev_hash and change manufacturer, add again
+    # - align all columns before merge
+    devs = getDF(tab="DEVICE")
+    dat = align_data(devs)
+    return dat

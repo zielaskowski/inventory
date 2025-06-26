@@ -20,12 +20,12 @@ from app.common import (
     STOCK_HASH,
     STOCK_QTY,
 )
-from app.message import messageHandler
+from app.message import MessageHandler
 from app.sql import getDF
 from app.tabs import prepare_project
 from conf.config import DISP_CURR
 
-msg = messageHandler()
+msg = MessageHandler()
 
 
 def trans(args: Namespace):
@@ -54,7 +54,7 @@ def trans(args: Namespace):
     bom.loc[:, BOM_QTY] = bom.loc[:, BOM_QTY] * args.qty
 
     # read STOCK table from sql
-    stock = getDF(tab="STOCK", search=[dev_list], where=[STOCK_HASH])
+    stock = getDF(tab="STOCK", search=dev_list, where=[STOCK_HASH])
 
     if not stock.empty:
         # merge BOM and STOCK on device_hash

@@ -17,7 +17,7 @@ from app.common import (
     IMPORT_FORMAT_SPECIAL_KEYS,
     NO_EXPORT_COLS,
 )
-from app.message import messageHandler
+from app.message import MessageHandler
 from app.tabs import (
     bom_info,
     bom_template,
@@ -27,7 +27,7 @@ from app.tabs import (
 )
 from conf.config import import_format
 
-msg = messageHandler()
+msg = MessageHandler()
 
 
 def bom_import(args: Namespace) -> None:
@@ -68,7 +68,7 @@ def bom_remove(args: Namespace) -> None:
     if (projects := prepare_project(projects=args.remove, commited=False)) == []:
         return
     sql.rm(tab="BOM", value=projects, column=[BOM_PROJECT])
-    msg.BOM_remove(projects)
+    msg.bom_remove(projects)
 
 
 def import_csv(file: str) -> pd.DataFrame:
@@ -135,7 +135,7 @@ def bom_export(args: Namespace) -> None:
     if (projects := prepare_project(args.export, commited=False)) == []:
         return
     df = sql.getDF(tab="BOM", search=projects, where=[BOM_PROJECT], follow=True)
-    df.drop(columns=NO_EXPORT_COLS, inplace=True)
+    df.drop(columns=NO_EXPORT_COLS, inplace=True, errors="ignore")
     if args.hide_columns:
         cols = [c for c in args.hide_columns if c in df.columns]
         df.drop(columns=cols, inplace=True)

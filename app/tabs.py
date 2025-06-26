@@ -21,13 +21,13 @@ from app.common import (
     BOM_FORMAT,
     BOM_HASH,
     BOM_PROJECT,
-    DEBUG,
-    DEV_DESC,
     DEV_HASH,
     DEV_ID,
     DEV_MAN,
     SHOP_DATE,
+    SHOP_HASH,
     SHOP_SHOP,
+    STOCK_HASH,
     check_dir_file,
     foreign_tabs,
     get_alternatives,
@@ -39,17 +39,17 @@ from app.common import (
     vimdiff_config,
 )
 from app.error import (
-    ambigous_matchError,
-    check_dirError,
-    no_matchError,
-    prepare_tabError,
-    scan_dir_permissionError,
-    sql_tabError,
+    AmbigousMatchError,
+    CheckDirError,
+    NoMatchError,
+    PrepareTabError,
+    ScanDirPermissionError,
+    SqlTabError,
 )
-from app.message import messageHandler
-from conf.config import SQL_SCHEME, TEMP_DIR, import_format
+from app.message import MessageHandler
+from conf import config as conf
 
-msg = messageHandler()
+msg = MessageHandler()
 
 
 def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:
@@ -69,7 +69,7 @@ def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:
         return
 
     # existing device for summary info reasons
-    ex_devs = sql.getL(tab="DEVICE", get=[DEV_HASH])
+    ex_devs = sql.getL(tab="DEVICE", get_col=[DEV_HASH])
 
     try:
         # align table with sql definition
@@ -78,9 +78,9 @@ def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:
             dat=dat.copy(),
             tab=tab,
             file=file,
-            row_shift=import_format[args.format]["header"],
+            row_shift=conf.import_format[args.format]["header"],
         )
-    except prepare_tabError as e:
+    except PrepareTabError as e:
         msg.msg(str(e))
         return
 
@@ -88,29 +88,40 @@ def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:
     if tab == "BOM" and not check_existing_data(dat, args, file):
         return  # user do not want to overwrite nor add to existing data
 
-    # check for different manufacturer on the same dev_id
-    # must be before HASH but after tab preparations and alignment!!
-    dat = align_column_duplications(dat, merge_on=DEV_ID, duplication=DEV_MAN)
-
     # hash columns - must be last so all columns aligned and present
     dat = hash_tab(tab=tab, dat=dat)
 
-    # check for different descriptions on the same dev_hash
-    # must be after hash and all other formating
-    dat = align_column_duplications(dat, merge_on=DEV_HASH, duplication=DEV_DESC)
+    sql_scheme = read_json_dict(conf.SQL_SCHEME)
+
+    # check for different manufacturer on the same dev_id
+    aligned_dat = align_data(dat)
+    # possibly return data from other tabs (if manufacturers are to be aligned)
+    try:
+        no_diff = True
+        pd.testing.assert_frame_equal(
+            aligned_dat,
+            dat,
+            check_dtype=False,
+        )
+    except AssertionError:
+        no_diff = False
+    if no_diff:
+        tabs = foreign_tabs(tab) + [tab]
+    else:
+        tabs = sorted(list(sql_scheme.keys()), key=lambda x: (x != "DEVICE", x))
 
     # write data to SQL
     # need to start from DEVICE because other tables refer to it
-    sql_scheme = read_json_dict(SQL_SCHEME)
-    for t in foreign_tabs(tab) + [tab]:
+    for t in tabs:
         sql.put(
-            dat=dat,
+            dat=aligned_dat,
             tab=t,
             on_conflict=sql_scheme[t].get("ON_CONFLICT", {}),
         )
 
     # SUMMARY
-    msg.BOM_import_summary(dat, len(dat[dat[BOM_HASH].isin(ex_devs)]))
+    if tab == "BOM":
+        msg.bom_import_summary(dat, len(dat[dat[BOM_HASH].isin(ex_devs)]))
 
 
 def prepare_tab(
@@ -138,7 +149,7 @@ def prepare_tab(
         msg.project_as_filename()
     # must afetr project column creation, otherway possibly missing
     if any(missing_cols):
-        raise prepare_tabError(tab, file, missing_cols)
+        raise PrepareTabError(tab, file, missing_cols)
 
     # remove rows with NA in must_cols
     dat = NA_rows(dat, must_cols, nice_cols, row_shift)
@@ -171,7 +182,7 @@ def hash_tab(tab: str, dat: pd.DataFrame) -> pd.DataFrame:
         if hash_cols:
             dat["hash"] = dat.apply(lambda row: apply_hash(row, hash_cols), axis=1)
 
-    sql_scheme = read_json_dict(SQL_SCHEME)
+    sql_scheme = read_json_dict(conf.SQL_SCHEME)
     tabs = [tab] + foreign_tabs(tab)
 
     for t in tabs:
@@ -212,13 +223,14 @@ def NA_rows(
 
 
 def columns_align(n_stock: pd.DataFrame, file: str, args: Namespace) -> pd.DataFrame:
+    """basic columns align per config.py"""
     # lower columns
     n_stock.rename(
         columns={c: str(c).lower() for c in n_stock.columns},
         inplace=True,
     )
     # drop columns if any col in values so to avoid duplication
-    if cols := import_format[args.format].get("cols"):
+    if cols := conf.import_format[args.format].get("cols"):
         n_stock.drop(
             [v for _, v in cols.items() if v in n_stock.columns],
             axis="columns",
@@ -231,12 +243,12 @@ def columns_align(n_stock: pd.DataFrame, file: str, args: Namespace) -> pd.DataF
         )
 
     # apply formatter functions
-    if f := import_format[args.format].get("func"):
+    if f := conf.import_format[args.format].get("func"):
         n_stock = n_stock.apply(f, axis=1, result_type="broadcast")  # type: ignore
 
     # change columns type
     # only for existing cols
-    if dtype := import_format[args.format].get("dtype"):
+    if dtype := conf.import_format[args.format].get("dtype"):
         exist_col = [c in n_stock.columns for c in dtype.keys()]
         exist_col_dtypes = {k: v for k, v in dtype.items() if k in exist_col}
         n_stock = n_stock.astype(exist_col_dtypes)
@@ -257,20 +269,147 @@ def columns_align(n_stock: pd.DataFrame, file: str, args: Namespace) -> pd.DataF
 
 
 def ASCII_txt(txt: str) -> str:
-    # remove any chinese signs from string columns
+    """remove any chinese signs from string columns"""
     txt = str(txt).encode("ascii", "ignore").decode("ascii")
     # remove any empty paranthases '()' from string columns
     txt = re.sub(r"\(.*?\)", "", txt)
     return txt
 
 
-def align_column_duplications(
-    dat: pd.DataFrame,
-    merge_on: str,
-    duplication: str,
-) -> pd.DataFrame:
+def align_data(dat: pd.DataFrame) -> pd.DataFrame:
     """
-    Example for manufacturer duplication, analogously work for other (DEV_HASH,DEV_DESC)
+    align new data with existing:
+        1. align manufacturers
+        2. where manufacturer changed, align all other columns
+        3. remove devs where manufacturer changed
+        4. return aligned data to be added
+    """
+    align_dat = dat.copy(deep=True)
+    man_cols = [DEV_ID, DEV_MAN]
+    while True:
+        temp_dat = align_manufacturers(align_dat.copy(deep=True))
+        try:
+            pd.testing.assert_frame_equal(
+                align_dat.loc[:, man_cols],
+                temp_dat.loc[:, man_cols],
+                check_dtype=False,
+            )
+        except AssertionError:
+            align_dat = temp_dat
+            continue
+        break
+    align_dat = hash_tab(tab="DEVICE", dat=align_dat)
+    differ_row = dat[DEV_MAN] != align_dat[DEV_MAN]
+    dev_align = pd.DataFrame(
+        {
+            "dev_rm": dat.loc[differ_row, DEV_HASH],
+            "man_rm": dat.loc[differ_row, DEV_MAN],
+            DEV_HASH: align_dat.loc[differ_row, DEV_HASH],
+            DEV_MAN: align_dat.loc[differ_row, DEV_MAN],
+        }
+    )
+    if dev_align.empty:
+        return dat
+    # align all other dev cols
+    dat_align = align_other_cols(dat=dev_align)
+    # add data from other tabs for devs we are going to remove
+    new_dat = pd.concat(
+        [
+            dat_align,
+            sql.getDF(
+                tab="BOM",
+                search=dev_align.loc[:, "dev_rm"],
+                where=[BOM_HASH],
+            ),
+            sql.getDF(
+                tab="SHOP",
+                search=dev_align.loc[:, "dev_rm"],
+                where=[SHOP_HASH],
+            ),
+            sql.getDF(
+                tab="STOCK",
+                search=dev_align.loc[:, "dev_rm"],
+                where=[STOCK_HASH],
+            ),
+        ],
+        axis="columns",
+    )
+    new_dat = new_dat.ffill()
+    for tab in ["BOM", "SHOP", "STOCK", "DEVICE"]:
+        sql.rm(tab=tab, value=dev_align.loc[:, "dev_rm"])
+    return new_dat
+
+
+def align_other_cols(dat: pd.DataFrame) -> pd.DataFrame:
+    """
+    expect DataFrame with one pair replacement per row:
+    and columns: dev_rm | man_rm | DEV_HASH | DEV_MAN
+    display all other attributes of device to user to choose
+    dispalay only not empty and attributes that differ
+    return selected attributes attached in row to input dat
+    """
+    necessery_cols = ["dev_rm", "man_rm", DEV_HASH, DEV_MAN]
+    if not all(c in necessery_cols for c in dat.columns):
+        sys.exit(1)
+    must_cols, nice_cols = tab_cols(tab="DEVICE")
+    display_cols = [
+        c for c in must_cols + nice_cols if c not in [DEV_HASH, DEV_MAN, DEV_ID]
+    ]
+    dat_align = pd.DataFrame(
+        columns=pd.Series(list(set(must_cols + nice_cols + necessery_cols)))
+    )
+    for _, r in dat.iterrows():
+        add_attr = (
+            sql.getDF(
+                tab="DEVICE",
+                search=[getattr(r, "dev_rm")],
+                where=[DEV_HASH],
+            )
+            .loc[:, display_cols]
+            .dropna(axis="columns")
+        )
+        rm_attr = (
+            sql.getDF(
+                tab="DEVICE",
+                search=[getattr(r, DEV_HASH)],
+                where=[DEV_HASH],
+            )
+            .loc[:, display_cols]
+            .dropna(axis="columns")
+        )
+        # if NA in add_attr (missing col), take from rm_attr if present
+        for c in rm_attr.columns:
+            if c not in add_attr:
+                add_attr[c] = rm_attr[c]
+        add_attr_cols = list(add_attr.columns)
+        # hide attributes which are already aligned
+        for c in add_attr.columns:
+            if add_attr[c].to_string(index=False) == rm_attr[c].to_string(index=False):
+                add_attr_cols.remove(c)
+        if not add_attr_cols:
+            aligned_cols = add_attr.iloc[0, :].to_list()
+        else:
+            aligned_cols = vimdiff_selection(
+                ref_col={"column": add_attr_cols},
+                change_col={str(r["man_rm"]): add_attr.iloc[0, :].to_list()},
+                opt_col={str(r[DEV_MAN]): rm_attr.iloc[0, :].to_list()},
+                exit_on_change=False,
+            )
+        dat_align = pd.concat(
+            [
+                dat_align,
+                pd.DataFrame(
+                    [aligned_cols + r.to_list()],
+                    columns=add_attr.columns.to_list() + necessery_cols,
+                ),
+            ],
+            ignore_index=True,
+        )
+    return dat_align
+
+
+def align_manufacturers(dat: pd.DataFrame) -> pd.DataFrame:
+    """
     For device_id duplication, collect manufacturer name if different
     create dictionary with list of manufacturers as values for device_id as key:
     {DEV_ID:[MAN1,MAN2,...]}
@@ -281,13 +420,13 @@ def align_column_duplications(
         '|' as list. Special macro in vim to pick option
     return DataFrame modified by user
     """
-    if not all(c in dat.columns for c in [merge_on, duplication]):
+    if not all(c in dat.columns for c in [DEV_ID, DEV_MAN]):
         return dat
     ex_dat = sql.getDF(
         tab="DEVICE",
-        get=[merge_on, duplication],
-        search=dat[merge_on].to_list(),
-        where=[merge_on],
+        get_col=[DEV_ID, DEV_MAN],
+        search=dat[DEV_ID].to_list(),
+        where=[DEV_ID],
     )
     if ex_dat.empty:
         # no duplications in stock
@@ -295,7 +434,7 @@ def align_column_duplications(
 
     # group existing data on dev, join manufacturers with ' | ' if more then one dev
     ex_grp = (
-        ex_dat.groupby(merge_on)[duplication]
+        ex_dat.groupby(DEV_ID)[DEV_MAN]
         .agg(lambda x: " | ".join(x.astype(str)))
         .reset_index()
     )
@@ -305,64 +444,105 @@ def align_column_duplications(
     dat_dup = pd.merge(
         left=dat,
         right=ex_grp,
-        on=merge_on,
+        on=DEV_ID,
         how="left",
-        suffixes=("", "_stock"),
+        suffixes=("", "_opts"),
     )
 
-    # column name
-    duplication_stock = duplication + "_stock"
+    # column name for grouped manufacturers
+    man_grp_col = DEV_MAN + "_opts"
 
     # for GREAT panda NaN is any value so must be droped before
-    dat_dup = dat_dup.loc[~dat_dup[duplication_stock].isna(), :]
+    dat_dup = dat_dup.loc[~dat_dup[man_grp_col].isna(), :]
 
     # drop rows with matched manufacturer
-    dat_dup = dat_dup[dat_dup[duplication] != dat_dup[duplication_stock]]
+    dat_dup = dat_dup[dat_dup[DEV_MAN] != dat_dup[man_grp_col]]
 
     if dat_dup.empty:
         # importing manufacturers are aligned with stock
         return dat
 
     # if we have stored alternatives, use it
-    if DEV_MAN == duplication:
-        dat_dup.loc[:, duplication] = get_alternatives(dat_dup[duplication].to_list())
+    dat_dup.loc[:, DEV_MAN] = get_alternatives(dat_dup[DEV_MAN].to_list())
 
-    chosen = select_column(
-        alternatives={
-            duplication: dat_dup.loc[:, duplication].to_list(),
-            duplication_stock: dat_dup.loc[:, duplication_stock].to_list(),
-        },
-        column=duplication,
+    # remove dup_col from dup_col_grp
+    for r in dat_dup.itertuples():
+        dup_col_grp_v = getattr(r, man_grp_col)
+        dup_col_v = getattr(r, DEV_MAN)
+        opts = str(dup_col_grp_v).split(" | ")
+        opts = [o for o in opts if o != dup_col_v]
+        dat_dup.loc[r.Index, man_grp_col] = " | ".join(opts)
+
+    chosen = vimdiff_selection(
+        ref_col={"devices": dat_dup.loc[:, DEV_ID].to_list()},
+        change_col={DEV_MAN: dat_dup.loc[:, DEV_MAN].to_list()},
+        opt_col={man_grp_col: dat_dup.loc[:, man_grp_col].to_list()},
+        exit_on_change=True,
     )
-    dat_dup[duplication] = chosen
+    dat_dup[DEV_MAN] = chosen
     # put new data into orginal tab, based on preserved indexes
-    dat.loc[dat_dup.index, duplication] = dat_dup[duplication]
+    dat.loc[dat_dup.index, DEV_MAN] = dat_dup[DEV_MAN]
 
     return dat
 
 
-def select_column(alternatives: dict[str, list[str]], column: str) -> list[str]:
+def vimdiff_selection(
+    ref_col: dict[str, list[str]],
+    change_col: dict[str, list[str]],
+    opt_col: dict[str, list[str]],
+    exit_on_change: bool,
+) -> list[str]:
     """present alternatives in vimdiff"""
-    panel_name = []  # first item is left panel, second is right panel
-    for panel in alternatives:
-        panel_name += [TEMP_DIR + panel + ".txt"]
-        with open(TEMP_DIR + panel + ".txt", mode="w", encoding="UTF8") as f:
-            for manufacturer in alternatives[panel]:
-                f.write(manufacturer + "\n")
+    cols = []
+    for col in [ref_col, change_col, opt_col]:
+        cols.append(next(iter(col)))
+        cols.append(next(iter(col.values())))
+    ref_k, ref_v = (0, 1)
+    change_k, change_v = (2, 3)
+    opt_k, opt_v = (4, 5)
+    for key in [ref_k, change_k, opt_k]:
+        with open(
+            conf.TEMP_DIR + cols[key] + ".txt",
+            mode="w",
+            encoding="UTF8",
+        ) as f:
+            for ind, item in enumerate(cols[key + 1]):
+                f.write(str(ind) + "| " + item + "\n")  # add line number: '1| txt'
+                # other way diff may shift rows to align data between columns
 
-    vimdiff_config(panel_name, column)
-    if not DEBUG:
-        subprocess.run("vim -u " + TEMP_DIR + ".vimrc", shell=True, check=False)
-    with open(panel_name[0], mode="r", encoding="UTF8") as f:
+    vimdiff_config(
+        ref_col=cols[ref_k],
+        change_col=cols[change_k],
+        opt_col=cols[opt_k],
+        alternate_col=cols[change_k],
+        exit_on_change=exit_on_change,
+    )
+
+    vim_cmd = "vim -u " + conf.TEMP_DIR + ".vimrc"
+    if conf.DEBUG == "none":
+        subprocess.run(vim_cmd, shell=True, check=False)
+    elif conf.DEBUG == "debugpy":
+        with subprocess.Popen("konsole -e " + vim_cmd, shell=True) as p:
+            p.wait()
+
+    with open(conf.TEMP_DIR + cols[change_k] + ".txt", mode="r", encoding="UTF8") as f:
         chosen = f.readlines()
 
+    # remove line numbers
+    chosen = [re.sub(r"^\d+\|\s*", "", c) for c in chosen]
     chosen = [c.strip() for c in chosen]
-    if any(len(chosen) != len(v) for v in alternatives.values()):
+    if any(len(chosen) != len(cols[v]) for v in [ref_v, change_v, opt_v]):
         # if user mess-up and added/removed rows
-        return alternatives[list(alternatives.keys())[0]]
+        return cols[change_v]
     # write 1to1 matches selected by user, so next time save some time
-    if DEV_MAN == column:
-        store_alternatives(alternatives=alternatives, selection=chosen)
+    if DEV_MAN == cols[ref_k]:
+        store_alternatives(
+            alternatives={
+                cols[change_k]: cols[change_v],
+                cols[opt_k]: cols[opt_v],
+            },
+            selection=chosen,
+        )
     return chosen
 
 
@@ -374,8 +554,8 @@ def check_existing_data(dat: pd.DataFrame, args: Namespace, file: str) -> bool:
     return True if we can continue
     """
     file_name = os.path.basename(file)
-    old_files = sql.getL(tab="BOM", get=[BOM_FILE])
-    old_project = sql.getL(tab="BOM", get=[BOM_PROJECT])
+    old_files = sql.getL(tab="BOM", get_col=[BOM_FILE])
+    old_project = sql.getL(tab="BOM", get_col=[BOM_PROJECT])
     if args.overwrite:
         # remove all old data
         sql.rm(
@@ -405,16 +585,16 @@ def prepare_project(projects: list[str], commited: bool) -> list[str]:
         commit_search = ["False"]
     available = sql.getL(
         tab="BOM",
-        get=[BOM_PROJECT],
+        get_col=[BOM_PROJECT],
         search=commit_search,
         where=[BOM_COMMITED],
     )
     all_projects = sql.getL(
         tab="BOM",
-        get=[BOM_PROJECT],
+        get_col=[BOM_PROJECT],
     )
     if projects == ["?"]:
-        msg.BOM_prepare_projects(
+        msg.bom_prepare_projects(
             project=available,
             available=available,
             all_projects=all_projects,
@@ -426,13 +606,13 @@ def prepare_project(projects: list[str], commited: bool) -> list[str]:
     for project in projects:
         try:
             match_projects += [match_from_list(project, available)]
-        except ambigous_matchError as err:
+        except AmbigousMatchError as err:
             print(err)
-        except no_matchError as err:
+        except NoMatchError as err:
             print(err)
 
     if not any(p in available for p in match_projects):
-        msg.BOM_prepare_projects(
+        msg.bom_prepare_projects(
             project=match_projects,
             available=available,
             all_projects=all_projects,
@@ -449,10 +629,10 @@ def scan_files(args) -> list[str]:
     if not reimport:
         try:
             files = check_dir_file(args)
-        except check_dirError as err:
+        except CheckDirError as err:
             msg.msg(str(err))
             sys.exit(1)
-        except scan_dir_permissionError as err:
+        except ScanDirPermissionError as err:
             msg.msg(str(err))
             sys.exit(1)
         if not files:
@@ -462,7 +642,7 @@ def scan_files(args) -> list[str]:
     else:
         locations = sql.getDF(
             tab="BOM",
-            get=[BOM_DIR, BOM_FILE, BOM_PROJECT, BOM_FORMAT],
+            get_col=[BOM_DIR, BOM_FILE, BOM_PROJECT, BOM_FORMAT],
             search=["False"],
             where=[BOM_COMMITED],
         )
@@ -477,7 +657,7 @@ def scan_files(args) -> list[str]:
             args.project = r[BOM_PROJECT]
             try:
                 f = check_dir_file(args)
-            except check_dirError as e:
+            except CheckDirError as e:
                 msg.msg(str(e))
                 continue
             files += f
@@ -492,11 +672,11 @@ def bom_info(tab: str, silent: bool = False) -> list[str]:
     """diplay info about columns in BOM table"""
     try:
         must_col, nice_col = tab_cols(tab)
-    except sql_tabError as err:
+    except SqlTabError as err:
         msg.msg(str(err))
         sys.exit(1)
     if not silent:
-        msg.BOM_info(must_col, nice_col, col_description())
+        msg.bom_info(must_col, nice_col, col_description())
     return must_col + nice_col
 
 
@@ -510,7 +690,7 @@ def bom_template(tab: str, args: Namespace) -> None:
 
 def col_description() -> dict:
     """extract columns descriptions from sql_scheme"""
-    sql_scheme = read_json_dict(SQL_SCHEME)
+    sql_scheme = read_json_dict(conf.SQL_SCHEME)
     col_desc = {}
     for _, cont in sql_scheme.items():
         if "COL_DESCRIPTION" in cont:

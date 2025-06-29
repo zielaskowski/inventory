@@ -35,7 +35,7 @@ def test_bom_no_args(cli, capsys):
 
 def test_bom_empty_sql(cli, capsys, monkeypatch, tmpdir):
     """empty sql so no files to reimport"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
     sql_check()
     args = cli.parse_args(["bom", "-r"])
     with pytest.raises(SystemExit) as err_info:
@@ -55,8 +55,9 @@ def test_bom_no_permission(cli):
 
 def test_bom_import_csv(cli, monkeypatch, tmpdir):
     """import and export without errors"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     test = tmpdir.join("test.csv")
     with open(test, "w", encoding="UTF8") as f:
@@ -80,8 +81,9 @@ def test_bom_import_csv(cli, monkeypatch, tmpdir):
 
 def test_bom_import_csv11(cli, monkeypatch, tmpdir):
     """import and export without errors, strip text during import"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     test = tmpdir.join("test.csv")
     with open(test, "w", encoding="UTF8") as f:
@@ -105,8 +107,9 @@ def test_bom_import_csv11(cli, monkeypatch, tmpdir):
 
 def test_bom_export(cli, monkeypatch, tmpdir):
     """export with not existing hidden columns"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     csv = tmpdir.join("test.csv")
     csv.write("device_id,device_manufacturer,qty,project\n")
@@ -140,8 +143,9 @@ def test_bom_export(cli, monkeypatch, tmpdir):
 def test_bom_import_csv1(cli, monkeypatch, tmpdir, capsys):
     """import empty csv file
     error: no header in file"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     csv = tmpdir.join("test.csv")
     csv.write("")
@@ -153,8 +157,9 @@ def test_bom_import_csv1(cli, monkeypatch, tmpdir, capsys):
 
 def test_bom_import_csv2(cli, monkeypatch, tmpdir, capsys):
     """missing mandatory columns"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     csv = tmpdir.join("test.csv")
     csv.write("device_manufacturer,qty,project\n")
@@ -167,8 +172,9 @@ def test_bom_import_csv2(cli, monkeypatch, tmpdir, capsys):
 
 def test_bom_import_csv3(cli, monkeypatch, tmpdir, capsys):
     """NAs in mandatory rows"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     csv = tmpdir.join("test.csv")
     csv.write("device_id,device_manufacturer,qty,project\n")
@@ -195,8 +201,9 @@ def test_bom_import_csv3(cli, monkeypatch, tmpdir, capsys):
 
 def test_bom_import_csv4(cli, monkeypatch, tmpdir):
     """setting project as filename"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     csv = tmpdir.join("test.csv")
     csv.write("device_id,device_manufacturer,qty\n")
@@ -221,18 +228,21 @@ def test_bom_import_csv4(cli, monkeypatch, tmpdir):
 
 def test_bom_import_csv5(cli, monkeypatch, tmpdir):
     """import again and remove old"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     csv = tmpdir.join("test.csv")
-    csv.write("device_id,device_manufacturer,qty,project\n")
-    csv.write("aa,bb,1,test", mode="a")
+    with open(csv, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,qty,project\n" 
+            + "aa,bb,1,test\n"
+        )  # fmt: skip
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
     bom_import(args)
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv", "-o"])
     bom_import(args)
     exp = tmpdir.join("exp.csv")
-    exp.write("")
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
     bom_import(args)
     inp = pd.read_csv(csv)
@@ -242,10 +252,34 @@ def test_bom_import_csv5(cli, monkeypatch, tmpdir):
     assert exp.equals(inp[common_cols])
 
 
+def test_bom_import_csv51(cli, monkeypatch, tmpdir):
+    """import again , add qty on conflict"""
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
+    sql_check()
+    csv = tmpdir.join("test.csv")
+    with open(csv, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,qty,project\n" 
+            + "aa,bb,1,test\n"
+        )  # fmt: skip
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
+    bom_import(args)
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
+    bom_import(args)
+    exp = tmpdir.join("exp.csv")
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
+    bom_import(args)
+    exp = pd.read_csv(exp)
+    assert int(exp.loc[0, "qty"]) == 2
+
+
 def test_bom_import_csv6(cli, monkeypatch, tmpdir, capsys):
     """remove from BOM all"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     csv1 = tmpdir.join("test1.csv")
     csv1.write("device_id,device_manufacturer,qty\n")
@@ -267,8 +301,9 @@ def test_bom_import_csv6(cli, monkeypatch, tmpdir, capsys):
 
 def test_bom_import_csv7(cli, monkeypatch, tmpdir):
     """remove from BOM one project"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     csv1 = tmpdir.join("test1.csv")
     csv1.write("device_id,device_manufacturer,qty\n")
@@ -293,8 +328,9 @@ def test_bom_import_csv7(cli, monkeypatch, tmpdir):
 
 def test_bom_import_csv9(cli, monkeypatch, tmpdir, capsys):
     """remove from BOM project that do not exists"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     csv1 = tmpdir.join("test1.csv")
     csv1.write("device_id,device_manufacturer,qty\n")
@@ -325,8 +361,9 @@ def test_bom_import_csv9(cli, monkeypatch, tmpdir, capsys):
 
 def test_scan_files1(cli, monkeypatch, tmpdir):
     """expected behaviour"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     csv1 = tmpdir.join("test1.csv")
     csv1.write("device_id,device_manufacturer,qty\n")
@@ -342,8 +379,9 @@ def test_scan_files1(cli, monkeypatch, tmpdir):
 
 def test_scan_files2(cli, monkeypatch, tmpdir, capsys):
     """empty DB"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     args = cli.parse_args(["bom", "--reimport"])
     with pytest.raises(SystemExit):
@@ -354,8 +392,9 @@ def test_scan_files2(cli, monkeypatch, tmpdir, capsys):
 
 def test_scan_files3(cli, monkeypatch, tmpdir, capsys):
     """file deleted"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
 
     test1 = tmpdir.join("test1.csv")
@@ -382,8 +421,9 @@ def test_scan_files3(cli, monkeypatch, tmpdir, capsys):
 
 def test_scan_files4(cli, monkeypatch, tmpdir):
     """no files"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     csv1 = tmpdir.join("test1.csv")
     csv1.write("device_id,device_manufacturer,qty\n")
@@ -402,8 +442,9 @@ def test_scan_files4(cli, monkeypatch, tmpdir):
 
 def test_export_show_all_projects(cli, monkeypatch, tmpdir, capsys):
     """show all projects possible to export"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     csv1 = tmpdir.join("test1.csv")
     csv1.write("device_id,device_manufacturer,qty\n")
@@ -422,8 +463,9 @@ def test_export_show_all_projects(cli, monkeypatch, tmpdir, capsys):
 
 def test_remove_show_all_projects(cli, monkeypatch, tmpdir, capsys):
     """show all projects possible to export"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     csv1 = tmpdir.join("test1.csv")
     csv1.write("device_id,device_manufacturer,qty\n")

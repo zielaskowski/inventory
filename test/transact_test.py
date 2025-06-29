@@ -24,8 +24,9 @@ def test_trans1(monkeypatch, cli, tmpdir):
     standard transaction or selected project with split on shops
     also consider min qty and price calculation
     """
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     bom = tmpdir.join("bom.csv")
     with open(bom, "w", encoding="UTF8") as f:
@@ -86,8 +87,9 @@ def test_trans1(monkeypatch, cli, tmpdir):
 
 def test_trans2(monkeypatch, cli, tmpdir):
     """standard transaction or selected project without split on shops"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     bom = tmpdir.join("bom.csv")
     with open(bom, "w", encoding="UTF8") as f:
@@ -142,8 +144,9 @@ def test_trans3(monkeypatch, cli, tmpdir):
     standard transaction or selected project with split on shops
     also consider min qty and price calculation
     """
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     bom = tmpdir.join("bom.csv")
     with open(bom, "w", encoding="UTF8") as f:
@@ -210,8 +213,9 @@ def test_trans4(monkeypatch, cli, tmpdir):
     standard transaction or selected project with split on shops
     also consider min qty and price calculation
     """
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     bom = tmpdir.join("bom.csv")
     with open(bom, "w", encoding="UTF8") as f:

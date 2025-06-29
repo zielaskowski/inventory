@@ -4,6 +4,7 @@ import os
 
 import pandas as pd
 
+from conf import config
 from conf.config import DISP_CURR, config_file
 
 
@@ -61,15 +62,41 @@ class MessageHandler:
 
     def file_already_imported(self, file: str) -> bool:
         """message method"""
+        if config.DEBUG == "pytest":
+            return True
         self.message.append(f"File {file} was already imported.")
         self.message.append("Consider using option --overwrite.")
         self.message.append(
             "Are you sure you want to add this file again (will add to qty.)? (y/n)"
         )
         self.__exec__(warning=True)
-        if input() == "y":
+        if input().lower() == "y":
             return True
         return False
+
+    def inform_alternatives(self, alternatives: pd.DataFrame) -> bool:
+        """found manufacturer alternatives. Do you accept?"""
+        if config.DEBUG == "pytest":
+            return True
+        self.message.append("Found manufacturer alternative names for incoming data")
+        self.message.append(
+            f"Manufacturer alternatives are defined in '{config.MAN_ALT}'"
+        )
+        self.message.append(alternatives.to_string())
+        self.message.append("Do you accept? (y/n)")
+        self.__exec__()
+        if input().lower() == "y":
+            return True
+        return False
+
+    def inform_duplications(self, dup: pd.DataFrame) -> None:
+        """inform about possible manufacturer duplications"""
+        self.message.append(
+            "Found devices with different manufacturer, possibly duplication."
+        )
+        self.message.append(dup.to_string())
+        self.message.append("You can align later with 'admin --align_manufacturers' fucntion")
+        self.__exec__()
 
     def bom_remove(self, project: list[str]) -> None:
         """message method"""

@@ -14,6 +14,11 @@
     //** HASH_COLS   	 is not SQL! it's aditional info to allow hashing automation
     //** ON_CONFLICT 	 describes action to perform on conflict on table level 
     //**             	 (so can be only one). If missing REAPLCE is default
+    //**		{
+    //**		'action': UPDATE SET|REPLACE|NOTHING|FAIL|ABORT|ROLLBACK
+    //**		'unique_col':[cols] //may be from UNIQUE or PRIMARY KEY
+    //**		'add_col':[cols] //UPDATE will add new value to existing
+    //**		}
     //** COL_DESCRIPTION description of columns
 
     //** changing columns marked NOT NULL very liekely will break the app

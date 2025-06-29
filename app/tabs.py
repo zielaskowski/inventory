@@ -25,9 +25,7 @@ from app.common import (
     DEV_ID,
     DEV_MAN,
     SHOP_DATE,
-    SHOP_HASH,
     SHOP_SHOP,
-    STOCK_HASH,
     check_dir_file,
     foreign_tabs,
     get_alternatives,
@@ -89,39 +87,39 @@ def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:
         return  # user do not want to overwrite nor add to existing data
 
     # hash columns - must be last so all columns aligned and present
-    dat = hash_tab(tab=tab, dat=dat)
+    dat = hash_tab(dat=dat)
 
-    sql_scheme = read_json_dict(conf.SQL_SCHEME)
+    # if we have stored alternatives, use it
+    dat.loc[:, DEV_MAN], _ = get_alternatives(dat[DEV_MAN].to_list())
 
     # check for different manufacturer on the same dev_id
-    aligned_dat = align_data(dat)
-    # possibly return data from other tabs (if manufacturers are to be aligned)
-    try:
-        no_diff = True
-        pd.testing.assert_frame_equal(
-            aligned_dat,
-            dat,
-            check_dtype=False,
-        )
-    except AssertionError:
-        no_diff = False
-    if no_diff:
-        tabs = foreign_tabs(tab) + [tab]
-    else:
-        tabs = sorted(list(sql_scheme.keys()), key=lambda x: (x != "DEVICE", x))
+    # just inform taht alignment can be done with admin functions
+    align_data(dat=dat, just_inform=True)
 
-    # write data to SQL
-    # need to start from DEVICE because other tables refer to it
+    tabs = tabs_in_data(dat)
+    # write aligned data back to SQL
     for t in tabs:
-        sql.put(
-            dat=aligned_dat,
-            tab=t,
-            on_conflict=sql_scheme[t].get("ON_CONFLICT", {}),
-        )
+        sql.put(dat=dat, tab=t)
 
     # SUMMARY
     if tab == "BOM":
         msg.bom_import_summary(dat, len(dat[dat[BOM_HASH].isin(ex_devs)]))
+
+
+def tabs_in_data(dat: pd.DataFrame) -> list[str]:
+    """
+    return all tbles which mandatary cols are present in dat
+    """
+    sql_scheme = read_json_dict(conf.SQL_SCHEME)
+    # need to start from DEVICE because other tables refer to it
+    tabs = sorted(list(sql_scheme.keys()), key=lambda x: (x != "DEVICE", x))
+    for t in tabs[:]:
+        must_cols, _ = tab_cols(t)
+        # check if all required columns are in aligned_dat
+        missing_cols = [c for c in must_cols if c not in dat.columns]
+        if any(missing_cols):
+            tabs.remove(t)
+    return tabs
 
 
 def prepare_tab(
@@ -147,7 +145,7 @@ def prepare_tab(
         dat[BOM_PROJECT] = dat[BOM_FILE].apply(lambda cell: cell.split(".")[0])
         missing_cols = [c for c in missing_cols if c != BOM_PROJECT]
         msg.project_as_filename()
-    # must afetr project column creation, otherway possibly missing
+    # must after 'project' column creation, otherway possibly missing
     if any(missing_cols):
         raise PrepareTabError(tab, file, missing_cols)
 
@@ -167,11 +165,12 @@ def prepare_tab(
     return dat
 
 
-def hash_tab(tab: str, dat: pd.DataFrame) -> pd.DataFrame:
+def hash_tab(dat: pd.DataFrame) -> pd.DataFrame:
     """
     hash columns as per foreign key in SQLscheme
     also unpack foreign key to make sure all columns present
     """
+    sql_scheme = read_json_dict(conf.SQL_SCHEME)
 
     def apply_hash(row: pd.Series, cols: list[str]) -> str:
         combined = "".join(str(row[c]) for c in cols)
@@ -182,8 +181,10 @@ def hash_tab(tab: str, dat: pd.DataFrame) -> pd.DataFrame:
         if hash_cols:
             dat["hash"] = dat.apply(lambda row: apply_hash(row, hash_cols), axis=1)
 
-    sql_scheme = read_json_dict(conf.SQL_SCHEME)
-    tabs = [tab] + foreign_tabs(tab)
+    tabs = tabs_in_data(dat)
+    for t in tabs[:]:
+        tabs += foreign_tabs(t)
+    tabs = list(set(tabs))
 
     for t in tabs:
         hash_t(t)
@@ -276,68 +277,69 @@ def ASCII_txt(txt: str) -> str:
     return txt
 
 
-def align_data(dat: pd.DataFrame) -> pd.DataFrame:
+def align_data(dat: pd.DataFrame, just_inform: bool = False) -> pd.DataFrame:
     """
     align new data with existing:
         1. align manufacturers
         2. where manufacturer changed, align all other columns
         3. remove devs where manufacturer changed
         4. return aligned data to be added
+    if just_inform==True, just collect duplication and display, no action
+    return dataframe with changed devices with aditional column 'dev_rm'
+    with device hashes before change
     """
     align_dat = dat.copy(deep=True)
-    man_cols = [DEV_ID, DEV_MAN]
+    assert_cols = [DEV_ID, DEV_MAN]
     while True:
-        temp_dat = align_manufacturers(align_dat.copy(deep=True))
+        temp_dat = align_manufacturers(
+            align_dat.copy(deep=True),
+            just_inform=just_inform,
+        )
+        if just_inform:
+            return dat
         try:
             pd.testing.assert_frame_equal(
-                align_dat.loc[:, man_cols],
-                temp_dat.loc[:, man_cols],
+                align_dat.loc[:, assert_cols],
+                temp_dat.loc[:, assert_cols],
                 check_dtype=False,
             )
-        except AssertionError:
+        except AssertionError as err:
             align_dat = temp_dat
             continue
         break
-    align_dat = hash_tab(tab="DEVICE", dat=align_dat)
+    # create new hash after possibly changing manufacturer
+    align_dat = hash_tab(dat=align_dat)
+    # select rows where change
     differ_row = dat[DEV_MAN] != align_dat[DEV_MAN]
-    dev_align = pd.DataFrame(
-        {
-            "dev_rm": dat.loc[differ_row, DEV_HASH],
-            "man_rm": dat.loc[differ_row, DEV_MAN],
-            DEV_HASH: align_dat.loc[differ_row, DEV_HASH],
-            DEV_MAN: align_dat.loc[differ_row, DEV_MAN],
-        }
-    )
-    if dev_align.empty:
+    # possibly empty if no differ rows
+    if not any(differ_row.to_list()):
         return dat
-    # align all other dev cols
-    dat_align = align_other_cols(dat=dev_align)
-    # add data from other tabs for devs we are going to remove
-    new_dat = pd.concat(
+    # on changed rows, mark incoming data hash to be removed (dev_rm)
+    # hash to remove (dev_rm) will be ignored if come from new data
+    # incoming data can be brand new or existing (from admin funcs)
+    align_dat = pd.concat(
         [
-            dat_align,
-            sql.getDF(
-                tab="BOM",
-                search=dev_align.loc[:, "dev_rm"],
-                where=[BOM_HASH],
-            ),
-            sql.getDF(
-                tab="SHOP",
-                search=dev_align.loc[:, "dev_rm"],
-                where=[SHOP_HASH],
-            ),
-            sql.getDF(
-                tab="STOCK",
-                search=dev_align.loc[:, "dev_rm"],
-                where=[STOCK_HASH],
-            ),
+            dat.loc[differ_row, [DEV_HASH, DEV_MAN]].rename(
+                columns={
+                    DEV_HASH: "dev_rm",
+                    DEV_MAN: "man_rm",
+                }
+            ),  # fmt: ignore
+            align_dat.loc[differ_row, :],
         ],
         axis="columns",
+    )  # fmt: ignore
+    # align all other dev cols
+    align_dat = align_other_cols(dat=align_dat)
+    # add data from other tabs for devs we are going to remove
+    # don't take old hashes, but rehash again
+    align_dat = sql.getDF_other_tabs(
+        dat=align_dat,
+        hash_list=align_dat["dev_rm"].to_list(),
+        merge_on="dev_rm",
     )
-    new_dat = new_dat.ffill()
-    for tab in ["BOM", "SHOP", "STOCK", "DEVICE"]:
-        sql.rm(tab=tab, value=dev_align.loc[:, "dev_rm"])
-    return new_dat
+    align_dat = hash_tab(align_dat)
+    return align_dat
 
 
 def align_other_cols(dat: pd.DataFrame) -> pd.DataFrame:
@@ -349,9 +351,9 @@ def align_other_cols(dat: pd.DataFrame) -> pd.DataFrame:
     return selected attributes attached in row to input dat
     """
     necessery_cols = ["dev_rm", "man_rm", DEV_HASH, DEV_MAN]
-    if not all(c in necessery_cols for c in dat.columns):
-        sys.exit(1)
     must_cols, nice_cols = tab_cols(tab="DEVICE")
+    if not all(c for c in dat.columns if c in must_cols + necessery_cols):
+        sys.exit(1)
     display_cols = [
         c for c in must_cols + nice_cols if c not in [DEV_HASH, DEV_MAN, DEV_ID]
     ]
@@ -359,16 +361,8 @@ def align_other_cols(dat: pd.DataFrame) -> pd.DataFrame:
         columns=pd.Series(list(set(must_cols + nice_cols + necessery_cols)))
     )
     for _, r in dat.iterrows():
-        add_attr = (
-            sql.getDF(
-                tab="DEVICE",
-                search=[getattr(r, "dev_rm")],
-                where=[DEV_HASH],
-            )
-            .loc[:, display_cols]
-            .dropna(axis="columns")
-        )
-        rm_attr = (
+        # collect attributes for devices that we want to use
+        use_attr = (
             sql.getDF(
                 tab="DEVICE",
                 search=[getattr(r, DEV_HASH)],
@@ -376,39 +370,41 @@ def align_other_cols(dat: pd.DataFrame) -> pd.DataFrame:
             )
             .loc[:, display_cols]
             .dropna(axis="columns")
+            .iloc[0, :]  # conver to Series
         )
+        add_attr = r.loc[[c for c in display_cols if c in r]]
         # if NA in add_attr (missing col), take from rm_attr if present
-        for c in rm_attr.columns:
-            if c not in add_attr:
-                add_attr[c] = rm_attr[c]
-        add_attr_cols = list(add_attr.columns)
+        for idx, val in use_attr.items():
+            if idx not in add_attr:
+                add_attr[idx] = val
         # hide attributes which are already aligned
-        for c in add_attr.columns:
-            if add_attr[c].to_string(index=False) == rm_attr[c].to_string(index=False):
-                add_attr_cols.remove(c)
-        if not add_attr_cols:
-            aligned_cols = add_attr.iloc[0, :].to_list()
-        else:
-            aligned_cols = vimdiff_selection(
-                ref_col={"column": add_attr_cols},
-                change_col={str(r["man_rm"]): add_attr.iloc[0, :].to_list()},
-                opt_col={str(r[DEV_MAN]): rm_attr.iloc[0, :].to_list()},
+        for idx, val in add_attr.items():
+            if val == getattr(use_attr, idx, None):
+                add_attr.pop(idx)
+                if idx in use_attr:
+                    use_attr.pop(idx)
+        r_copy = r
+        if not add_attr.empty:
+            aligned_dat = vimdiff_selection(
+                ref_col={"column": add_attr.index.to_list()},
+                change_col={str(r["man_rm"]): add_attr.to_list()},
+                opt_col={str(r[DEV_MAN]): use_attr.to_list()},
                 exit_on_change=False,
             )
+            if len(aligned_dat) == len(add_attr):
+                add_attr.iloc[:] = aligned_dat
+                r_copy.update(add_attr)
         dat_align = pd.concat(
             [
                 dat_align,
-                pd.DataFrame(
-                    [aligned_cols + r.to_list()],
-                    columns=add_attr.columns.to_list() + necessery_cols,
-                ),
+                pd.DataFrame([r_copy]),
             ],
             ignore_index=True,
         )
     return dat_align
 
 
-def align_manufacturers(dat: pd.DataFrame) -> pd.DataFrame:
+def align_manufacturers(dat: pd.DataFrame, just_inform: bool = False) -> pd.DataFrame:
     """
     For device_id duplication, collect manufacturer name if different
     create dictionary with list of manufacturers as values for device_id as key:
@@ -419,6 +415,8 @@ def align_manufacturers(dat: pd.DataFrame) -> pd.DataFrame:
     3.  tricky is when are many devices in stock: present manufacturers separated with
         '|' as list. Special macro in vim to pick option
     return DataFrame modified by user
+    when 'just_inform', just display messages about possible duplications
+    and ref to admin funcs
     """
     if not all(c in dat.columns for c in [DEV_ID, DEV_MAN]):
         return dat
@@ -462,9 +460,6 @@ def align_manufacturers(dat: pd.DataFrame) -> pd.DataFrame:
         # importing manufacturers are aligned with stock
         return dat
 
-    # if we have stored alternatives, use it
-    dat_dup.loc[:, DEV_MAN] = get_alternatives(dat_dup[DEV_MAN].to_list())
-
     # remove dup_col from dup_col_grp
     for r in dat_dup.itertuples():
         dup_col_grp_v = getattr(r, man_grp_col)
@@ -472,6 +467,10 @@ def align_manufacturers(dat: pd.DataFrame) -> pd.DataFrame:
         opts = str(dup_col_grp_v).split(" | ")
         opts = [o for o in opts if o != dup_col_v]
         dat_dup.loc[r.Index, man_grp_col] = " | ".join(opts)
+
+    if just_inform:
+        msg.inform_duplications(dup=dat_dup.loc[:, [DEV_MAN, man_grp_col]])
+        return dat
 
     chosen = vimdiff_selection(
         ref_col={"devices": dat_dup.loc[:, DEV_ID].to_list()},
@@ -501,6 +500,8 @@ def vimdiff_selection(
     change_k, change_v = (2, 3)
     opt_k, opt_v = (4, 5)
     for key in [ref_k, change_k, opt_k]:
+        # remove forbiden chars: / \ : * ? " < > |
+        cols[key] = re.sub(r'[\/\\:\*\?"<>\|\r\n\t]', "_", cols[key])
         with open(
             conf.TEMP_DIR + cols[key] + ".txt",
             mode="w",
@@ -527,6 +528,10 @@ def vimdiff_selection(
 
     with open(conf.TEMP_DIR + cols[change_k] + ".txt", mode="r", encoding="UTF8") as f:
         chosen = f.readlines()
+
+    # clean up files
+    for key in [ref_k, change_k, opt_k]:
+        os.remove(cols[key])
 
     # remove line numbers
     chosen = [re.sub(r"^\d+\|\s*", "", c) for c in chosen]

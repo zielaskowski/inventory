@@ -3,12 +3,23 @@ py test
 testing functions from app/tabs.py
 """
 
+from unittest.mock import patch
+
 import pandas as pd
 import pytest
 
+from app.bom import bom_import
 from app.common import tab_cols
 from app.error import SqlTabError
+from app.sql import getDF, sql_check
 from app.tabs import NA_rows
+from inv import cli_parser
+
+
+@pytest.fixture(name="cli")
+def cli_fixture():
+    """command line parser"""
+    return cli_parser()
 
 
 def test_NA_rows(capsys):
@@ -58,7 +69,7 @@ def test_tab_cols1(monkeypatch, tmpdir):
     scheme = '{"tab1": {"col1": "TEXT"}}'
     f = tmpdir.join("shceme.json")
     f.write(scheme)
-    monkeypatch.setattr("app.common.SQL_SCHEME", f)
+    monkeypatch.setattr("conf.config.SQL_SCHEME", f)
     with pytest.raises(SqlTabError) as err_info:
         tab_cols("test")
     assert err_info.match("test")
@@ -69,7 +80,7 @@ def test_tab_cols2(monkeypatch, tmpdir):
     scheme = '{"tab1": {"col1": "TEXT"}, "tab2": {"col2": "TEXT"}}'
     f = tmpdir.join("shceme.json")
     f.write(scheme)
-    monkeypatch.setattr("app.common.SQL_SCHEME", f)
+    monkeypatch.setattr("conf.config.SQL_SCHEME", f)
     with pytest.raises(SqlTabError) as err_info:
         tab_cols("test")
     assert err_info.match("test")

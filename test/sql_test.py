@@ -6,17 +6,15 @@ import pytest
 
 from app.error import (
     CheckDirError,
-    ReadJsonError,
     SqlCheckError,
     SqlCreateError,
-    SqlSchemeError,
 )
 from app.sql import sql_check, sql_create
 
 
 def test_sql_create1(monkeypatch, tmpdir):
     """should be fine"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
     sql_create()
     sql_check()
 
@@ -24,7 +22,7 @@ def test_sql_create1(monkeypatch, tmpdir):
 def test_sql_create2(monkeypatch):
     """wrong DB_FILE path"""
     db_file = ".test//db_test.sql"
-    monkeypatch.setattr("app.sql.DB_FILE", db_file)
+    monkeypatch.setattr("conf.config.DB_FILE", db_file)
     with pytest.raises(CheckDirError) as err_info:
         sql_create()
     assert err_info.match(".test")
@@ -34,8 +32,8 @@ def test_sql_create3(monkeypatch):
     """missing json"""
     db_file = "./test/db_test.sql"
     sql_json = "./test/sql.json"
-    monkeypatch.setattr("app.sql.DB_FILE", db_file)
-    monkeypatch.setattr("app.sql.SQL_SCHEME", sql_json)
+    monkeypatch.setattr("conf.config.DB_FILE", db_file)
+    monkeypatch.setattr("conf.config.SQL_SCHEME", sql_json)
     with pytest.raises(SqlCreateError) as err_info:
         sql_create()
     assert err_info.match(sql_json)
@@ -52,8 +50,8 @@ def test_sql_create4(monkeypatch, tmpdir):
     """
     jfile = tmpdir.join("json.txt")
     jfile.write(json_txt)
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir + "db.sql")
-    monkeypatch.setattr("app.sql.SQL_SCHEME", jfile)
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir + "db.sql")
+    monkeypatch.setattr("conf.config.SQL_SCHEME", jfile)
     with pytest.raises(SqlCreateError) as err_info:
         sql_create()
     assert err_info.match(jfile.strpath)
@@ -70,8 +68,8 @@ def test_sql_create5(monkeypatch, tmpdir):
     """
     jfile = tmpdir.join("json.txt")
     jfile.write(json_txt)
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir + "db.sql")
-    monkeypatch.setattr("app.sql.SQL_SCHEME", jfile)
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir + "db.sql")
+    monkeypatch.setattr("conf.config.SQL_SCHEME", jfile)
     with pytest.raises(SqlCreateError) as err_info:
         sql_create()
     assert err_info.match(jfile.basename)
@@ -97,14 +95,13 @@ def test_sql_check1(monkeypatch, tmpdir):
     }
     jfile = tmpdir.join("json.txt")
     jfile.write(json.dumps(json_txt))
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.sql.SQL_SCHEME", jfile)
-    monkeypatch.setattr("app.common.SQL_SCHEME", jfile)
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SQL_SCHEME", jfile)
     sql_create()
     json_txt["BOM"]["FOREIGN"].pop()
     jfile2 = tmpdir.join("json2.txt")
     jfile2.write(json.dumps(json_txt))
-    monkeypatch.setattr("app.sql.SQL_SCHEME", jfile2)
+    monkeypatch.setattr("conf.config.SQL_SCHEME", jfile2)
     with pytest.raises(SqlCheckError) as err_info:
         sql_check()
     assert err_info.match("db.sql")

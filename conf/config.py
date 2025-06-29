@@ -4,19 +4,30 @@ import os
 
 import pandas as pd
 
+
+def module_path():
+    """
+    absolute path to the module:
+    one level up from this file
+    no '/' at end of path
+    """
+    abspath = os.path.abspath(__file__)
+    file_dir = os.path.dirname(abspath)
+    return os.path.dirname(file_dir)
+
+
 # configuration globals
-SQL_SCHEME = "/home/mi/docs/prog/python/inventory/conf/sql_scheme.jsonc"
+SQL_SCHEME = module_path() + "/conf/sql_scheme.jsonc"
 
 # database file location and name
-# DB_FILE = "/home/mi/docs/prog/MCU/inventory.sqlite"
-DB_FILE = "/home/mi/docs/prog/python/inventory/inventory.sqlite"
+DB_FILE = module_path() + "/inventory.sqlite"
 
 # log file location and name
 # set LOG_FILE = '' to turn off
-LOG_FILE = "/home/mi/docs/prog/python/inventory/conf/log.txt"
+LOG_FILE = module_path() + "/conf/log.txt"
 
 # file with manufacturer alternative names
-MAN_ALT = "/home/mi/docs/prog/python/inventory/conf/manufacturer_alternatives.jsonc"
+MAN_ALT = module_path() + "/conf/manufacturer_alternatives.jsonc"
 
 # directory to scan when searching for files
 # leave empty if you want to scan anything
@@ -42,12 +53,6 @@ DEBUG = "none"
 def config_file():
     """where am I"""
     return __file__
-
-
-def module_path():
-    """absolute path to the module"""
-    abspath = os.path.abspath(__file__)
-    return os.path.dirname(abspath)
 
 
 def mouser(row: pd.Series) -> pd.Series:

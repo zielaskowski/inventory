@@ -103,7 +103,7 @@ def test_read_json6(tmpdir):
 
 def test_log1(monkeypatch, capsys):
     """permission error"""
-    monkeypatch.setattr("app.common.LOG_FILE", "/home/nonexistinguser/log")
+    monkeypatch.setattr("conf.config.LOG_FILE", "/home/nonexistinguser/log")
     log(["test", "test"])
     out, _ = capsys.readouterr()
     assert "nonexistinguser" in out.lower()
@@ -112,14 +112,14 @@ def test_log1(monkeypatch, capsys):
 def test_log3(monkeypatch, tmpdir):
     """loging normaly"""
     f = tmpdir.join("log.txt")
-    monkeypatch.setattr("app.common.LOG_FILE", f)
+    monkeypatch.setattr("conf.config.LOG_FILE", f)
     log(["test", "log"])
     assert "test log" in f.read()
 
 
 def test_log4(monkeypatch, capsys):
     """no file"""
-    monkeypatch.setattr("app.common.LOG_FILE", "./test/")
+    monkeypatch.setattr("conf.config.LOG_FILE", "./test/")
     log(["test"])
     out, _ = capsys.readouterr()
     assert "missing filename" in out.lower()
@@ -127,7 +127,7 @@ def test_log4(monkeypatch, capsys):
 
 def test_find_files1(monkeypatch):
     """lack of permisions"""
-    monkeypatch.setattr("app.common.import_format", {"csv": {"file_ext": "csv"}})
+    monkeypatch.setattr("conf.config.import_format", {"csv": {"file_ext": "csv"}})
     with pytest.raises(ScanDirPermissionError) as err_info:
         find_files("/", "csv")
     assert err_info.match("/")
@@ -136,8 +136,8 @@ def test_find_files1(monkeypatch):
 def test_find_files2(monkeypatch, tmpdir):
     """expected bevaviour"""
     file_list = []
-    monkeypatch.setattr("app.common.import_format", {"csv": {"file_ext": "csv"}})
-    monkeypatch.setattr("app.common.SCAN_DIR", "sub")
+    monkeypatch.setattr("conf.config.import_format", {"csv": {"file_ext": "csv"}})
+    monkeypatch.setattr("conf.config.SCAN_DIR", "sub")
     d = tmpdir.mkdir("sub")
     for _ in range(4):
         d = d.mkdir("sub")
@@ -154,8 +154,8 @@ def test_check_dir_files1(monkeypatch, tmpdir, cli):
     args = cli.parse_args(
         ["bom", "--file", "fil", "--dir", tmpdir.strpath, "--format", "csv"]
     )
-    monkeypatch.setattr("app.common.import_format", {"csv": {"file_ext": "csv"}})
-    monkeypatch.setattr("app.common.SCAN_DIR", "sub")
+    monkeypatch.setattr("conf.config.import_format", {"csv": {"file_ext": "csv"}})
+    monkeypatch.setattr("conf.config.SCAN_DIR", "sub")
     d = tmpdir.mkdir("sub")
     for i in range(14):
         d = d.mkdir("sub")
@@ -172,8 +172,8 @@ def test_check_dir_files15(monkeypatch, tmpdir, cli):
     args = cli.parse_args(
         ["bom", "--file", "sub", "--dir", tmpdir.strpath, "--format", "csv"]
     )
-    monkeypatch.setattr("app.common.import_format", {"csv": {"file_ext": "csv"}})
-    monkeypatch.setattr("app.common.SCAN_DIR", "sub")
+    monkeypatch.setattr("conf.config.import_format", {"csv": {"file_ext": "csv"}})
+    monkeypatch.setattr("conf.config.SCAN_DIR", "sub")
     d = tmpdir.mkdir("sub")
     s = ""
     for i in range(14):
@@ -195,8 +195,8 @@ def test_check_dir_files2(monkeypatch, tmpdir, cli):
     args = cli.parse_args(
         ["bom", "--file", "fila", "--dir", tmpdir.strpath, "--format", "csv"]
     )
-    monkeypatch.setattr("app.common.import_format", {"csv": {"file_ext": "csv"}})
-    monkeypatch.setattr("app.common.SCAN_DIR", "sub")
+    monkeypatch.setattr("conf.config.import_format", {"csv": {"file_ext": "csv"}})
+    monkeypatch.setattr("conf.config.SCAN_DIR", "sub")
     d = tmpdir.mkdir("sub")
     for i in range(14):
         d = d.mkdir("sub")
@@ -222,7 +222,7 @@ def test_foreign_tabs1(monkeypatch, tmpdir):
     }
     fscheme = tmpdir.join("scheme.json")
     fscheme.write(json.dumps(sql_scheme))
-    monkeypatch.setattr("app.common.SQL_SCHEME", fscheme)
+    monkeypatch.setattr("conf.config.SQL_SCHEME", fscheme)
     tabs = foreign_tabs("tab1")
     assert tabs == ["tab2", "tab3"]
 
@@ -240,7 +240,8 @@ def test_store_alternatives1(tmpdir, monkeypatch):
     selection = ["aa", "cc", "d", "e"]
 
     man_json = tmpdir.join("man_alt.json")
-    monkeypatch.setattr("app.common.MAN_ALT", man_json.strpath)
+    monkeypatch.setattr("conf.config.MAN_ALT", man_json.strpath)
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     with open(man_json.strpath, "w", encoding="UTF8") as f:
         json.dump(man_alts, f)
 
@@ -271,7 +272,7 @@ def test_store_alternatives2(tmpdir, monkeypatch):
     selection = ["aa", "cc", "d", "e"]
 
     man_json = tmpdir.join("man_alt.json")
-    monkeypatch.setattr("app.common.MAN_ALT", man_json.strpath)
+    monkeypatch.setattr("conf.config.MAN_ALT", man_json.strpath)
     with open(man_json.strpath, "w", encoding="UTF8") as f:
         json.dump(man_alts, f)
 
@@ -303,7 +304,7 @@ def test_store_alternatives3(tmpdir, monkeypatch):
     selection = ["ff", "cc", "d", "e"]
 
     man_json = tmpdir.join("man_alt.json")
-    monkeypatch.setattr("app.common.MAN_ALT", man_json.strpath)
+    monkeypatch.setattr("conf.config.MAN_ALT", man_json.strpath)
     with open(man_json.strpath, "w", encoding="UTF8") as f:
         json.dump(man_alts, f)
 
@@ -324,15 +325,17 @@ def test_store_alternatives3(tmpdir, monkeypatch):
 
 def test_get_alternatives1(tmpdir, monkeypatch):
     """default"""
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     man_alts = {
         "aa": ["a1", "a2", "a3"],
         "bb": ["b1", "b2", "b3"],
     }
     man = ["a2", "a2", "b3", "c"]
     man_json = tmpdir.join("man_alt.json")
-    monkeypatch.setattr("app.common.MAN_ALT", man_json.strpath)
+    monkeypatch.setattr("conf.config.MAN_ALT", man_json.strpath)
     with open(man_json.strpath, "w", encoding="UTF8") as f:
         json.dump(man_alts, f)
 
-    man_alt = get_alternatives(man)
+    man_alt, diff_rows = get_alternatives(man)
     assert man_alt == ["aa", "aa", "bb", "c"]
+    assert diff_rows == [True, True, True, False]

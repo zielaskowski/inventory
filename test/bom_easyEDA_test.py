@@ -16,8 +16,9 @@ def cli_fixture():
 
 def test_bom_import_easyEDA1(cli, monkeypatch, tmpdir):
     """import and export without errors"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
 
     test = tmpdir.join("test.csv")

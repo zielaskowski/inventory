@@ -13,8 +13,10 @@ import sys
 from json import JSONDecodeError
 from typing import Dict
 
+import pandas as pd
 from jinja2 import Template
 
+import conf.config as conf
 from app.error import (
     AmbigousMatchError,
     CheckDirError,
@@ -25,15 +27,6 @@ from app.error import (
     WriteJsonError,
 )
 from app.message import MessageHandler
-from conf.config import (
-    LOG_FILE,
-    MAN_ALT,
-    SCAN_DIR,
-    SQL_SCHEME,
-    TEMP_DIR,
-    import_format,
-    module_path,
-)
 
 # list of keywords to be ignored during reading columns from tab
 SQL_KEYWORDS = ["FOREIGN", "UNIQUE", "ON_CONFLICT", "HASH_COLS", "COL_DESCRIPTION"]
@@ -94,7 +87,7 @@ def store_alternatives(
     alt_from = alternatives[alt_keys[0]]
     alt_options = alternatives[alt_keys[1]]
     try:
-        alt_exist = read_json_list(MAN_ALT)
+        alt_exist = read_json_list(conf.MAN_ALT)
     except ReadJsonError as e:
         msg.msg(str(e))
         return
@@ -114,16 +107,21 @@ def store_alternatives(
             else:
                 alt_exist[selection[i]] = [alt_from[i]]
 
-    write_json(MAN_ALT, alt_exist)
+    write_json(conf.MAN_ALT, alt_exist)
 
 
-def get_alternatives(manufacturers: list[str]) -> list[str]:
-    """check if we have match from stored alternative"""
+def get_alternatives(manufacturers: list[str]) -> tuple[list[str], list[bool]]:
+    """
+    check if we have match from stored alternative
+    return list with replaced manufacturers
+    (complete list, including not replaced also)
+    and list of bools indicating where replaced
+    """
     try:
-        alt_exist = read_json_list(MAN_ALT)
+        alt_exist = read_json_list(conf.MAN_ALT)
     except ReadJsonError as e:
         msg.msg(str(e))
-        return manufacturers
+        return manufacturers, []
     man_replaced = []
     for man in manufacturers:
         rep = [k for k, v in alt_exist.items() if man in v]
@@ -131,7 +129,13 @@ def get_alternatives(manufacturers: list[str]) -> list[str]:
             man_replaced.append(rep[0])
         else:
             man_replaced.append(man)
-    return man_replaced
+    # inform user about alternatives (be explicit!)
+    alt = pd.DataFrame({"was": manufacturers, "alternative": man_replaced})
+    differ_row = alt["was"] != alt["alternative"]
+    if not alt.loc[differ_row, :].empty:
+        if not msg.inform_alternatives(alternatives=alt.loc[differ_row, :]):
+            return manufacturers, []
+    return man_replaced, differ_row.to_list()
 
 
 def vimdiff_config(
@@ -152,20 +156,20 @@ def vimdiff_config(
                    (to change context for exmple)
     """
     with open(
-        module_path() + "/vimdiff_help.txt",
+        conf.module_path() + "/conf/vimdiff_help.txt",
         mode="r",
         encoding="UTF8",
     ) as f:
         help_temp = Template(f.read())
     with open(
-        module_path() + "/.vimrc",
+        conf.module_path() + "/conf/.vimrc",
         mode="r",
         encoding="UTF8",
     ) as f:
         vimrc_temp = Template(f.read())
 
     substitutions = {
-        "TEMP_DIR": TEMP_DIR,
+        "TEMP_DIR": conf.TEMP_DIR,
         "LEFT_NAME": opt_col,
         "RIGHT_NAME": change_col,
         "ALTERNATE_COL": alternate_col,
@@ -175,9 +179,9 @@ def vimdiff_config(
     }
     vimrc_txt = vimrc_temp.render(substitutions)
     help_txt = help_temp.render(substitutions)
-    with open(TEMP_DIR + ".vimrc", mode="w", encoding="UTF8") as f:
+    with open(conf.TEMP_DIR + ".vimrc", mode="w", encoding="UTF8") as f:
         f.write(vimrc_txt)
-    with open(TEMP_DIR + "vimdiff_help.txt", "w", encoding="UTF8") as f:
+    with open(conf.TEMP_DIR + "vimdiff_help.txt", "w", encoding="UTF8") as f:
         f.write(help_txt)
 
 
@@ -187,7 +191,7 @@ def log(args) -> None:
     skip  -h and --help commands
     check if attribute 'help' exists in com namespac
     """
-    if LOG_FILE == "":
+    if conf.LOG_FILE == "":
         return
     if any(a for a in args if a in ["--help", "-h"]):
         return
@@ -195,7 +199,7 @@ def log(args) -> None:
     cmd = ["python -m inv"] + args
 
     # check if path exists, if not create
-    path = os.path.dirname(LOG_FILE)
+    path = os.path.dirname(conf.LOG_FILE)
     if not os.path.exists(path):
         try:
             os.makedirs(path)
@@ -204,7 +208,7 @@ def log(args) -> None:
             return
 
     try:
-        with open(LOG_FILE, "a", encoding="UTF8") as f:
+        with open(conf.LOG_FILE, "a", encoding="UTF8") as f:
             f.write(f"{' '.join(cmd)}\n")
     except IsADirectoryError as e:
         msg.log_path_error(str(e) + ". missing filename.")
@@ -280,8 +284,8 @@ def find_files(directory: str, file_format: str) -> list:
         raise ScanDirPermissionError(directory=directory)
     console_width = shutil.get_terminal_size().columns
     match_files = []
-    file_ext = import_format[file_format]["file_ext"]
-    s_dir = SCAN_DIR
+    file_ext = conf.import_format[file_format]["file_ext"]
+    s_dir = conf.SCAN_DIR
     msg.msg(f"searching for *.{file_ext} files in {s_dir} folder:")
     for folder, _, files in os.walk(directory):
         for file in files:
@@ -307,7 +311,7 @@ def check_dir_file(args: argparse.Namespace) -> list[str]:
     return found files
     """
     if not os.path.exists(args.dir):
-        raise CheckDirError(directory=args.dir, scan_dir=SCAN_DIR)
+        raise CheckDirError(directory=args.dir, scan_dir=conf.SCAN_DIR)
     files = find_files(args.dir, args.format)
 
     # filter by file name
@@ -345,7 +349,7 @@ def tab_exists(tab: str) -> None:
     check if tab exists
     raises sql_tabError if not
     """
-    sql_scheme = read_json_dict(SQL_SCHEME)
+    sql_scheme = read_json_dict(conf.SQL_SCHEME)
     if tab not in sql_scheme.keys():
         raise SqlTabError(tab, sql_scheme.keys())
 
@@ -358,7 +362,7 @@ def tab_cols(
     and list of columns that are "nice to have"
     follow FOREIGN key constraints to other tab
     """
-    sql_scheme = read_json_dict(SQL_SCHEME)
+    sql_scheme = read_json_dict(conf.SQL_SCHEME)
     tab_exists(tab)  # will raise sql_tabError if not
 
     cols = list(sql_scheme.get(tab, ""))
@@ -404,7 +408,7 @@ def tab_cols(
 def foreign_tabs(tab: str) -> list[str]:
     """return list of tables refrenced in FOREIGN key"""
     tab_exists(tab)  # will raise sql_tabError if not
-    sql_scheme = read_json_dict(SQL_SCHEME)
+    sql_scheme = read_json_dict(conf.SQL_SCHEME)
     tabs = []
     f_keys = sql_scheme[tab].get("FOREIGN", [])
     for k in f_keys:

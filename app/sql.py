@@ -5,7 +5,17 @@ from typing import Dict, List, Set, Union
 
 import pandas as pd
 
-from app.common import SQL_KEYWORDS, read_json_dict, tab_exists, unpack_foreign
+import conf.config as conf
+from app.common import (
+    BOM_HASH,
+    DEV_HASH,
+    SHOP_HASH,
+    SQL_KEYWORDS,
+    STOCK_HASH,
+    read_json_dict,
+    tab_exists,
+    unpack_foreign,
+)
 from app.error import (
     CheckDirError,
     ReadJsonError,
@@ -17,7 +27,6 @@ from app.error import (
     SqlTabError,
 )
 from app.message import MessageHandler
-from conf.config import DB_FILE, SQL_SCHEME
 
 msg = MessageHandler()
 
@@ -26,20 +35,15 @@ DB structure is described in ./conf/sql_scheme.json
 """
 
 
-def put(dat: pd.DataFrame, tab: str, on_conflict: dict) -> Dict:
+def put(dat: pd.DataFrame, tab: str) -> Dict:
     """
     put DataFrame into sql at table=tab
     takes from DataFrame only columns present in sql table
     check if tab exists!
-    on_conflict is a list of dictionary:
-     {
-     'action': UPDATE SET|REPLACE|NOTHING|FAIL|ABORT|ROLLBACK
-     'unique_col':[cols] //may be from UNIQUE or PRIMARY KEY
-     'add_col':[cols] //UPDATE will add new value to existing
-     }
     put() may raise sql_executeError and sql_tabError
     """
     tab_exists(tab)
+    sql_scheme = read_json_dict(conf.SQL_SCHEME)
 
     if dat.empty:
         return {}
@@ -47,9 +51,12 @@ def put(dat: pd.DataFrame, tab: str, on_conflict: dict) -> Dict:
     dat = dat.apply(
         lambda x: x.str.upper() if isinstance(x, str) else x  # type: ignore
     )
-
+    # define action on conflict
+    # on_conflict is a list of dictionary defined in sql_scheme.jsonc
+    on_conflict = sql_scheme[tab].get("ON_CONFLICT", {})
     # add new data to sql
     sql_columns = tab_columns(tab)
+    # take only columns applicable to table
     d = dat.loc[:, [c in sql_columns for c in dat.columns]]
     return __write_table__(dat=d, tab=tab, on_conflict=on_conflict)
 
@@ -82,6 +89,71 @@ def __write_table__(
     cmd += cmd_action
 
     return __sql_execute__([cmd])
+
+
+def getDF_other_tabs(
+    dat: pd.DataFrame, hash_list: list[str], merge_on: str
+) -> pd.DataFrame:
+    """
+    get data from all tabs except DEVICE
+    merge data on 'merge_on' column (col will be preserved)
+    then drop table specific hash columns
+    ffill missing values (for multiple projects using the same dev)
+    return DataFrame
+    """
+    bom_tab = getDF(
+        tab="BOM",
+        search=hash_list,
+        where=[BOM_HASH],
+    )
+    shop_tab = getDF(
+        tab="SHOP",
+        search=hash_list,
+        where=[SHOP_HASH],
+    )
+    stock_tab = getDF(
+        tab="STOCK",
+        search=hash_list,
+        where=[STOCK_HASH],
+    )
+    if not bom_tab.empty:
+        dat = pd.merge(
+            left=dat,
+            right=bom_tab,
+            left_on=merge_on,
+            right_on=BOM_HASH,
+            how="right",
+        )
+    if not shop_tab.empty:
+        dat = pd.merge(
+            left=dat,
+            right=shop_tab,
+            left_on=merge_on,
+            right_on=SHOP_HASH,
+            how="left",
+        )
+    if not stock_tab.empty:
+        dat = pd.merge(
+            left=dat,
+            right=stock_tab,
+            left_on=merge_on,
+            right_on=STOCK_HASH,
+            how="left",
+        )
+    dat = dat.ffill().infer_objects(copy=False)
+    dat.drop(columns=[BOM_HASH, SHOP_HASH, STOCK_HASH], errors="ignore", inplace=True)
+    return dat
+
+
+def rm_all_tabs(hash_list: list[str]) -> None:
+    """remove from all tabs per hash list"""
+    for table, hash_col in {
+        "BOM": BOM_HASH,
+        "SHOP": SHOP_HASH,
+        "STOCK": STOCK_HASH,
+        "DEVICE": DEV_HASH,
+    }.items():
+        rm(tab=table, value=hash_list, column=[hash_col])
 
 
 def getDF(
@@ -182,7 +254,7 @@ def get(
     where = norm_to_list_str(where)
 
     search = __escape_quote__(search)
-    sql_scheme = read_json_dict(SQL_SCHEME)
+    sql_scheme = read_json_dict(conf.SQL_SCHEME)
 
     if "FOREIGN" not in sql_scheme[tab].keys():
         follow = False
@@ -342,22 +414,22 @@ def sql_check() -> None:
     DB location and name taken from ./conf/configuration/py
     """
     # make sure if exists
-    if not os.path.isfile(DB_FILE):
-        msg.sql_file_miss(DB_FILE)
+    if not os.path.isfile(conf.DB_FILE):
+        msg.sql_file_miss(conf.DB_FILE)
         sql_create()
 
-    sql_scheme = read_json_dict(SQL_SCHEME)
+    sql_scheme = read_json_dict(conf.SQL_SCHEME)
     for i in range(len(sql_scheme)):
         tab = list(sql_scheme.keys())[i]
         scheme_cols = [k for k in sql_scheme[tab].keys() if k not in SQL_KEYWORDS]
         # check if correct tables in sql
         if tab_columns(tab) != scheme_cols:
-            raise SqlCheckError(DB_FILE, tab)
+            raise SqlCheckError(conf.DB_FILE, tab)
         # check if correct foreign keys
         from_sql_scheme = [str(c) for c in tab_foreign(tab)]
         from_json_scheme = [str(c) for c in sql_scheme[tab].get("FOREIGN", [])]
         if sorted(from_sql_scheme) != sorted(from_json_scheme):
-            raise SqlCheckError(DB_FILE, tab)
+            raise SqlCheckError(conf.DB_FILE, tab)
 
 
 def __sql_execute__(script: list) -> Dict[str, pd.DataFrame]:
@@ -391,7 +463,7 @@ def __sql_execute__(script: list) -> Dict[str, pd.DataFrame]:
     script_split = __split_cmd__(script)
     try:
         con = sqlite3.connect(
-            DB_FILE,
+            conf.DB_FILE,
             detect_types=sqlite3.PARSE_COLNAMES | sqlite3.PARSE_DECLTYPES,
         )
         cur = con.cursor()
@@ -401,7 +473,7 @@ def __sql_execute__(script: list) -> Dict[str, pd.DataFrame]:
             for c in cmd_split:
                 cur.execute(c)
                 if a := cur.fetchall():
-                    colnames = [c[0] for c in cur.description]
+                    colnames = pd.Series([c[0] for c in cur.description])
                     if cmd in ans:
                         ans[cmd100] = pd.concat(
                             [
@@ -429,19 +501,19 @@ def sql_create() -> None:
     """Creates sql query based on sql_scheme.json and send to db.
     Perform check if created DB is aligned with scheme from sql.json file.
     """
-    if os.path.isfile(DB_FILE):
+    if os.path.isfile(conf.DB_FILE):
         # just in case the file exists
-        os.remove(DB_FILE)
+        os.remove(conf.DB_FILE)
 
-    path = os.path.dirname(DB_FILE)
+    path = os.path.dirname(conf.DB_FILE)
     if not os.path.isdir(path):
         raise CheckDirError(directory=path)
 
     try:
-        sql_scheme = read_json_dict(SQL_SCHEME)
+        sql_scheme = read_json_dict(conf.SQL_SCHEME)
     except ReadJsonError as err:
         print(err)
-        raise SqlCreateError(SQL_SCHEME) from err
+        raise SqlCreateError(conf.SQL_SCHEME) from err
 
     # create tables query for db
     sql_cmd = []
@@ -467,7 +539,7 @@ def sql_create() -> None:
                         tab_exists(f_table)
                     except SqlTabError as err:
                         msg.msg(str(err))
-                        raise SqlCreateError(SQL_SCHEME) from err
+                        raise SqlCreateError(conf.SQL_SCHEME) from err
 
                     tab_cmd += f"FOREIGN KEY({k}) REFERENCES {v}, "
         tab_cmd = re.sub(",[^,]*$", "", tab_cmd)  # remove last comma
@@ -494,16 +566,16 @@ def sql_create() -> None:
     try:
         status = __sql_execute__(sql_cmd)
     except SqlExecuteError as err:
-        os.remove(DB_FILE)
+        os.remove(conf.DB_FILE)
         msg.msg(str(err))
-        raise SqlCreateError(SQL_SCHEME) from err
+        raise SqlCreateError(conf.SQL_SCHEME) from err
 
     if sorted(status[sql_cmd[-1][0:100]]["tbl_name"].to_list()) != sorted(
         list(sql_scheme.keys())
     ):
-        if os.path.isfile(DB_FILE):
-            os.remove(DB_FILE)
-        raise SqlCreateError(SQL_SCHEME)
+        if os.path.isfile(conf.DB_FILE):
+            os.remove(conf.DB_FILE)
+        raise SqlCreateError(conf.SQL_SCHEME)
 
 
 def __escape_quote__(txt: Union[List[str], set]) -> List[str]:

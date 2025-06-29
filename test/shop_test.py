@@ -21,8 +21,9 @@ def cli_fixture():
 
 def test_shop_import_csv1(monkeypatch, tmpdir, cli):
     """1. import from csv"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
 
     test = tmpdir.join("test.csv")
@@ -46,8 +47,9 @@ def test_shop_import_csv1(monkeypatch, tmpdir, cli):
 
 def test_shop_import_csv2(monkeypatch, tmpdir, cli):
     """2. import again with new date (add)"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     test = tmpdir.join("test.csv")
     with open(test, "w", encoding="UTF8") as f:
@@ -69,13 +71,8 @@ def test_shop_import_csv2(monkeypatch, tmpdir, cli):
         row_shift=10,
     )
     dat["date"] = "2025-06-01"
-    sql_scheme = read_json_dict(SQL_SCHEME)
     for tab in foreign_tabs("SHOP") + ["SHOP"]:
-        put(
-            dat=dat,
-            tab=tab,
-            on_conflict=sql_scheme[tab].get("ON_CONFLICT", {}),
-        )
+        put(dat=dat, tab=tab)
     shop_import(args)
     exp = getDF(tab="SHOP")
     exp["date"] = exp["date"].apply(str)
@@ -91,8 +88,9 @@ def test_shop_import_csv2(monkeypatch, tmpdir, cli):
 
 def test_shop_import_csv3(monkeypatch, tmpdir, cli):
     """3. import again with the same date"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
 
     test = tmpdir.join("test.csv")
@@ -117,8 +115,9 @@ def test_shop_import_csv3(monkeypatch, tmpdir, cli):
 
 def test_shop_import_csv4(monkeypatch, tmpdir, cli, capsys):
     """4. info about columns"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     args = cli.parse_args(["shop", "--info"])
     shop_import(args)
@@ -136,8 +135,8 @@ def test_shop_import_csv4(monkeypatch, tmpdir, cli, capsys):
 
 def test_shop_import_csv6(monkeypatch, tmpdir, cli):
     """6. the same device_id but different manufacturer"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
     monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
 
@@ -177,8 +176,8 @@ def test_shop_import_csv6(monkeypatch, tmpdir, cli):
 
 def test_shop_import_csv7(monkeypatch, tmpdir, cli):
     """6. the same device_id but different description"""
-    monkeypatch.setattr("app.sql.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("app.common.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
     monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
 

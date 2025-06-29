@@ -3,9 +3,10 @@ from argparse import Namespace
 
 import pandas as pd
 
-from app.common import print_file, read_json_dict
-from app.sql import getDF, getL, rm
-from app.tabs import align_data
+from app import sql
+from app.common import DEV_HASH, DEV_MAN, get_alternatives, print_file, read_json_dict
+from app.sql import getDF, getL, put, rm
+from app.tabs import align_data, hash_tab, tabs_in_data
 from conf.config import SQL_SCHEME
 
 
@@ -84,7 +85,33 @@ def remove_dev(dev: list[str], by: str, force: bool) -> pd.DataFrame:
     return dev
 
 
-def align() -> pd.DataFrame:
+def apply_alternatives() -> None:
+    """
+    apply alternatives stored
+    must remove first to not add qty to bom
+    """
+    dat = getDF(tab="DEVICE")
+    dat.loc[:, DEV_MAN], differ_rows = get_alternatives(dat[DEV_MAN].to_list())
+    dat = dat.loc[differ_rows, :]
+    # store hashes for later removal
+    dat["dev_rm"] = dat[DEV_HASH]
+    # add data from other tabs
+    dat = sql.getDF_other_tabs(
+        dat=dat,
+        hash_list=dat["dev_rm"].to_list(),
+        merge_on="dev_rm",
+    )
+    # rehash for new manufacturers
+    dat = hash_tab(dat)
+    # remove old
+    sql.rm_all_tabs(hash_list=dat["dev_rm"].to_list())
+    # add new
+    tabs = tabs_in_data(dat)
+    for t in tabs:
+        put(dat=dat, tab=t)
+
+
+def align() -> None:
     """align manufacturers"""
     # man_grp: all DEVICES group by dev_id and collect possible manufacturers man1 | man2 | etc
     # dat: merge DEVICES with man_grp, for each dev remove man from man_grp
@@ -94,5 +121,11 @@ def align() -> pd.DataFrame:
     # - take old dev_hash lines, remove dev_hash and change manufacturer, add again
     # - align all columns before merge
     devs = getDF(tab="DEVICE")
-    dat = align_data(devs)
-    return dat
+    dat = align_data(dat=devs)
+
+    # remove old hashes of changed devices
+    sql.rm_all_tabs(hash_list=dat["dev_rm"].to_list())
+    # write aligned data back to SQL
+    tabs = tabs_in_data(dat)
+    for t in tabs:
+        put(dat=dat, tab=t)

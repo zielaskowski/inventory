@@ -4,7 +4,6 @@ import pandas as pd
 import pytest
 
 from app.bom import bom_import, scan_files
-from app.error import CheckDirError
 from app.sql import sql_check
 from inv import cli_parser
 
@@ -480,3 +479,33 @@ def test_remove_show_all_projects(cli, monkeypatch, tmpdir, capsys):
     out, _ = capsys.readouterr()
     assert "test1" in out.lower()
     assert "test2" in out.lower()
+
+
+def test_bom_export_committed_bool(cli, monkeypatch, tmpdir):
+    """Check if BOM_COMMITED column is correctly converted to bool"""
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
+    sql_check()
+    csv_path = tmpdir.join("test.csv")
+    with open(csv_path, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,qty,project,committed\n"
+            + "aa,bb,1,test1,1\n"
+            + "cc,dd,2,test2,0\n"
+        )
+
+    # Import the test data
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
+    bom_import(args)
+
+    # Export the data to a new file
+    export_path = tmpdir.join("export.csv")
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "export.csv", "-e", "%"])
+    bom_import(args)
+
+    # Read the exported file and check the 'committed' column
+    result_df = pd.read_csv(export_path)
+    assert "committed" in result_df.columns
+    assert result_df["committed"].dtype == "bool"
+    assert bool(result_df.loc[result_df["project"] == "test2", "committed"].iloc[0]) is False

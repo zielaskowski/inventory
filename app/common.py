@@ -37,7 +37,7 @@ DEV_PACK = "package"
 DEV_HASH = "hash"
 BOM_FILE = "import_file"
 BOM_DIR = "project_dir"
-BOM_COMMITED = "commited"
+BOM_COMMITTED = "committed"
 BOM_PROJECT = "project"
 BOM_HASH = "device_hash"
 BOM_FORMAT = "file_format"
@@ -54,7 +54,7 @@ TAKE_LONGER_COLS = [DEV_MAN, DEV_DESC, DEV_PACK]
 HIDDEN_COLS = [
     BOM_DIR,
     BOM_FILE,
-    BOM_COMMITED,
+    BOM_COMMITTED,
     BOM_FORMAT,
     "id",
     DEV_HASH,
@@ -138,12 +138,23 @@ def get_alternatives(manufacturers: list[str]) -> tuple[list[str], list[bool]]:
     return man_replaced, differ_row.to_list()
 
 
+def first_diff_index(list1: list[str], list2: list[str]) -> int:
+    """return index of first different element in lists"""
+    for i, (x, y) in enumerate(zip(list1, list2)):
+        if x != y:
+            return i + 1
+    if len(list1) != len(list2):
+        return min(len(list1), len(list2))
+    return 0  # identical lists
+
+
 def vimdiff_config(
     ref_col: str,
     change_col: str,
     opt_col: str,
     alternate_col: str,
     exit_on_change: bool,
+    start_line: int = 1,
 ):
     """
     prepare vimdiff config from template
@@ -169,6 +180,7 @@ def vimdiff_config(
         vimrc_temp = Template(f.read())
 
     substitutions = {
+        "START_LINE": start_line,
         "TEMP_DIR": conf.TEMP_DIR,
         "LEFT_NAME": opt_col,
         "RIGHT_NAME": change_col,

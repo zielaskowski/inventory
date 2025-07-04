@@ -25,6 +25,7 @@ function! OpenDiffWithHelp()
         setlocal nomodifiable
         execute 'silent split {{TEMP_DIR}}{{REF_COL}}.txt'
         execute 'diffoff'
+	setlocal scrollbind
         setlocal buftype=nofile
         setlocal bufhidden=wipe
         setlocal noswapfile
@@ -33,6 +34,8 @@ function! OpenDiffWithHelp()
         execute 'diffthis'
         execute 'silent vsplit {{TEMP_DIR}}{{RIGHT_NAME}}.txt'
         execute 'diffthis'
+	setlocal scrollbind
+	execute 'call cursor ({{START_LINE}},1)'
 endfunction
 
 function! PickOption_vmode()
@@ -88,10 +91,12 @@ endfunction
 let mapleader = " "
 
 autocmd VimEnter * call OpenDiffWithHelp()
-
 {% if EXIT_ON_CHANGE %}
 autocmd TextChanged * call BufferChange()
 {% endif %}
+
+" Abort by emptying the file
+nnoremap Q :%d<CR>:wqa<CR>
 
 " Map the <SPACE>pn key with pick function 
 " (take diffrence from other panel)

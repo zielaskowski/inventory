@@ -5,11 +5,10 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-from app.common import DEV_ID, DEV_MAN, read_json_dict
+from app.common import DEV_MAN
 from app.shop import shop_import
 from app.sql import getDF, put, sql_check
 from app.tabs import align_manufacturers, columns_align, foreign_tabs, prepare_tab
-from conf.config import SQL_SCHEME
 from inv import cli_parser
 
 
@@ -164,13 +163,17 @@ def test_shop_import_csv6(monkeypatch, tmpdir, cli):
         "change_col": {DEV_MAN: ["ac"]},
         "opt_col": {DEV_MAN + "_opts": ["aa | ab"]},
     }
-    with patch("app.tabs.vimdiff_selection") as mock_select_column:
+    with patch(
+        "app.tabs.vimdiff_selection",
+        side_effect=[["ac"]],
+    ) as mock_select_column:
         align_manufacturers(inp)
         mock_select_column.assert_called_with(
             ref_col=alternatives["ref_col"],
             change_col=alternatives["change_col"],
             opt_col=alternatives["opt_col"],
             exit_on_change=True,
+            start_line=1,
         )
 
 

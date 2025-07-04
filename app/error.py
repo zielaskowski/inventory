@@ -8,7 +8,9 @@ from conf.config import SQL_SCHEME
 class SqlGetError(Exception):
     """exception class"""
 
-    def __init__(self, col: list[str], all_cols: list[str], *args: object) -> None:
+    def __init__(
+        self, col: set[str] | list[str], all_cols: set[str] | list[str], *args: object
+    ) -> None:
         self.message = f"Not correct get='{col}' argument."
         self.message += f"possible options: {all_cols}"
         super().__init__(*args)

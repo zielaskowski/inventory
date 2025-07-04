@@ -13,6 +13,7 @@ from pandas.errors import EmptyDataError, ParserError
 
 from app import sql
 from app.common import (
+    BOM_COMMITTED,
     BOM_PROJECT,
     IMPORT_FORMAT_SPECIAL_KEYS,
     NO_EXPORT_COLS,
@@ -139,6 +140,9 @@ def bom_export(args: Namespace) -> None:
     if args.hide_columns:
         cols = [c for c in args.hide_columns if c in df.columns]
         df.drop(columns=cols, inplace=True)
+    # replace 0/1 in commit column with True/False
+    if BOM_COMMITTED in df.columns:
+        df[BOM_COMMITTED] = df[BOM_COMMITTED].astype(bool)
     if not args.file:
         with pd.option_context(
             "display.max_rows",

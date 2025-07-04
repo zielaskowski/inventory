@@ -15,7 +15,7 @@ import pandas as pd
 
 from app import sql
 from app.common import (
-    BOM_COMMITED,
+    BOM_COMMITTED,
     BOM_DIR,
     BOM_FILE,
     BOM_FORMAT,
@@ -27,6 +27,7 @@ from app.common import (
     SHOP_DATE,
     SHOP_SHOP,
     check_dir_file,
+    first_diff_index,
     foreign_tabs,
     get_alternatives,
     match_from_list,
@@ -149,18 +150,19 @@ def prepare_tab(
     if any(missing_cols):
         raise PrepareTabError(tab, file, missing_cols)
 
-    # remove rows with NA in must_cols
-    dat = NA_rows(dat, must_cols, nice_cols, row_shift)
-
     # clean text, leave only ASCII
     # i.e. easyEDM writes manufactuere in Chinese in parenthesis
-    # MUST be after NA_rows, becouse ASCI_txt affect NaNs
     for c in dat.columns:
         if dat[c].dtype == "object":
             dat[c] = dat[c].apply(ASCII_txt)
 
+    # remove rows with NA in must_cols
+    # must be afterASCII_txt, becouse it is possible to have only chinese in must_col
+    dat = NA_rows(dat, must_cols, nice_cols, row_shift)
+
     # and strip text
-    dat = dat.apply(lambda x: x.str.strip() if x.dtype == object else x)  # type: ignore
+    for col in dat.select_dtypes(include=["object"]).columns:
+        dat[col] = dat[col].apply(lambda x: x.strip() if isinstance(x, str) else x)
 
     return dat
 
@@ -258,7 +260,7 @@ def columns_align(n_stock: pd.DataFrame, file: str, args: Namespace) -> pd.DataF
     n_stock = n_stock.map(lambda x: x.strip() if isinstance(x, str) else x)
 
     # add column with path and file name and supplier
-    n_stock[BOM_COMMITED] = False
+    n_stock[BOM_COMMITTED] = False
     n_stock[BOM_DIR] = os.path.abspath(args.dir)
     n_stock[BOM_FILE] = os.path.basename(file)
     n_stock[BOM_FORMAT] = args.format
@@ -269,11 +271,17 @@ def columns_align(n_stock: pd.DataFrame, file: str, args: Namespace) -> pd.DataF
     return n_stock
 
 
-def ASCII_txt(txt: str) -> str:
+def ASCII_txt(txt: str | None) -> str | None:
     """remove any chinese signs from string columns"""
+    if not isinstance(txt, str):
+        return txt
+    if pd.isna(txt):
+        return None
     txt = str(txt).encode("ascii", "ignore").decode("ascii")
     # remove any empty paranthases '()' from string columns
     txt = re.sub(r"\(.*?\)", "", txt)
+    if not txt:  # only chinese letters
+        return None
     return txt
 
 
@@ -288,25 +296,15 @@ def align_data(dat: pd.DataFrame, just_inform: bool = False) -> pd.DataFrame:
     return dataframe with changed devices with aditional column 'dev_rm'
     with device hashes before change
     """
-    align_dat = dat.copy(deep=True)
-    assert_cols = [DEV_ID, DEV_MAN]
-    while True:
-        temp_dat = align_manufacturers(
-            align_dat.copy(deep=True),
-            just_inform=just_inform,
-        )
-        if just_inform:
-            return dat
-        try:
-            pd.testing.assert_frame_equal(
-                align_dat.loc[:, assert_cols],
-                temp_dat.loc[:, assert_cols],
-                check_dtype=False,
-            )
-        except AssertionError as err:
-            align_dat = temp_dat
-            continue
-        break
+    align_dat = align_manufacturers(
+        dat.copy(deep=True),
+        just_inform=just_inform,
+    )
+    # user abort
+    if align_dat.empty:
+        return align_dat
+    if just_inform:
+        return dat
     # create new hash after possibly changing manufacturer
     align_dat = hash_tab(dat=align_dat)
     # select rows where change
@@ -331,6 +329,9 @@ def align_data(dat: pd.DataFrame, just_inform: bool = False) -> pd.DataFrame:
     )  # fmt: ignore
     # align all other dev cols
     align_dat = align_other_cols(dat=align_dat)
+    # user abort
+    if align_dat.empty:
+        return align_dat
     # add data from other tabs for devs we are going to remove
     # don't take old hashes, but rehash again
     align_dat = sql.getDF_other_tabs(
@@ -370,27 +371,37 @@ def align_other_cols(dat: pd.DataFrame) -> pd.DataFrame:
             )
             .loc[:, display_cols]
             .dropna(axis="columns")
-            .iloc[0, :]  # conver to Series
+            .iloc[0, :]  # convert to Series
         )
         add_attr = r.loc[[c for c in display_cols if c in r]]
         # if NA in add_attr (missing col), take from rm_attr if present
         for idx, val in use_attr.items():
             if idx not in add_attr:
                 add_attr[idx] = val
+        # if NA in existing attributes use_attr
+        for idx, val in add_attr.items():
+            if idx not in use_attr:
+                use_attr[idx] = val
         # hide attributes which are already aligned
         for idx, val in add_attr.items():
             if val == getattr(use_attr, idx, None):
                 add_attr.pop(idx)
                 if idx in use_attr:
                     use_attr.pop(idx)
-        r_copy = r
+        r_copy = r.copy(deep=True)
         if not add_attr.empty:
-            aligned_dat = vimdiff_selection(
-                ref_col={"column": add_attr.index.to_list()},
-                change_col={str(r["man_rm"]): add_attr.to_list()},
-                opt_col={str(r[DEV_MAN]): use_attr.to_list()},
-                exit_on_change=False,
-            )
+            add_attr.sort_index(inplace=True)
+            use_attr.sort_index(inplace=True)
+            try:
+                aligned_dat = vimdiff_selection(
+                    ref_col={"column": add_attr.index.to_list()},
+                    change_col={str(r["man_rm"]): add_attr.to_list()},
+                    opt_col={str(r[DEV_MAN]): use_attr.to_list()},
+                    exit_on_change=False,
+                )
+            except KeyboardInterrupt:
+                msg.msg("Interupted by user. Changes discarded.")
+                return pd.DataFrame()
             if len(aligned_dat) == len(add_attr):
                 add_attr.iloc[:] = aligned_dat
                 r_copy.update(add_attr)
@@ -418,6 +429,7 @@ def align_manufacturers(dat: pd.DataFrame, just_inform: bool = False) -> pd.Data
     when 'just_inform', just display messages about possible duplications
     and ref to admin funcs
     """
+    start_line = 1  # start line for vim (vim count from 1)
     if not all(c in dat.columns for c in [DEV_ID, DEV_MAN]):
         return dat
     ex_dat = sql.getDF(
@@ -437,50 +449,63 @@ def align_manufacturers(dat: pd.DataFrame, just_inform: bool = False) -> pd.Data
         .reset_index()
     )
 
-    # panda RULES: must be merged on 'left' to keep indexes, and clean up NAs later
-    # with merge on 'inner' indexed are fuck up
-    dat_dup = pd.merge(
-        left=dat,
-        right=ex_grp,
-        on=DEV_ID,
-        how="left",
-        suffixes=("", "_opts"),
-    )
+    # iterate as long as there is a change from user
+    while True:
+        # panda RULES: must be merged on 'left' to keep indexes, and clean up NAs later
+        # with merge on 'inner' indexed are fuck up
+        dat_dup = pd.merge(
+            left=dat,
+            right=ex_grp,
+            on=DEV_ID,
+            how="left",
+            suffixes=("", "_opts"),
+        )
 
-    # column name for grouped manufacturers
-    man_grp_col = DEV_MAN + "_opts"
+        # column name for grouped manufacturers
+        man_grp_col = DEV_MAN + "_opts"
 
-    # for GREAT panda NaN is any value so must be droped before
-    dat_dup = dat_dup.loc[~dat_dup[man_grp_col].isna(), :]
+        # for GREAT panda NaN is any value so must be droped before
+        dat_dup = dat_dup.loc[~dat_dup[man_grp_col].isna(), :]
 
-    # drop rows with matched manufacturer
-    dat_dup = dat_dup[dat_dup[DEV_MAN] != dat_dup[man_grp_col]]
+        # drop rows with matched manufacturer
+        dat_dup = dat_dup[dat_dup[DEV_MAN] != dat_dup[man_grp_col]]
 
-    if dat_dup.empty:
-        # importing manufacturers are aligned with stock
-        return dat
+        if dat_dup.empty:
+            # importing manufacturers are aligned with stock
+            return dat
 
-    # remove dup_col from dup_col_grp
-    for r in dat_dup.itertuples():
-        dup_col_grp_v = getattr(r, man_grp_col)
-        dup_col_v = getattr(r, DEV_MAN)
-        opts = str(dup_col_grp_v).split(" | ")
-        opts = [o for o in opts if o != dup_col_v]
-        dat_dup.loc[r.Index, man_grp_col] = " | ".join(opts)
+        # remove dup_col from dup_col_grp
+        for r in dat_dup.itertuples():
+            dup_col_grp_v = getattr(r, man_grp_col)
+            dup_col_v = getattr(r, DEV_MAN)
+            opts = str(dup_col_grp_v).split(" | ")
+            opts = [o for o in opts if o != dup_col_v]
+            dat_dup.loc[r.Index, man_grp_col] = " | ".join(opts)
 
-    if just_inform:
-        msg.inform_duplications(dup=dat_dup.loc[:, [DEV_MAN, man_grp_col]])
-        return dat
-
-    chosen = vimdiff_selection(
-        ref_col={"devices": dat_dup.loc[:, DEV_ID].to_list()},
-        change_col={DEV_MAN: dat_dup.loc[:, DEV_MAN].to_list()},
-        opt_col={man_grp_col: dat_dup.loc[:, man_grp_col].to_list()},
-        exit_on_change=True,
-    )
-    dat_dup[DEV_MAN] = chosen
-    # put new data into orginal tab, based on preserved indexes
-    dat.loc[dat_dup.index, DEV_MAN] = dat_dup[DEV_MAN]
+        if just_inform:
+            msg.inform_duplications(dup=dat_dup.loc[:, [DEV_MAN, man_grp_col, DEV_ID]])
+            return dat
+        # sort data on device_id, much easier to understand in vimdiff
+        dat_dup.sort_values(by=DEV_ID, inplace=True)
+        try:
+            chosen = vimdiff_selection(
+                ref_col={"devices": dat_dup.loc[:, DEV_ID].to_list()},
+                change_col={DEV_MAN: dat_dup.loc[:, DEV_MAN].to_list()},
+                opt_col={man_grp_col: dat_dup.loc[:, man_grp_col].to_list()},
+                exit_on_change=True,
+                start_line=start_line,
+            )
+        except KeyboardInterrupt:
+            msg.msg("Interupted by user. Changes discarded.")
+            return pd.DataFrame()
+        # if no change from user, finish
+        if dat_dup[DEV_MAN].to_list() == chosen:
+            break
+        # find index of change, so can start vim on correct line number
+        start_line = first_diff_index(dat_dup[DEV_MAN].to_list(), chosen)
+        dat_dup[DEV_MAN] = chosen
+        # put new data into orginal tab, based on preserved indexes
+        dat.loc[dat_dup.index, DEV_MAN] = dat_dup[DEV_MAN]
 
     return dat
 
@@ -490,6 +515,7 @@ def vimdiff_selection(
     change_col: dict[str, list[str]],
     opt_col: dict[str, list[str]],
     exit_on_change: bool,
+    start_line: int = 1,
 ) -> list[str]:
     """present alternatives in vimdiff"""
     cols = []
@@ -517,6 +543,7 @@ def vimdiff_selection(
         opt_col=cols[opt_k],
         alternate_col=cols[change_k],
         exit_on_change=exit_on_change,
+        start_line=start_line,
     )
 
     vim_cmd = "vim -u " + conf.TEMP_DIR + ".vimrc"
@@ -527,12 +554,14 @@ def vimdiff_selection(
             p.wait()
 
     with open(conf.TEMP_DIR + cols[change_k] + ".txt", mode="r", encoding="UTF8") as f:
-        chosen = f.readlines()
+        chosen = f.read().splitlines()
 
     # clean up files
     for key in [ref_k, change_k, opt_k]:
-        os.remove(cols[key])
+        os.remove(conf.TEMP_DIR + cols[key] + ".txt")
 
+    if chosen == []:  # user interrupt
+        raise KeyboardInterrupt
     # remove line numbers
     chosen = [re.sub(r"^\d+\|\s*", "", c) for c in chosen]
     chosen = [c.strip() for c in chosen]
@@ -587,12 +616,12 @@ def prepare_project(projects: list[str], commited: bool) -> list[str]:
     if commited:
         commit_search = ["%"]
     else:
-        commit_search = ["False"]
+        commit_search = [False]
     available = sql.getL(
         tab="BOM",
         get_col=[BOM_PROJECT],
         search=commit_search,
-        where=[BOM_COMMITED],
+        where=[BOM_COMMITTED],
     )
     all_projects = sql.getL(
         tab="BOM",
@@ -648,8 +677,8 @@ def scan_files(args) -> list[str]:
         locations = sql.getDF(
             tab="BOM",
             get_col=[BOM_DIR, BOM_FILE, BOM_PROJECT, BOM_FORMAT],
-            search=["False"],
-            where=[BOM_COMMITED],
+            search=[False],
+            where=[BOM_COMMITTED],
         )
         if locations.empty:
             msg.reimport_missing_file()
@@ -680,6 +709,8 @@ def bom_info(tab: str, silent: bool = False) -> list[str]:
     except SqlTabError as err:
         msg.msg(str(err))
         sys.exit(1)
+    must_col.sort()
+    nice_col.sort()
     if not silent:
         msg.bom_info(must_col, nice_col, col_description())
     return must_col + nice_col

@@ -63,7 +63,7 @@
         "project_dir": "TEXT",
         "import_file": "TEXT",
 	"project": "TEXT NOT NULL",
-	"commited": "TEXT NOT NULL",
+	"committed": "INTEGER NOT NULL",
 	"file_format": "TEXT",
 	"COL_DESCRIPTION":{
 		"qty":"number of items in BOM for a project",

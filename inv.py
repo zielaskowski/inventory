@@ -255,6 +255,7 @@ def cli_parser() -> AbbreviationParser:
         nargs="+",
         default=False,
         help="""Clean all devices from list using device part number. Also from all other tables.
+                You can read part number from csv file, see --csv option.
                 Refuse to remove devices used in project; use force to overcome.""",
     )
     admin_group.add_argument(
@@ -262,7 +263,8 @@ def cli_parser() -> AbbreviationParser:
         nargs="*",
         default=False,
         help="""Remove shop part number from shop table.
-                Usefull when item not in stock in shop any more""",
+                You can read part number from csv file, see --csv option.
+                Usefull when item not in shop stock any more""",
     )
     cli_admin.add_argument(
         "-F",
@@ -272,7 +274,8 @@ def cli_parser() -> AbbreviationParser:
     )
     cli_admin.add_argument(
         "--csv",
-        help="read item list from csv file.",
+        help="""read device_id list from csv file. See --what_col and
+                --filter_col, --filter_val for column selection and filtering""",
     )
     cli_admin.add_argument(
         "-w",

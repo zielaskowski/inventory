@@ -7,6 +7,7 @@ import pytest
 from app.common import (
     check_dir_file,
     find_files,
+    first_diff_index,
     foreign_tabs,
     get_alternatives,
     log,
@@ -339,3 +340,10 @@ def test_get_alternatives1(tmpdir, monkeypatch):
     man_alt, diff_rows = get_alternatives(man)
     assert man_alt == ["aa", "aa", "bb", "c"]
     assert diff_rows == [True, True, True, False]
+
+
+def test_first_diff_index():
+    """all tests comparing lists"""
+    assert first_diff_index(["a", "b", "cc", "d"], ["a", "b", "c", "d"]) == 3
+    assert first_diff_index(["a", "b", "c", "d"], ["a", "b", "c", "d", "e"]) == 4
+    assert first_diff_index(["a", "b", "c", "d"], ["a", "b", "c", "d"]) == 0

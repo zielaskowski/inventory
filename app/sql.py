@@ -1,7 +1,7 @@
 import os
 import re
 import sqlite3
-from typing import Dict, List, Set, Union
+from typing import Any, Dict, Iterable, List, Sequence, Set, Union
 
 import pandas as pd
 
@@ -65,30 +65,37 @@ def __write_table__(
     dat: pd.DataFrame, tab: str, on_conflict: dict
 ) -> Dict[str, pd.DataFrame]:
     """writes DataFrame to SQL table 'tab'"""
-    records = list(dat.astype("string").to_records(index=False))
-    records = [tuple(__escape_quote__(r)) for r in records]
+    # Create a copy to avoid modifying the original DataFrame
+    df_copy = dat.copy()
+
+    # Convert boolean columns to integers (0 for False, 1 for True)
+    for col in df_copy.select_dtypes(include=["bool"]).columns:
+        df_copy[col] = df_copy[col].astype(int)
+
+    # Replace pandas' NA/NaN with None for SQL compatibility
+    df_copy = df_copy.where(pd.notna(df_copy), None)
+
+    # Convert to list of tuples, which executemany handles correctly
+    records = list(df_copy.itertuples(index=False, name=None))
 
     action = on_conflict.get("action", "REPLACE")  # default is ON CONFLICT REPLACE
     if action == "UPDATE SET":
         unique_col = on_conflict["unique_col"]
-        cmd_action = f"""ON CONFLICT ({','.join(unique_col)})
-                    DO {action}
-                """
-        cmd_action += ",".join(
+        update_cols = ",".join(
             [f"{c} = {c} + EXCLUDED.{c}" for c in on_conflict["add_col"]]
         )
-        action = ""
+        cmd = f"""INSERT INTO {tab} {tuple(dat.columns)}
+                  VALUES ({','.join(['?'] * len(dat.columns))})
+                  ON CONFLICT ({','.join(unique_col)})
+                  DO UPDATE SET {update_cols}
+               """
     else:
         action = "OR " + action
-        cmd_action = ""
+        cmd = f"""INSERT {action} INTO {tab} {tuple(dat.columns)}
+                  VALUES ({','.join(['?'] * len(dat.columns))})
+               """
 
-    cmd = f"""INSERT {action} INTO {tab} {tuple(dat.columns)}
-            VALUES
-        """
-    cmd += ",".join([str(c) for c in records])
-    cmd += cmd_action
-
-    return __sql_execute__([cmd])
+    return __sql_execute__([cmd], records)
 
 
 def getDF_other_tabs(
@@ -158,9 +165,9 @@ def rm_all_tabs(hash_list: list[str]) -> None:
 
 def getDF(
     tab: str,
-    get_col: Union[List[str], Set[str], pd.Series, None] = None,
-    search: Union[List[str], Set[str], pd.Series, None] = None,
-    where: Union[List[str], Set[str], pd.Series, None] = None,
+    get_col: List[str] | Set[str] | pd.Series | None = None,
+    search: List[str] | List[int] | List[bool] | pd.Series | None = None,
+    where: List[str] | Set[str] | pd.Series | None = None,
     follow: bool = False,
 ) -> pd.DataFrame:
     """wraper around get() when:
@@ -179,9 +186,9 @@ def getDF(
 
 def getL(
     tab: str,
-    get_col: Union[List[str], Set[str], pd.Series, None] = None,
-    search: Union[List[str], Set[str], pd.Series, None] = None,
-    where: Union[List[str], Set[str], pd.Series, None] = None,
+    get_col: List[str] | Set[str] | pd.Series | None = None,
+    search: List[str] | List[int] | List[bool] | pd.Series | None = None,
+    where: List[str] | Set[str] | pd.Series | None = None,
     follow: bool = False,
 ) -> List:
     """wraper around get() when:
@@ -200,27 +207,29 @@ def getL(
     return [] if df.empty else list(df.to_dict(orient="list").values())[0]
 
 
-def norm_to_list_str(norm: Union[List[str], Set[str], pd.Series]) -> List[str]:
+def norm_to_set_str(
+    norm: List[str] | List[int] | List[bool] | Set[str] | pd.Series,
+) -> list[str]:
     """
     normalize to list of string
+    remove duplicates
     also check if all elements are str (rise ValueError)
     """
     if isinstance(norm, pd.Series):
-        out = norm.astype(str).to_list()
-    elif isinstance(norm, set):
-        out = list(norm)
+        out = list(norm.astype(str).to_list())
     else:
         out = norm
-    if not all(isinstance(s, str) for s in out):
-        raise ValueError("all elements must be strings")
-    return out
+    # Convert boolean columns to integers (0 for False, 1 for True)
+    out = [int(s) if isinstance(s, bool) else s for s in out]
+
+    return [str(s) for s in out]
 
 
 def get(
     tab: str,
-    get_col: Union[List[str], Set[str], pd.Series, None] = None,
-    search: Union[List[str], Set[str], pd.Series, None] = None,
-    where: Union[List[str], Set[str], pd.Series, None] = None,
+    get_col: List[str] | Set[str] | pd.Series | None = None,
+    search: List[str] | List[int] | List[bool] | pd.Series | None = None,
+    where: List[str] | Set[str] | pd.Series | None = None,
     follow: bool = False,
 ) -> Dict[str, pd.DataFrame]:
     """get info from table
@@ -231,29 +240,28 @@ def get(
 
     Args:
         tab: table to search
-        get_col: column name to extract (default '%' for all columns)
-        search: what to get (default '%' for everything)
-        where: columns used for searching (default '%' for everything)
+        get_col: column name to extract (default None for all columns)
+        search: what to get (default None for everything)
+        where: columns used for searching (default None for everything)
         follow: if True, search in all FOREIGN subtables
     """
     # check if tab exists!
     tab_exists(tab)
     # assign values if default
     all_cols = tab_columns(tab)
-    if where is None or where == ["%"]:
-        where = all_cols
-    if get_col is None:
-        get_col = ["%"]
-    if get_col == ["%"] and not follow:
-        get_col = all_cols
-    if search is None:
-        search = ["%"]
     # normalize input to list
-    get_col = norm_to_list_str(get_col)
-    search = norm_to_list_str(search)
-    where = norm_to_list_str(where)
+    if where is None:
+        where = all_cols
+    else:
+        where = set(norm_to_set_str(where))
+    if get_col is None:
+        get_col = all_cols
+    else:
+        get_col = set(norm_to_set_str(get_col))
+    if search is not None:
+        search = norm_to_set_str(search)
+        search = __escape_quote__(search)
 
-    search = __escape_quote__(search)
     sql_scheme = read_json_dict(conf.SQL_SCHEME)
 
     if "FOREIGN" not in sql_scheme[tab].keys():
@@ -267,10 +275,10 @@ def get(
                     col, f_tab, f_col = unpack_foreign(f)
                     f_df = getDF(tab=f_tab)
                     r_tab = r_tab.merge(f_df, left_on=col, right_on=f_col)
-                    if get_col != ["%"]:
+                    if get_col != all_cols:
                         if any(c not in r_tab.columns for c in get_col):
                             raise SqlGetError(get_col, r_tab.columns.to_list())
-                        r_tab = r_tab[get_col]
+                        r_tab = r_tab[list(get_col)]
                     resp[r] = r_tab  # type: ignore
 
     else:
@@ -283,9 +291,9 @@ def get(
 
 def __get_tab__(
     tab: str,
-    get_col: Union[List[str], Set],
-    search: Union[List[str], Set],
-    where: Union[List[str], Set],
+    get_col: set[str],
+    search: list[str] | None,
+    where: set[str],
 ) -> Dict[str, pd.DataFrame]:
     """get info from table
     return as Dict:
@@ -295,68 +303,21 @@ def __get_tab__(
 
     Args:
         tab: table to search
-        get: column name to extract
-        search: what to get
+        get_col: column name to extract
+        search: what to get, get all if None
         where: columns used for searching
     """
     resp = {}
-
     for c in where:
-        cmd = f"SELECT {','.join(get_col)} FROM {tab} WHERE "
-        cmd += "("
-        cmd += " ".join([f"{c} LIKE '{s}' OR " for s in search])
-        cmd += f"{c} LIKE 'none'"  # just to close last 'OR'
-        cmd += ")"
-        if resp_col := __sql_execute__([cmd]):
-            resp[c] = resp_col[cmd[0:100]].drop_duplicates()
+        if not search:
+            cmd = f"SELECT {','.join(get_col)} FROM {tab}"
+        else:
+            # Create a placeholder string for the IN clause
+            placeholders = ",".join("?" * len(search))
+            cmd = f"SELECT {','.join(get_col)} FROM {tab} WHERE {c} IN ({placeholders})"
+        if resp_col := __sql_execute__([cmd], search):
+            resp[c] = resp_col[cmd].drop_duplicates()
     return resp
-
-
-def __split_cmd__(script: list) -> List[List]:
-    # split OR logic chain into 500 len elements
-    # there is limit of 1000 tree depth
-    def split_logic_chain(cmd):
-        cmd = cmd.replace("\t", "").replace("\n", "").replace("\r", "")
-        where_index = cmd.find("WHERE")
-        if where_index == -1:
-            return [cmd]
-        cmd1 = cmd[: where_index + 5]
-        cmd2 = cmd[where_index + 5 :]
-        cmd3 = cmd2[cmd2.find(")") + 1 :]
-        cmd2 = cmd2[: cmd2.find(")") + 1]
-        logic_tree = cmd2.replace("'", "stock_name")
-        lenOR = logic_tree.count(" OR ")
-        lenAND = logic_tree.count(" AND ")
-        if lenAND != 0 and lenAND + lenOR > 500:
-            raise ValueError("FATAL: sql cmd exceeded length limit")
-        if lenOR > 500:
-            cmd_new = [cmd1 + c + cmd3 for c in split_list(cmd2, 500)]
-            return cmd_new
-        return [cmd]
-
-    def split_list(cmd: str, n) -> list:
-        lst = cmd.split(" OR ")
-        res = [" OR ".join(lst[i : i + n]) for i in range(0, len(lst), n)]
-        res = [r.strip() for r in res]
-        # remove first and last parenthesis in string if exists
-        res = [r[1:] if r[0] == "(" else r for r in res]
-        res = [r[:-2] if r[-1] == ")" else r for r in res]
-        return [f" ( {r} ) " for r in res]
-
-    resp = [split_logic_chain(cmd) for cmd in script]
-    return [r for r in resp if r]
-
-
-def __split_list__(lst: str, nel: int) -> list:
-    """
-    Split list into parts with nel elements each (except last)
-    """
-    lst_split = re.split(" OR ", lst)
-    n = (len(lst_split) // nel) + 1
-    cmd_split = [" OR ".join(lst_split[i * nel : (i + 1) * nel]) for i in range(n)]
-    # make sure each part starts and ends with parenthesis
-    cmd_split = ["(" + re.sub(r"[\(\)]", "", s) + ") " for s in cmd_split]
-    return cmd_split
 
 
 def rm(
@@ -366,31 +327,28 @@ def rm(
 ) -> None:
     """
     Remove all instances of value from column in tab.
-    if value or column is missing, default is all ['%']
+    if value or column is missing, default is all
     """
-    if value is None:
-        value = ["%"]
-    if column is None:
-        column = ["%"]
-    value = norm_to_list_str(value)
-    column = norm_to_list_str(column)
-    for c in column:
-        cmd = f"DELETE FROM {tab} "
-        if column != ["%"]:
-            cmd += "WHERE ("
-            cmd += " ".join([f"{c} LIKE '{s}' OR " for s in value])
-            cmd += f"{c} LIKE 'none'"  # just to close last 'OR'
-            cmd += ")"
+    if column is None or value is None:
+        cmd = f"DELETE FROM {tab}"
         __sql_execute__([cmd])
+        return
+
+    value = norm_to_set_str(value)
+    column = norm_to_set_str(column)
+    for c in column:
+        placeholders = ",".join("?" * len(value))
+        cmd = f"DELETE FROM {tab} WHERE {c} IN ({placeholders})"
+        __sql_execute__([cmd], value)
 
 
-def tab_columns(tab: str) -> List[str]:
+def tab_columns(tab: str) -> set[str]:
     """return list of columns for table"""
     sql_cmd = f"pragma table_info({tab})"
     resp = __sql_execute__([sql_cmd])
     if not resp or resp[sql_cmd].empty:
-        return []
-    return resp[sql_cmd]["name"].to_list()
+        return set()
+    return set(resp[sql_cmd]["name"].to_list())
 
 
 def tab_foreign(tab: str) -> List[Dict[str, str]]:
@@ -423,7 +381,7 @@ def sql_check() -> None:
         tab = list(sql_scheme.keys())[i]
         scheme_cols = [k for k in sql_scheme[tab].keys() if k not in SQL_KEYWORDS]
         # check if correct tables in sql
-        if tab_columns(tab) != scheme_cols:
+        if not any(c in tab_columns(tab) for c in scheme_cols):
             raise SqlCheckError(conf.DB_FILE, tab)
         # check if correct foreign keys
         from_sql_scheme = [str(c) for c in tab_foreign(tab)]
@@ -432,66 +390,59 @@ def sql_check() -> None:
             raise SqlCheckError(conf.DB_FILE, tab)
 
 
-def __sql_execute__(script: list) -> Dict[str, pd.DataFrame]:
+def __sql_execute__(
+    script: list,
+    params: Sequence[str | tuple[Any, ...] | list[str]] | None = None,
+) -> Dict[str, pd.DataFrame]:
     """Execute provided SQL commands.
     If db returns anything write as dict {command: respose as pd.DataFrame}
-    Command is shortened to first 100 characters
-    Split cmd if logic tree exceeds 500 (just in case as limit is 1000)
-    Also control cmd character number (<100e6) NOT IMPLEMENTED
     will generate error only
 
     Args:
         script (list): list of sql commands to execute
-        db_file (string): file name
+        params : if None or list(str) will be used in sql.execute to replace '?'
+                if list[list[str]] will use executemany
 
     Returns:
         Dict: dict of response from sql
-            {command[0:20]: response in form of pd.DataFrame (may be empty)}
+            {command: response in form of pd.DataFrame (may be empty)}
     """
-    for c in script:
-        if len(c) > 100e6:
-            raise SqlExecuteError("Command too long ", c)
 
     ans = {}
     cmd = ""
-    # when writing panda as dictionary
-    # NULL is written as <NA>, sql needs NULL
-    script = [re.sub("<NA>", "NULL", str(c)) for c in script]
-    # Foreign key constraints are disabled by default,
-    # so must be enabled separately for each database connection.
-    script = ["PRAGMA foreign_keys = ON"] + script
-    script_split = __split_cmd__(script)
+
+    executemany = False
+    if params is None:
+        params = []
+    elif not isinstance(params[0], str):
+        executemany = True
+
+    if not executemany:
+        if len(params) > 900:
+            raise SqlExecuteError("Too many parameters: ", str(len(params)))
+
     try:
         con = sqlite3.connect(
             conf.DB_FILE,
             detect_types=sqlite3.PARSE_COLNAMES | sqlite3.PARSE_DECLTYPES,
         )
         cur = con.cursor()
-        for cmd_split in script_split:
-            cmd = script[script_split.index(cmd_split)]
-            cmd100 = cmd[0:100]
-            for c in cmd_split:
-                cur.execute(c)
-                if a := cur.fetchall():
-                    colnames = pd.Series([c[0] for c in cur.description])
-                    if cmd in ans:
-                        ans[cmd100] = pd.concat(
-                            [
-                                ans[cmd].fillna(""),
-                                pd.DataFrame(a, columns=colnames).fillna(""),
-                            ],
-                            ignore_index=True,
-                        )
-                    else:
-                        ans[cmd100] = pd.DataFrame(a, columns=colnames)
-                else:
-                    ans[cmd100] = pd.DataFrame()
+        for cmd in script:
+            if executemany:
+                cur.executemany(cmd, params)
+            else:
+                cur.execute(cmd, params)
+            if a := cur.fetchall():
+                colnames = pd.Series([c[0] for c in cur.description])
+                ans[cmd] = pd.DataFrame(a, columns=colnames)
+            else:
+                ans[cmd] = pd.DataFrame()
         con.commit()
         return ans
     except sqlite3.IntegrityError as err:
-        raise SqlExecuteError(err, cmd100) from err
+        raise SqlExecuteError(err, cmd) from err
     except sqlite3.Error as err:
-        raise SqlExecuteError(err, cmd100) from err
+        raise SqlExecuteError(err, cmd) from err
     finally:
         cur.close()  # type: ignore
         con.close()  # type: ignore
@@ -578,7 +529,7 @@ def sql_create() -> None:
         raise SqlCreateError(conf.SQL_SCHEME)
 
 
-def __escape_quote__(txt: Union[List[str], set]) -> List[str]:
+def __escape_quote__(txt: list[str]) -> list[str]:
     """
     escape quotes in a list of strings
     """

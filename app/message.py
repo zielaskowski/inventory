@@ -82,7 +82,7 @@ class MessageHandler:
         self.message.append(
             f"Manufacturer alternatives are defined in '{config.MAN_ALT}'"
         )
-        self.message.append(alternatives.to_string())
+        self.message.append(alternatives.drop_duplicates().to_string())
         self.message.append("Do you accept? (y/n)")
         self.__exec__()
         if input().lower() == "y":
@@ -95,7 +95,9 @@ class MessageHandler:
             "Found devices with different manufacturer, possibly duplication."
         )
         self.message.append(dup.to_string())
-        self.message.append("You can align later with 'admin --align_manufacturers' fucntion")
+        self.message.append(
+            "You can align later with 'admin --align_manufacturers' fucntion"
+        )
         self.__exec__()
 
     def bom_remove(self, project: list[str]) -> None:

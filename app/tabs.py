@@ -12,6 +12,7 @@ from argparse import Namespace
 from datetime import date
 
 import pandas as pd
+from pandas.core.dtypes.cast import NAType
 
 from app import sql
 from app.common import (
@@ -204,8 +205,8 @@ def hash_tab(dat: pd.DataFrame) -> pd.DataFrame:
 def NA_rows(
     df: pd.DataFrame,
     must_cols: list[str],
-    nice_cols: list[str],
-    row_shift: int,
+    nice_cols:list[str],
+    row_shift: int = 0,
 ) -> pd.DataFrame:
     """
     check rows with any NA
@@ -271,13 +272,14 @@ def columns_align(n_stock: pd.DataFrame, file: str, args: Namespace) -> pd.DataF
     return n_stock
 
 
-def ASCII_txt(txt: str | None) -> str | None:
+def ASCII_txt(txt: str | None | NAType) -> str | None | NAType:
     """remove any chinese signs from string columns"""
     if not isinstance(txt, str):
         return txt
     if pd.isna(txt):
         return None
-    txt = str(txt).encode("ascii", "ignore").decode("ascii")
+    txt = str(txt).replace("Ω", "ohm")
+    txt = txt.encode("ascii", "ignore").decode("ascii")
     # remove any empty paranthases '()' from string columns
     txt = re.sub(r"\(.*?\)", "", txt)
     if not txt:  # only chinese letters
@@ -358,45 +360,46 @@ def align_other_cols(dat: pd.DataFrame) -> pd.DataFrame:
     display_cols = [
         c for c in must_cols + nice_cols if c not in [DEV_HASH, DEV_MAN, DEV_ID]
     ]
-    dat_align = pd.DataFrame(
-        columns=pd.Series(list(set(must_cols + nice_cols + necessery_cols)))
-    )
-    for _, r in dat.iterrows():
+    dat.reset_index(
+        inplace=True, drop=True
+    )  # to be aligne after subsequent reset_index
+    for idx in dat.index:
+        row = dat.copy(deep=True).loc[idx, :]
         # collect attributes for devices that we want to use
         use_attr = (
             sql.getDF(
                 tab="DEVICE",
-                search=[getattr(r, DEV_HASH)],
+                search=[row[DEV_HASH]],
                 where=[DEV_HASH],
             )
             .loc[:, display_cols]
             .dropna(axis="columns")
             .iloc[0, :]  # convert to Series
         )
-        add_attr = r.loc[[c for c in display_cols if c in r]]
-        # if NA in add_attr (missing col), take from rm_attr if present
+        add_attr = row.loc[[c for c in display_cols if c in row]]
+        # if NA in add_attr or missing col, take from rm_attr if present
         for idx, val in use_attr.items():
             if idx not in add_attr:
                 add_attr[idx] = val
+            if add_attr[idx] is None:
+                add_attr[idx] = use_attr[idx]
         # if NA in existing attributes use_attr
         for idx, val in add_attr.items():
             if idx not in use_attr:
                 use_attr[idx] = val
         # hide attributes which are already aligned
         for idx, val in add_attr.items():
-            if val == getattr(use_attr, idx, None):
+            if val == use_attr[idx]:
                 add_attr.pop(idx)
-                if idx in use_attr:
-                    use_attr.pop(idx)
-        r_copy = r.copy(deep=True)
+                use_attr.pop(idx)
         if not add_attr.empty:
             add_attr.sort_index(inplace=True)
             use_attr.sort_index(inplace=True)
             try:
                 aligned_dat = vimdiff_selection(
                     ref_col={"column": add_attr.index.to_list()},
-                    change_col={str(r["man_rm"]): add_attr.to_list()},
-                    opt_col={str(r[DEV_MAN]): use_attr.to_list()},
+                    change_col={str(row["man_rm"]): add_attr.to_list()},
+                    opt_col={str(row[DEV_MAN]): use_attr.to_list()},
                     exit_on_change=False,
                 )
             except KeyboardInterrupt:
@@ -404,15 +407,16 @@ def align_other_cols(dat: pd.DataFrame) -> pd.DataFrame:
                 return pd.DataFrame()
             if len(aligned_dat) == len(add_attr):
                 add_attr.iloc[:] = aligned_dat
-                r_copy.update(add_attr)
-        dat_align = pd.concat(
-            [
-                dat_align,
-                pd.DataFrame([r_copy]),
-            ],
-            ignore_index=True,
-        )
-    return dat_align
+                row.update(add_attr)
+            dat.set_index(DEV_HASH, inplace=True)
+            row_df = (
+                pd.DataFrame([row])
+                .set_index(DEV_HASH)
+                .drop(columns=["dev_rm", "man_rm"])
+            )
+            dat.update(row_df)
+            dat.reset_index(inplace=True)
+    return dat
 
 
 def align_manufacturers(dat: pd.DataFrame, just_inform: bool = False) -> pd.DataFrame:

@@ -75,9 +75,10 @@ def mouser(row: pd.Series) -> pd.Series:
 def easyEDA(row: pd.Series) -> pd.Series:
     """merge column 'value' with 'description'"""
     if "value" in row.index and "device_description" in row.index:
-        row["device_description"] = (
-            str(row["value"]) + " : " + str(row["device_description"])
-        )
+        if not bool(pd.isna(row["value"])):
+            row["device_description"] = (
+                str(row["value"]) + " : " + str(row["device_description"])
+            )
     return row
 
 

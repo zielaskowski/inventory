@@ -129,8 +129,8 @@ def getDF_other_tabs(
             right=bom_tab,
             left_on=merge_on,
             right_on=BOM_HASH,
-            how="right",
-        )
+            how="left",
+        ).drop(columns=[BOM_HASH, SHOP_HASH, STOCK_HASH], errors="ignore")
     if not shop_tab.empty:
         dat = pd.merge(
             left=dat,
@@ -138,7 +138,7 @@ def getDF_other_tabs(
             left_on=merge_on,
             right_on=SHOP_HASH,
             how="left",
-        )
+        ).drop(columns=[BOM_HASH, SHOP_HASH, STOCK_HASH], errors="ignore")
     if not stock_tab.empty:
         dat = pd.merge(
             left=dat,
@@ -146,9 +146,8 @@ def getDF_other_tabs(
             left_on=merge_on,
             right_on=STOCK_HASH,
             how="left",
-        )
-    dat = dat.ffill().infer_objects(copy=False)
-    dat.drop(columns=[BOM_HASH, SHOP_HASH, STOCK_HASH], errors="ignore", inplace=True)
+        ).drop(columns=[BOM_HASH, SHOP_HASH, STOCK_HASH], errors="ignore")
+    dat = dat.groupby(DEV_HASH).transform(lambda g: g.ffill().bfill())
     return dat
 
 

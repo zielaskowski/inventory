@@ -3,16 +3,12 @@ py test
 testing functions from app/tabs.py
 """
 
-from unittest.mock import patch
-
 import pandas as pd
 import pytest
 
-from app.bom import bom_import
 from app.common import tab_cols
 from app.error import SqlTabError
-from app.sql import getDF, sql_check
-from app.tabs import NA_rows
+from app.tabs import ASCII_txt, NA_rows
 from inv import cli_parser
 
 
@@ -84,3 +80,20 @@ def test_tab_cols2(monkeypatch, tmpdir):
     with pytest.raises(SqlTabError) as err_info:
         tab_cols("test")
     assert err_info.match("test")
+
+
+def test_ASCII_txt_ohm_conversion():
+    """Test that ASCII_txt correctly converts 'Ω' to 'ohm'."""
+
+    # Test with the Omega symbol
+    assert ASCII_txt("100Ω") == "100ohm"
+    # Test with other non-ASCII characters
+    assert ASCII_txt("resistor 100Ω (示例文本)") == "resistor 100ohm "
+    # Test with no Omega symbol
+    assert ASCII_txt("standard resistor") == "standard resistor"
+    # Test with only the Omega symbol
+    assert ASCII_txt("Ω") == "ohm"
+    # Test with None
+    assert ASCII_txt(None) is None
+    # Test with NaN
+    assert ASCII_txt(pd.NA) is pd.NA

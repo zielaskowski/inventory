@@ -13,6 +13,7 @@ from app.common import (
     get_alternatives,
     print_file,
     read_json_dict,
+    tab_cols,
 )
 from app.tabs import NA_rows, align_data, hash_tab, tabs_in_data
 from conf import config as conf
@@ -139,7 +140,6 @@ def align() -> None:
     # write aligned data back to SQL
     tabs = tabs_in_data(dat)
     for t in tabs:
-        if t == "BOM":
-            sql.put(dat=dat.drop_duplicates(subset=[DEV_HASH, BOM_PROJECT]), tab=t)
-            continue
-        sql.put(dat=dat, tab=t)
+        must_cols, nice_cols = tab_cols(t)
+        tab_dat = NA_rows(dat, must_cols, nice_cols, inform=False)
+        sql.put(dat=tab_dat, tab=t)

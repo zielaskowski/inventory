@@ -10,8 +10,8 @@ if you mess up, <ESC>u undo the changes ;)
 1. to select one or more lines press <SHIFT>v and arrows; press <ESC> to cancel selection
 2. press <SPACE>p to copy from right to left panel
 3. press 'i' for manual editing the text, then <ESC> back to normal mode
-4. press <ESC>:wqa when you are happy; or <ESC>qa! to discard all changes
-5. press Q to abort the process
+4. press <ESC><Ctr>s when you are happy; or <ESC><Ctr>c to discard all changes and continue
+5. press <Shift>q to abort the process
 
 {% if MULTIPLE_MANUFACTURERS %}
 If there are more manufacturers in stock, they are showed like this:

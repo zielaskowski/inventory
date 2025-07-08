@@ -7,6 +7,7 @@ import pytest
 
 from app.admin import align
 from app.bom import bom_import
+from app.common import DEV_DESC, DEV_MAN
 from app.shop import shop_import
 from app.sql import getDF, sql_check
 from inv import cli_parser
@@ -265,9 +266,9 @@ def _setup_bom_data_for_align(cli, tmpdir):
     bom_file = tmpdir.join("bom_align_test.csv")
     with open(bom_file, "w", encoding="UTF8") as f:
         f.write(
-            "device_id,device_manufacturer,qty,project\n"
-            + "device1,MAN_A,10,proj1\n"
-            + "device1,MAN_B,20,proj2\n"
+            "device_id,device_manufacturer,qty,project,device_description\n"
+            + "device1,MAN_A,10,proj1,desc1\n"
+            + "device1,MAN_B,20,proj2,desc2\n"
         )
     args = cli.parse_args(
         ["bom", "-d", tmpdir.strpath, "-f", "bom_align_test", "-F", "csv"]
@@ -280,10 +281,10 @@ def _setup_shop_data_for_align(cli, tmpdir):
     shop_file = tmpdir.join("shop_align_test.csv")
     with open(shop_file, "w", encoding="UTF8") as f:
         f.write(
-            "device_id,device_manufacturer,price,order_qty,shop\n"
-            + "device1,MAN_C,1.1,10,shop1\n"
-            + "device1,MAN_D,1.2,9,shop2\n"
-            + "device1,MAN_E,1.3,8,shop3\n"
+            "device_id,device_manufacturer,price,order_qty,shop,device_description\n"
+            + "device1,MAN_C,1.1,10,shop1,desc4\n"
+            + "device1,MAN_D,1.2,9,shop2,desc5\n"
+            + "device1,MAN_E,1.3,8,shop3,desc6\n"
         )
     args = cli.parse_args(
         ["shop", "-d", tmpdir.strpath, "-f", "shop_align_test", "-F", "csv"]
@@ -313,8 +314,72 @@ def test_align_manufacturers_complex(monkeypatch, tmpdir, cli):
     assert initial_mans == {"MAN_A", "MAN_B", "MAN_C", "MAN_D", "MAN_E"}
 
     # 2. Mock the interactive part and run the alignment
+    with patch(
+        "app.tabs.vimdiff_selection",
+        side_effect=[
+            ["MAN_A"] * 5,
+            ["MAN_A"] * 5,
+            ["desc"],
+            ["desc"],
+            ["desc"],
+            ["desc"],
+            ["desc"],
+        ],
+    ):
+        align()
+
+    # 3. Verify the final state
+    final_devs = getDF(
+        tab="DEVICE", search=["device1"], where=["device_id"], follow=True
+    )
+
+    # There should be only one entry for 'device1' now
+    assert len(final_devs) == 1
+
+    # The manufacturer should be the one chosen in the mock
+    final_man = final_devs[DEV_MAN].iloc[0]
+    assert final_man == "MAN_A"
+
+    # the device description should the one chosen in he mock
+    final_desc = final_devs[DEV_DESC].iloc[0]
+    assert final_desc == "desc"
+
+    # Check that the BOM quantities have been correctly aggregated under the new unified device
+    bom_df = getDF(tab="BOM", follow=True)
+    assert bom_df.loc[bom_df["project"] == "proj1", "qty"].iloc[0] == 10
+    assert bom_df.loc[bom_df["project"] == "proj2", "qty"].iloc[0] == 20
+
+    # Check that shop data is preserved
+    shop_df = getDF(tab="SHOP", follow=True)
+    assert len(shop_df) == 3
+    assert set(shop_df["shop"]) == {"shop1", "shop2", "shop3"}
+
+
+def test_align_manufacturers_complex1(monkeypatch, tmpdir, cli):
+    """
+    Tests aligning a device with multiple manufacturers from both BOM and SHOP imports.
+    new manufacturer name
+    """
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
+    sql_check()
+
+    # 1. Setup initial data with conflicts
+    _setup_bom_data_for_align(cli, tmpdir)
+    _setup_shop_data_for_align(cli, tmpdir)
+
+    # Verify initial state: 5 different manufacturers for 'device1'
+    initial_devs = getDF(
+        tab="DEVICE", search=["device1"], where=["device_id"], follow=True
+    )
+    assert len(initial_devs) == 5
+    initial_mans = set(initial_devs["device_manufacturer"])
+    assert initial_mans == {"MAN_A", "MAN_B", "MAN_C", "MAN_D", "MAN_E"}
+
+    # 2. Mock the interactive part and run the alignment
     # The user is "choosing" UNIFIED_MANUFACTURER from the vimdiff
-    with patch("app.tabs.vimdiff_selection", return_value=["MAN_A"] * 5):
+    with patch("app.tabs.vimdiff_selection", return_value=["MAN"] * 5):
         align()
 
     # 3. Verify the final state
@@ -327,7 +392,7 @@ def test_align_manufacturers_complex(monkeypatch, tmpdir, cli):
 
     # The manufacturer should be the one chosen in the mock
     final_man = final_devs["device_manufacturer"].iloc[0]
-    assert final_man == "MAN_A"
+    assert final_man == "MAN"
 
     # Check that the BOM quantities have been correctly aggregated under the new unified device
     bom_df = getDF(tab="BOM", follow=True)
@@ -338,3 +403,89 @@ def test_align_manufacturers_complex(monkeypatch, tmpdir, cli):
     shop_df = getDF(tab="SHOP", follow=True)
     assert len(shop_df) == 3
     assert set(shop_df["shop"]) == {"shop1", "shop2", "shop3"}
+
+
+def _setup_bom_data_for_align1(cli, tmpdir):
+    """
+    Helper to import BOM data with conflicting manufacturers.
+    When chosen device has null in display_cols
+    """
+    bom_file = tmpdir.join("bom_align_test.csv")
+    with open(bom_file, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,qty,project,device_description\n"
+            + "device1,MAN_A,10,proj1\n"
+            + "device1,MAN_B,20,proj2,desc2\n"
+        )
+    args = cli.parse_args(
+        ["bom", "-d", tmpdir.strpath, "-f", "bom_align_test", "-F", "csv"]
+    )
+    bom_import(args)
+
+
+def test_align_manufacturers_complex2(monkeypatch, tmpdir, cli):
+    """
+    Tests aligning a device with multiple manufacturers from both BOM and SHOP imports.
+    make sure to ask also when None in new dev
+    """
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
+    sql_check()
+
+    # 1. Setup initial data with conflicts
+    _setup_bom_data_for_align1(cli, tmpdir)
+    _setup_shop_data_for_align(cli, tmpdir)
+
+    # Verify initial state: 5 different manufacturers for 'device1'
+    initial_devs = getDF(
+        tab="DEVICE", search=["device1"], where=["device_id"], follow=True
+    )
+    assert len(initial_devs) == 5
+    initial_mans = set(initial_devs["device_manufacturer"])
+    assert initial_mans == {"MAN_A", "MAN_B", "MAN_C", "MAN_D", "MAN_E"}
+
+    # 2. Mock the interactive part and run the alignment
+    with patch(
+        "app.tabs.vimdiff_selection",
+        side_effect=[
+            ["MAN_A"] * 5,
+            ["MAN_A"] * 5,
+            ["desc"],
+            ["desc"],
+            ["desc"],
+            ["desc"],
+            ["desc"],
+        ],
+    ):
+        align()
+
+    # 3. Verify the final state
+    final_devs = getDF(
+        tab="DEVICE", search=["device1"], where=["device_id"], follow=True
+    )
+
+    # There should be only one entry for 'device1' now
+    assert len(final_devs) == 1
+
+    # The manufacturer should be the one chosen in the mock
+    final_man = final_devs[DEV_MAN].iloc[0]
+    assert final_man == "MAN_A"
+
+    # The manufacturer should be the one chosen in the mock
+    final_desc = final_devs[DEV_DESC].iloc[0]
+    assert final_desc == "desc"
+
+    # Check that the BOM quantities have been correctly aggregated under the new unified device
+    bom_df = getDF(tab="BOM", follow=True)
+    assert bom_df.loc[bom_df["project"] == "proj1", "qty"].iloc[0] == 10
+    assert bom_df.loc[bom_df["project"] == "proj2", "qty"].iloc[0] == 20
+
+    # Check that shop data is preserved
+    shop_df = getDF(tab="SHOP", follow=True)
+    assert len(shop_df) == 3
+    assert set(shop_df["shop"]) == {"shop1", "shop2", "shop3"}
+
+
+# handle nicely when user change number of lines
+# or user abort other_cols alignment not going through all changed devices

@@ -205,8 +205,9 @@ def hash_tab(dat: pd.DataFrame) -> pd.DataFrame:
 def NA_rows(
     df: pd.DataFrame,
     must_cols: list[str],
-    nice_cols:list[str],
+    nice_cols: list[str],
     row_shift: int = 0,
+    inform: bool = True,
 ) -> pd.DataFrame:
     """
     check rows with any NA
@@ -222,7 +223,8 @@ def NA_rows(
     # check for nice cols
     nicer_cols = [c for c in nice_cols if c in df.columns]
     na_rows = df.loc[df.loc[:, nicer_cols].isna().any(axis=1)]
-    msg.na_rows(rows=na_rows, row_id=na_rows_id)
+    if inform:
+        msg.na_rows(rows=na_rows, row_id=na_rows_id)
     return df
 
 
@@ -307,16 +309,28 @@ def align_data(dat: pd.DataFrame, just_inform: bool = False) -> pd.DataFrame:
         return align_dat
     if just_inform:
         return dat
-    # create new hash after possibly changing manufacturer
-    align_dat = hash_tab(dat=align_dat)
     # select rows where change
     differ_row = dat[DEV_MAN] != align_dat[DEV_MAN]
+    # create new hash after possibly changing manufacturer
+    align_dat = hash_tab(dat=align_dat).loc[differ_row, :]
+    # keep new device in separate dataframe
+    keep_dev_hash = align_dat[DEV_HASH].drop_duplicates().to_list()
+    keep_dev = dat[dat[DEV_HASH].isin(keep_dev_hash)]
+    if len(keep_dev) != len(keep_dev_hash):
+        # new manufacturer name somwhere, device not existing in db
+        new_dev_hash = [c for c in keep_dev_hash if c not in dat[DEV_HASH]]
+        keep_dev = pd.concat(
+            [
+                keep_dev,
+                align_dat[align_dat[DEV_HASH].isin(new_dev_hash)].drop_duplicates(
+                    subset=[DEV_HASH]
+                ),
+            ],
+        )
     # possibly empty if no differ rows
     if not any(differ_row.to_list()):
         return dat
-    # on changed rows, mark incoming data hash to be removed (dev_rm)
-    # hash to remove (dev_rm) will be ignored if come from new data
-    # incoming data can be brand new or existing (from admin funcs)
+    # mark devs that will be removed (dev_rm and man_rm)
     align_dat = pd.concat(
         [
             dat.loc[differ_row, [DEV_HASH, DEV_MAN]].rename(
@@ -325,27 +339,33 @@ def align_data(dat: pd.DataFrame, just_inform: bool = False) -> pd.DataFrame:
                     DEV_MAN: "man_rm",
                 }
             ),  # fmt: ignore
-            align_dat.loc[differ_row, :],
+            align_dat,
         ],
         axis="columns",
     )  # fmt: ignore
     # align all other dev cols
-    align_dat = align_other_cols(dat=align_dat)
+    keep_dev = align_other_cols(rm_dat=align_dat, keep_dat=keep_dev) #pyright: ignore
     # user abort
-    if align_dat.empty:
-        return align_dat
+    if keep_dev.empty:
+        return keep_dev
     # add data from other tabs for devs we are going to remove
     # don't take old hashes, but rehash again
-    align_dat = sql.getDF_other_tabs(
-        dat=align_dat,
-        hash_list=align_dat["dev_rm"].to_list(),
+    keep_dev = pd.merge(
+        left=keep_dev,
+        right=align_dat.loc[:, ["dev_rm", DEV_HASH]],
+        on=DEV_HASH,
+        how="right",
+    )
+    keep_dev = sql.getDF_other_tabs(
+        dat=keep_dev,
+        hash_list=keep_dev["dev_rm"].to_list(),
         merge_on="dev_rm",
     )
-    align_dat = hash_tab(align_dat)
-    return align_dat
+    keep_dev = hash_tab(keep_dev)
+    return keep_dev
 
 
-def align_other_cols(dat: pd.DataFrame) -> pd.DataFrame:
+def align_other_cols(rm_dat: pd.DataFrame, keep_dat: pd.DataFrame) -> pd.DataFrame:
     """
     expect DataFrame with one pair replacement per row:
     and columns: dev_rm | man_rm | DEV_HASH | DEV_MAN
@@ -354,69 +374,50 @@ def align_other_cols(dat: pd.DataFrame) -> pd.DataFrame:
     return selected attributes attached in row to input dat
     """
     necessery_cols = ["dev_rm", "man_rm", DEV_HASH, DEV_MAN]
-    must_cols, nice_cols = tab_cols(tab="DEVICE")
-    if not all(c for c in dat.columns if c in must_cols + necessery_cols):
+    must_cols, _ = tab_cols(tab="DEVICE")
+    if not all(c for c in rm_dat.columns if c in must_cols + necessery_cols):
         sys.exit(1)
-    display_cols = [
-        c for c in must_cols + nice_cols if c not in [DEV_HASH, DEV_MAN, DEV_ID]
-    ]
-    dat.reset_index(
-        inplace=True, drop=True
-    )  # to be aligne after subsequent reset_index
-    for idx in dat.index:
-        row = dat.copy(deep=True).loc[idx, :]
+    keep_dat.set_index(DEV_HASH, inplace=True)
+    # collect all useful data from devices we are about to remove
+    for idx in rm_dat.index:
+        rm_attr = rm_dat.copy(deep=True).loc[idx, :]
         # collect attributes for devices that we want to use
-        use_attr = (
-            sql.getDF(
-                tab="DEVICE",
-                search=[row[DEV_HASH]],
-                where=[DEV_HASH],
-            )
-            .loc[:, display_cols]
-            .dropna(axis="columns")
-            .iloc[0, :]  # convert to Series
-        )
-        add_attr = row.loc[[c for c in display_cols if c in row]]
-        # if NA in add_attr or missing col, take from rm_attr if present
-        for idx, val in use_attr.items():
-            if idx not in add_attr:
-                add_attr[idx] = val
-            if add_attr[idx] is None:
-                add_attr[idx] = use_attr[idx]
-        # if NA in existing attributes use_attr
-        for idx, val in add_attr.items():
-            if idx not in use_attr:
-                use_attr[idx] = val
+        keep_attr = keep_dat.loc[keep_dat.index == rm_attr[DEV_HASH]].iloc[0, :]
+        change_man = keep_attr[DEV_MAN]
+        opt_man = rm_attr["man_rm"]
+        # if NA in rm_attr or missing col, take from add_attr if present
+        for idx, val in keep_attr.items():
+            if idx not in rm_attr:
+                rm_attr[idx] = val
+            if rm_attr[idx] is None:
+                rm_attr[idx] = keep_attr[idx]
+        # and oposite, then will be easy to remove the same
+        # keep nulls in add_attr, so user can change
+        for idx, val in rm_attr.items():
+            if idx not in keep_attr:
+                keep_attr[idx] = val
         # hide attributes which are already aligned
-        for idx, val in add_attr.items():
-            if val == use_attr[idx]:
-                add_attr.pop(idx)
-                use_attr.pop(idx)
-        if not add_attr.empty:
-            add_attr.sort_index(inplace=True)
-            use_attr.sort_index(inplace=True)
+        for idx, val in rm_attr.items():
+            if val == keep_attr[idx]:
+                rm_attr.pop(idx)
+                keep_attr.pop(idx)
+        if not keep_attr.empty:
+            rm_attr.sort_index(inplace=True)
+            keep_attr.sort_index(inplace=True)
             try:
                 aligned_dat = vimdiff_selection(
-                    ref_col={"column": add_attr.index.to_list()},
-                    change_col={str(row["man_rm"]): add_attr.to_list()},
-                    opt_col={str(row[DEV_MAN]): use_attr.to_list()},
+                    ref_col={"column": rm_attr.index.to_list()},
+                    change_col={change_man: keep_attr.to_list()},
+                    opt_col={opt_man: rm_attr.to_list()},
                     exit_on_change=False,
                 )
             except KeyboardInterrupt:
                 msg.msg("Interupted by user. Changes discarded.")
                 return pd.DataFrame()
-            if len(aligned_dat) == len(add_attr):
-                add_attr.iloc[:] = aligned_dat
-                row.update(add_attr)
-            dat.set_index(DEV_HASH, inplace=True)
-            row_df = (
-                pd.DataFrame([row])
-                .set_index(DEV_HASH)
-                .drop(columns=["dev_rm", "man_rm"])
-            )
-            dat.update(row_df)
-            dat.reset_index(inplace=True)
-    return dat
+            if len(aligned_dat) == len(keep_attr):
+                keep_attr.iloc[:] = aligned_dat
+            keep_dat.update(pd.DataFrame([keep_attr]))
+    return keep_dat.reset_index()
 
 
 def align_manufacturers(dat: pd.DataFrame, just_inform: bool = False) -> pd.DataFrame:
@@ -538,7 +539,7 @@ def vimdiff_selection(
             encoding="UTF8",
         ) as f:
             for ind, item in enumerate(cols[key + 1]):
-                f.write(str(ind) + "| " + item + "\n")  # add line number: '1| txt'
+                f.write(str(ind) + "| " + str(item) + "\n")  # add line number: '1| txt'
                 # other way diff may shift rows to align data between columns
 
     vimdiff_config(
@@ -573,7 +574,7 @@ def vimdiff_selection(
         # if user mess-up and added/removed rows
         return cols[change_v]
     # write 1to1 matches selected by user, so next time save some time
-    if DEV_MAN == cols[ref_k]:
+    if DEV_MAN == cols[change_k]:
         store_alternatives(
             alternatives={
                 cols[change_k]: cols[change_v],

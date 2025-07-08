@@ -97,6 +97,9 @@ autocmd TextChanged * call BufferChange()
 
 " Abort by emptying the file
 nnoremap Q :%d<CR>:wqa<CR>
+" windowish save and exit shortcuts
+nnoremap <C-s> :wqa<CR>
+nnoremap <C-c> :qa!<CR>
 
 " Map the <SPACE>pn key with pick function 
 " (take diffrence from other panel)
@@ -112,6 +115,8 @@ nnoremap <silent> <Leader>p8 :<C-u>call PickOption_nmode(8)<CR>
 nnoremap <silent> <Leader>p9 :<C-u>call PickOption_nmode(9)<CR>
 
 xnoremap <silent> <Leader>p  :<C-u>call PickOption_vmode()<CR>
+
+
 
 " coloring...anything but standard
 highlight DiffAdd    cterm=bold ctermfg=10 ctermbg=17 gui=none guifg=bg guibg=Red

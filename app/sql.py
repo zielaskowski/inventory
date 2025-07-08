@@ -147,7 +147,6 @@ def getDF_other_tabs(
             right_on=STOCK_HASH,
             how="left",
         ).drop(columns=[BOM_HASH, SHOP_HASH, STOCK_HASH], errors="ignore")
-    dat = dat.groupby(DEV_HASH).transform(lambda g: g.ffill().bfill())
     return dat
 
 

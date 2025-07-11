@@ -45,6 +45,7 @@ from app.error import (
     PrepareTabError,
     ScanDirPermissionError,
     SqlTabError,
+    VimdiffSelError,
 )
 from app.message import MessageHandler
 from conf import config as conf
@@ -88,14 +89,14 @@ def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:
     if tab == "BOM" and not check_existing_data(dat, args, file):
         return  # user do not want to overwrite nor add to existing data
 
-    # hash columns - must be last so all columns aligned and present
-    dat = hash_tab(dat=dat)
-
     # if we have stored alternatives, use it
     dat.loc[:, DEV_MAN], _ = get_alternatives(dat[DEV_MAN].to_list())
 
+    # hash columns - must be last so all columns aligned and present
+    dat = hash_tab(dat=dat)
+
     # check for different manufacturer on the same dev_id
-    # just inform taht alignment can be done with admin functions
+    # just inform that alignment can be done with admin functions
     align_data(dat=dat, just_inform=True)
 
     tabs = tabs_in_data(dat)
@@ -344,7 +345,7 @@ def align_data(dat: pd.DataFrame, just_inform: bool = False) -> pd.DataFrame:
         axis="columns",
     )  # fmt: ignore
     # align all other dev cols
-    keep_dev = align_other_cols(rm_dat=align_dat, keep_dat=keep_dev) #pyright: ignore
+    keep_dev = align_other_cols(rm_dat=align_dat, keep_dat=keep_dev)  # pyright: ignore
     # user abort
     if keep_dev.empty:
         return keep_dev
@@ -414,8 +415,13 @@ def align_other_cols(rm_dat: pd.DataFrame, keep_dat: pd.DataFrame) -> pd.DataFra
             except KeyboardInterrupt:
                 msg.msg("Interupted by user. Changes discarded.")
                 return pd.DataFrame()
-            if len(aligned_dat) == len(keep_attr):
-                keep_attr.iloc[:] = aligned_dat
+            except VimdiffSelError as err:
+                # if no change from user, skip
+                print(str(err))
+                if err.interact:
+                    input("Press any key....")
+                continue
+            keep_attr.iloc[:] = aligned_dat
             keep_dat.update(pd.DataFrame([keep_attr]))
     return keep_dat.reset_index()
 
@@ -503,6 +509,10 @@ def align_manufacturers(dat: pd.DataFrame, just_inform: bool = False) -> pd.Data
         except KeyboardInterrupt:
             msg.msg("Interupted by user. Changes discarded.")
             return pd.DataFrame()
+        except VimdiffSelError as err:
+            # user messed up with line numbers
+            print(str(err))
+            return pd.DataFrame()
         # if no change from user, finish
         if dat_dup[DEV_MAN].to_list() == chosen:
             break
@@ -571,8 +581,12 @@ def vimdiff_selection(
     chosen = [re.sub(r"^\d+\|\s*", "", c) for c in chosen]
     chosen = [c.strip() for c in chosen]
     if any(len(chosen) != len(cols[v]) for v in [ref_v, change_v, opt_v]):
-        # if user mess-up and added/removed rows
-        return cols[change_v]
+        # if user mess-up or added/removed rows
+        max_len = max(len(chosen), len(cols[opt_v]))
+        chosen += [None] * (max_len - len(chosen))
+        cols[opt_v] += [None] * (max_len - len(cols[opt_v]))
+        df = pd.DataFrame({"selected": chosen, "opts": cols[opt_v]})
+        raise VimdiffSelError(select=df, interact=DEV_MAN != cols[change_k])
     # write 1to1 matches selected by user, so next time save some time
     if DEV_MAN == cols[change_k]:
         store_alternatives(

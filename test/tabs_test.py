@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 from app.common import tab_cols
-from app.error import SqlTabError
+from app.error import SqlTabError, VimdiffSelError
 from app.tabs import ASCII_txt, NA_rows, vimdiff_selection
 from inv import cli_parser
 
@@ -145,3 +145,35 @@ def test_vimdiff_selection_handles_none_input():
     assert (
         found_none_write
     ), "A 'None' value was not correctly written to the temp file."
+
+
+def test_vimdiff_selection_raises_on_length_mismatch():
+    """
+    Test that vimdiff_selection raises VimdiffSelError if the user adds or removes
+    a line, causing the output length to mismatch the input length.
+    """
+
+    # 1. Setup: Input data
+    ref_col = {"ref": ["a", "b", "c"]}
+    change_col = {"change": ["val1", "val2", "val3"]}
+    opt_col = {"opt": ["opt1", "opt2", "opt3"]}
+
+    # 2. Simulate user deleting a line in vim
+    mock_read_data = "0| val1\n2| val3\n"  # Line 1 is missing
+
+    # 3. Mock external dependencies and expect the exception
+    m = mock_open(read_data=mock_read_data)
+    with patch("app.tabs.open", m), patch("app.tabs.vimdiff_config"), patch(
+        "subprocess.run"
+    ), patch("os.remove"):
+        with pytest.raises(VimdiffSelError) as excinfo:
+            vimdiff_selection(
+                ref_col=ref_col,
+                change_col=change_col,
+                opt_col=opt_col,
+                exit_on_change=True,
+            )
+    # 4. Assert that the error message contains the user's incorrect data
+    assert "val1" in str(excinfo.value)
+    assert "val3" in str(excinfo.value)
+    assert "val2" not in str(excinfo.value)

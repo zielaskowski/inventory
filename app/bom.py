@@ -1,8 +1,5 @@
 """
-BOM tools:
-    - import from file
-    - remove
-    - list
+BOM tools: import from file, list
 """
 
 import os
@@ -38,9 +35,6 @@ def bom_import(args: Namespace) -> None:
     if args.info:
         bom_info(tab="BOM")
         return
-    if args.remove:
-        bom_remove(args)
-        return
     if args.csv_template:
         bom_template(args=args, tab="BOM")
         return
@@ -59,17 +53,6 @@ def bom_import(args: Namespace) -> None:
             args=args,
             file=file,
         )
-
-
-def bom_remove(args: Namespace) -> None:
-    """
-    Remove from BOM table based on match on project column
-    Remove only not commited projects.
-    """
-    if (projects := prepare_project(projects=args.remove, commited=False)) == []:
-        return
-    sql.rm(tab="BOM", value=projects, column=[BOM_PROJECT])
-    msg.bom_remove(projects)
 
 
 def import_csv(file: str) -> pd.DataFrame:

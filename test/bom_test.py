@@ -3,6 +3,7 @@
 import pandas as pd
 import pytest
 
+from app.admin import admin
 from app.bom import bom_import, scan_files
 from app.sql import sql_check
 from inv import cli_parser
@@ -274,90 +275,6 @@ def test_bom_import_csv51(cli, monkeypatch, tmpdir):
     assert int(exp.loc[0, "qty"]) == 2
 
 
-def test_bom_import_csv6(cli, monkeypatch, tmpdir, capsys):
-    """remove from BOM all"""
-    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("conf.config.SCAN_DIR", "")
-    monkeypatch.setattr("conf.config.DEBUG", "pytest")
-    sql_check()
-    csv1 = tmpdir.join("test1.csv")
-    csv1.write("device_id,device_manufacturer,qty\n")
-    csv1.write("aa,bb,1", mode="a")
-    csv2 = tmpdir.join("test2.csv")
-    csv2.write("device_id,device_manufacturer,qty\n")
-    csv2.write("aa,bb,1", mode="a")
-    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
-    bom_import(args)
-    args = cli.parse_args(["bom", "--remove", "%"])
-    bom_import(args)
-    exp = tmpdir.join("exp.csv")
-    exp.write("")
-    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
-    bom_import(args)
-    out, _ = capsys.readouterr()
-    assert "no available not-commited projects." in out.lower()
-
-
-def test_bom_import_csv7(cli, monkeypatch, tmpdir):
-    """remove from BOM one project"""
-    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("conf.config.SCAN_DIR", "")
-    monkeypatch.setattr("conf.config.DEBUG", "pytest")
-    sql_check()
-    csv1 = tmpdir.join("test1.csv")
-    csv1.write("device_id,device_manufacturer,qty\n")
-    csv1.write("aa,bb,1", mode="a")
-    csv2 = tmpdir.join("test2.csv")
-    csv2.write("device_id,device_manufacturer,qty\n")
-    csv2.write("aa,bb,1", mode="a")
-    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
-    bom_import(args)
-    args = cli.parse_args(["bom", "--remove", "test1"])
-    bom_import(args)
-    exp = tmpdir.join("exp.csv")
-    exp.write("")
-    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
-    bom_import(args)
-    inp = pd.read_csv(csv2)
-    exp = pd.read_csv(exp)
-    common_cols = exp.columns.intersection(inp.columns)
-    exp = exp[common_cols]
-    assert exp.equals(inp[common_cols])
-
-
-def test_bom_import_csv9(cli, monkeypatch, tmpdir, capsys):
-    """remove from BOM project that do not exists"""
-    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("conf.config.SCAN_DIR", "")
-    monkeypatch.setattr("conf.config.DEBUG", "pytest")
-    sql_check()
-    csv1 = tmpdir.join("test1.csv")
-    csv1.write("device_id,device_manufacturer,qty\n")
-    csv1.write("aa,bb,1", mode="a")
-    csv2 = tmpdir.join("test2.csv")
-    csv2.write("device_id,device_manufacturer,qty\n")
-    csv2.write("aa,bb,1", mode="a")
-    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
-    bom_import(args)
-    args = cli.parse_args(["bom", "--remove", "test"])
-    bom_import(args)
-    exp = tmpdir.join("exp.csv")
-    exp.write("")
-    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
-    bom_import(args)
-    csv = tmpdir.join("csv.csv")
-    csv.write("device_id,device_manufacturer,qty\n")
-    csv.write("aa,bb,1\n", mode="a")
-    csv.write("aa,bb,1", mode="a")
-    inp = pd.read_csv(csv)
-    exp = pd.read_csv(exp)
-    common_cols = exp.columns.intersection(inp.columns)
-    exp = exp[common_cols]
-    assert exp.equals(inp[common_cols])
-    out, _ = capsys.readouterr()
-    assert "ambiguous abbreviation 'test'" in out.lower()
-
-
 def test_scan_files1(cli, monkeypatch, tmpdir):
     """expected behaviour"""
     monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
@@ -460,27 +377,6 @@ def test_export_show_all_projects(cli, monkeypatch, tmpdir, capsys):
     assert "test2" in out.lower()
 
 
-def test_remove_show_all_projects(cli, monkeypatch, tmpdir, capsys):
-    """show all projects possible to export"""
-    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("conf.config.SCAN_DIR", "")
-    monkeypatch.setattr("conf.config.DEBUG", "pytest")
-    sql_check()
-    csv1 = tmpdir.join("test1.csv")
-    csv1.write("device_id,device_manufacturer,qty\n")
-    csv1.write("aa,bb,1", mode="a")
-    csv2 = tmpdir.join("test2.csv")
-    csv2.write("device_id,device_manufacturer,qty\n")
-    csv2.write("aa,bb,1", mode="a")
-    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
-    bom_import(args)
-    args = cli.parse_args(["bom", "--remove", "?"])
-    bom_import(args)
-    out, _ = capsys.readouterr()
-    assert "test1" in out.lower()
-    assert "test2" in out.lower()
-
-
 def test_bom_export_committed_bool(cli, monkeypatch, tmpdir):
     """Check if BOM_COMMITED column is correctly converted to bool"""
     monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
@@ -508,4 +404,7 @@ def test_bom_export_committed_bool(cli, monkeypatch, tmpdir):
     result_df = pd.read_csv(export_path)
     assert "committed" in result_df.columns
     assert result_df["committed"].dtype == "bool"
-    assert bool(result_df.loc[result_df["project"] == "test2", "committed"].iloc[0]) is False
+    assert (
+        bool(result_df.loc[result_df["project"] == "test2", "committed"].iloc[0])
+        is False
+    )

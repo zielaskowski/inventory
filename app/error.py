@@ -2,6 +2,8 @@
 
 from typing import KeysView
 
+import pandas as pd
+
 from conf.config import SQL_SCHEME
 
 
@@ -96,6 +98,24 @@ class SqlCheckError(Exception):
 
     def __str__(self) -> str:
         return f"SQL check error: {self.message}"
+
+
+class VimdiffSelError(Exception):
+    """exception class"""
+
+    def __init__(
+        self,
+        select: pd.DataFrame,
+        *args: object,
+        interact: bool = False,
+    ) -> None:
+        self.message = "Do not remove or add rows.\n"
+        self.message += select.to_string(max_colwidth=40)
+        self.interact = interact
+        super().__init__(*args)
+
+    def __str__(self) -> str:
+        return f"Vimdiff selection error: \n{self.message}"
 
 
 class SqlCreateError(Exception):

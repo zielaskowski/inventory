@@ -5,11 +5,11 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-from app.admin import align
+from app.admin import admin, align, remove_dev
 from app.bom import bom_import
 from app.common import DEV_DESC, DEV_MAN
 from app.shop import shop_import
-from app.sql import getDF, sql_check
+from app.sql import getDF, rm, sql_check
 from inv import cli_parser
 
 
@@ -292,6 +292,80 @@ def _setup_shop_data_for_align(cli, tmpdir):
     shop_import(args)
 
 
+def _setup_data_for_remove_test(cli, tmpdir):
+    """Sets up BOM and DEVICE tables for remove_dev tests."""
+    bom_file = tmpdir.join("bom_remove_test.csv")
+    with open(bom_file, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,qty,project,device_description\n"
+            + "dev_in_safe_proj,MAN_A,1,proj_safe,desc_safe\n"
+            + "dev_to_remove,MAN_B,1,proj_to_remove,desc_remove\n"
+            + "dev_unused,MAN_C,100,dummy_project,desc_unused\n"  # This project will be removed
+        )
+    args = cli.parse_args(
+        ["bom", "-d", tmpdir.strpath, "-f", "bom_remove_test", "-F", "csv"]
+    )
+    bom_import(args)
+    # Remove the dummy project to leave dev_unused orphaned in the DEVICE table
+
+    rm(tab="BOM", value=["dummy_project"], column=["project"])
+
+
+def test_remove_dev_skip_project_devices(monkeypatch, tmpdir, cli):
+    """
+    Tests that remove_dev (with force=False) removes unused devices but
+    skips devices that are part of a project in the BOM table.
+    """
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    sql_check()
+    _setup_data_for_remove_test(cli, tmpdir)
+
+    # Attempt to remove an unused device and a device used in a project
+    remove_dev(dev=["dev_unused", "dev_to_remove"], force=False)
+
+    # Assertions
+    devices_after = getDF(tab="DEVICE")
+    bom_after = getDF(tab="BOM")
+
+    # dev_unused should be gone
+    assert "dev_unused" not in devices_after["device_id"].to_list()
+    # dev_to_remove should NOT be removed because it's in a project
+    assert "dev_to_remove" in devices_after["device_id"].to_list()
+    # The project containing dev_to_remove should still exist
+    assert "proj_to_remove" in bom_after["project"].to_list()
+    # The safe project and its device should be untouched
+    assert "proj_safe" in bom_after["project"].to_list()
+    assert "dev_in_safe_proj" in devices_after["device_id"].to_list()
+
+
+def test_remove_dev_force(monkeypatch, tmpdir, cli):
+    """
+    Tests that remove_dev (with force=True) removes devices everywhere,
+    including the projects they are part of in the BOM table.
+    """
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    sql_check()
+    _setup_data_for_remove_test(cli, tmpdir)
+
+    # Force remove an unused device and a device used in a project
+    remove_dev(dev=["dev_unused", "dev_to_remove"], force=True)
+
+    # Assertions
+    devices_after = getDF(tab="DEVICE")
+    bom_after = getDF(tab="BOM")
+
+    # Both dev_unused and dev_to_remove should be gone
+    assert "dev_unused" not in devices_after["device_id"].to_list()
+    assert "dev_to_remove" not in devices_after["device_id"].to_list()
+    # The project containing dev_to_remove should also be gone
+    assert "proj_to_remove" not in bom_after["project"].to_list()
+    # The safe project and its device should be untouched
+    assert "proj_safe" in bom_after["project"].to_list()
+    assert "dev_in_safe_proj" in devices_after["device_id"].to_list()
+
+
 def test_align_manufacturers_complex(monkeypatch, tmpdir, cli):
     """
     Tests aligning a device with multiple manufacturers from both BOM and SHOP imports.
@@ -379,7 +453,18 @@ def test_align_manufacturers_complex1(monkeypatch, tmpdir, cli):
 
     # 2. Mock the interactive part and run the alignment
     # The user is "choosing" UNIFIED_MANUFACTURER from the vimdiff
-    with patch("app.tabs.vimdiff_selection", return_value=["MAN"] * 5):
+    with patch(
+        "app.tabs.vimdiff_selection",
+        side_effect=[
+            ["MAN"] * 5,
+            ["MAN"] * 5,
+            ["desc1"],
+            ["desc1"],
+            ["desc1"],
+            ["desc1"],
+            ["desc1"],
+        ],
+    ):
         align()
 
     # 3. Verify the final state
@@ -487,5 +572,111 @@ def test_align_manufacturers_complex2(monkeypatch, tmpdir, cli):
     assert set(shop_df["shop"]) == {"shop1", "shop2", "shop3"}
 
 
-# handle nicely when user change number of lines
+# handle nicely when user change number of lines or remove line number
+
 # or user abort other_cols alignment not going through all changed devices
+
+
+def test_admin_project_remove1(cli, monkeypatch, tmpdir, capsys):
+    """remove from BOM all"""
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
+    sql_check()
+    csv1 = tmpdir.join("test1.csv")
+    csv1.write("device_id,device_manufacturer,qty\n")
+    csv1.write("aa,bb,1", mode="a")
+    csv2 = tmpdir.join("test2.csv")
+    csv2.write("device_id,device_manufacturer,qty\n")
+    csv2.write("aa,bb,1", mode="a")
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
+    bom_import(args)
+    args = cli.parse_args(["admin", "--remove_project", "%"])
+    admin(args)
+    exp = tmpdir.join("exp.csv")
+    exp.write("")
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
+    bom_import(args)
+    out, _ = capsys.readouterr()
+    assert "no available not-commited projects." in out.lower()
+
+
+def test_admin_project_remove2(cli, monkeypatch, tmpdir):
+    """remove from BOM one project"""
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
+    sql_check()
+    csv1 = tmpdir.join("test1.csv")
+    csv1.write("device_id,device_manufacturer,qty\n")
+    csv1.write("aa,bb,1", mode="a")
+    csv2 = tmpdir.join("test2.csv")
+    csv2.write("device_id,device_manufacturer,qty\n")
+    csv2.write("aa,bb,1", mode="a")
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
+    bom_import(args)
+    args = cli.parse_args(["admin", "--remove_project", "test1"])
+    admin(args)
+    exp = tmpdir.join("exp.csv")
+    exp.write("")
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
+    bom_import(args)
+    inp = pd.read_csv(csv2)
+    exp = pd.read_csv(exp)
+    common_cols = exp.columns.intersection(inp.columns)
+    exp = exp[common_cols]
+    assert exp.equals(inp[common_cols])
+
+
+def test_admin_project_remove3(cli, monkeypatch, tmpdir, capsys):
+    """remove from BOM project that do not exists"""
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
+    sql_check()
+    csv1 = tmpdir.join("test1.csv")
+    csv1.write("device_id,device_manufacturer,qty\n")
+    csv1.write("aa,bb,1", mode="a")
+    csv2 = tmpdir.join("test2.csv")
+    csv2.write("device_id,device_manufacturer,qty\n")
+    csv2.write("aa,bb,1", mode="a")
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
+    bom_import(args)
+    args = cli.parse_args(["admin", "--remove_project", "test"])
+    admin(args)
+    exp = tmpdir.join("exp.csv")
+    exp.write("")
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
+    bom_import(args)
+    csv = tmpdir.join("csv.csv")
+    csv.write("device_id,device_manufacturer,qty\n")
+    csv.write("aa,bb,1\n", mode="a")
+    csv.write("aa,bb,1", mode="a")
+    inp = pd.read_csv(csv)
+    exp = pd.read_csv(exp)
+    common_cols = exp.columns.intersection(inp.columns)
+    exp = exp[common_cols]
+    assert exp.equals(inp[common_cols])
+    out, _ = capsys.readouterr()
+    assert "ambiguous abbreviation 'test'" in out.lower()
+
+
+def test_remove_show_all_projects(cli, monkeypatch, tmpdir, capsys):
+    """show all projects possible to export"""
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
+    sql_check()
+    csv1 = tmpdir.join("test1.csv")
+    csv1.write("device_id,device_manufacturer,qty\n")
+    csv1.write("aa,bb,1", mode="a")
+    csv2 = tmpdir.join("test2.csv")
+    csv2.write("device_id,device_manufacturer,qty\n")
+    csv2.write("aa,bb,1", mode="a")
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
+    bom_import(args)
+    args = cli.parse_args(["admin", "--remove_project", "?"])
+    admin(args)
+    out, _ = capsys.readouterr()
+    assert "test1" in out.lower()
+    assert "test2" in out.lower()

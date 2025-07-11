@@ -7,47 +7,20 @@ import sys
 
 from app.admin import admin
 from app.bom import bom_import
-from app.commit import commit
 from app.common import AbbreviationParser, log, write_json
 from app.error import SqlCheckError, SqlCreateError
 from app.message import MessageHandler
 from app.shop import shop_import
 from app.sql import sql_check
+from app.stock import stock
 from app.transaction import trans
 from conf import config as conf
 
 msg = MessageHandler()
 
 
-def cli_parser() -> AbbreviationParser:
-    """command line parser definition"""
-    cli = AbbreviationParser(
-        description=f"""
-        INVentory management system.
-        Store information about available stock, devices info, and shop cost.
-        Also store BOM projects (list of devices).
-        
-        Typical workflow can be:
-        Scan all BOM files from location (including subfolders) and put 
-        into BOM table (each element into separate row). Scan only files 
-        inside 'bom|BOM' folder. Can be changed in config.py. Each imported file 
-        will be treated as project. You can combine multiple project and export to
-        file suitable for importing into shop cart. There is also a function to 
-        import Shoping cart with prices. If you import shop cart from many shops,
-        BOM can export separate file for each shop considering best cost combination.
-        Finaly, you can commit the selected projects, which will store the
-        devices in the STOCK table.
-
-        Output is written in stock.sql db file. If the file is not found, it will be
-        created based on sql_scheme.jsonc file.
-        Application can import exccel files in different formats (from different)
-        shops. Format description is in config file. Should be easy to extend.
-        Each execution of app is writing used arguments into log file. You cen setup 
-        in {conf.config_file()} file.""",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    command_parser = cli.add_subparsers(title="commands", dest="command")
-
+def _add_bom_import_parser(command_parser):
+    """Adds arguments for the 'bom_import' command."""
     cli_import_bom = command_parser.add_parser(
         "bom_import",
         allow_abbrev=True,
@@ -79,16 +52,18 @@ def cli_parser() -> AbbreviationParser:
     cli_import_bom.add_argument(
         "-e",
         "--export",
+        metavar="PROJECT",
         nargs="+",
         default=None,
         help="""Print data from BOM table, you can use abbreviations.
                 If --file is given, write to file as csv in --dir folder.
-                Use '%%' if you want to export all projects. Use '?' to
-                list available projects.""",
+                Use '%%' if you want to export all projects. Use '?'
+                (including single quote!) to list available projects.""",
         required=False,
     )
     cli_import_bom.add_argument(
         "--hide_columns",
+        metavar="COL",
         required=False,
         nargs="+",
         type=str,
@@ -110,15 +85,6 @@ def cli_parser() -> AbbreviationParser:
         help="""Import again (and replace) items in BOM table if not yet commited.""",
     )
     cli_import_bom.add_argument(
-        "--remove",
-        nargs="+",
-        default=None,
-        help="""Remove from BOM table all items from PROJECTs. Alowed are onyl
-                project which are not commited. Use '%%' if you want to remove 
-                all not commited projects. Use '?' to list available projects.
-                Do not touch any other table in DB.""",
-    )
-    cli_import_bom.add_argument(
         "--info",
         help="""Display info about necessery and acceptable columns for BOM table.""",
         required=False,
@@ -126,7 +92,8 @@ def cli_parser() -> AbbreviationParser:
     )
     cli_import_bom.add_argument(
         "--csv_template",
-        help="Save template csv with all columns to a file. Default is './template.csv'",
+        help="""Save template csv with all columns to a file.
+                Default is './template.csv'""",
         required=False,
         nargs="?",
         const="./template.csv",
@@ -134,6 +101,9 @@ def cli_parser() -> AbbreviationParser:
     )
     cli_import_bom.set_defaults(func=bom_import)
 
+
+def _add_shop_cart_import_parser(command_parser):
+    """Adds arguments for the 'shop_cart_import' command."""
     cli_import_cart = command_parser.add_parser(
         "shop_cart_import",
         allow_abbrev=True,
@@ -178,6 +148,9 @@ def cli_parser() -> AbbreviationParser:
     )
     cli_import_cart.set_defaults(func=shop_import)
 
+
+def _add_transact_parser(command_parser):
+    """Adds arguments for the 'transact' command."""
     cli_transact = command_parser.add_parser(
         "transact",
         allow_abbrev=True,
@@ -225,25 +198,40 @@ def cli_parser() -> AbbreviationParser:
     )
     cli_transact.set_defaults(func=trans)
 
-    cli_commit = command_parser.add_parser(
-        "commit",
-        help="""commit selected projects and update stock.""",
-    )
-    cli_commit.add_argument(
-        "-p", "--project", help="project name to commit", required=True
-    )
-    cli_commit.set_defaults(func=commit)
 
+def _add_stock_parser(command_parser):
+    """Adds arguments for the 'stock' command."""
+    cli_stock = command_parser.add_parser(
+        "stock",
+        help="""stock operations: add, remove, display.""",
+    )
+    cli_stock.add_argument(
+        "-p",
+        "--project",
+        nargs="+",
+        default=None,
+        help="""Commit PROJECTs. Add all devices from selected projects
+                to the stock, use --qty option to multiply quantity.
+                Use '%%' if you want to commit all projects.
+                Use '?' (including single quote!) to list available projects.""",
+    )
+    cli_stock.add_argument(
+        "-q",
+        "--qty",
+        type=int,
+        default=1,
+        required=False,
+        help="""Quantity used to multiply device qty inside projects for commit.""",
+    )
+    cli_stock.set_defaults(func=stock)
+
+
+def _add_admin_parser(command_parser):
+    """Adds arguments for the 'admin' command."""
     cli_admin = command_parser.add_parser(
         "admin", help="Admin functions. Be responsible."
     )
     admin_group = cli_admin.add_mutually_exclusive_group(required=True)
-    admin_group.add_argument(
-        "-a",
-        "--align_manufacturers",
-        action="store_true",
-        help="align manufacturers",
-    )
     admin_group.add_argument(
         "-c",
         "--config",
@@ -251,7 +239,25 @@ def cli_parser() -> AbbreviationParser:
         help="Show current config",
     )
     admin_group.add_argument(
+        "-a",
+        "--align_manufacturers",
+        action="store_true",
+        help="""align manufacturers for the same dvices. Will ask user for selection""",
+    )
+    admin_group.add_argument(
+        "--remove_project",
+        metavar="PROJECT",
+        nargs="+",
+        default=None,
+        help="""Remove from BOM table all items from PROJECTs. Alowed are only
+                projects which are not commited, ore use --force option.
+                Use '%%' if you want to remove all not commited projects.
+                Use '?' (including single quote!) to list available projects.
+                Do not touch any other table in DB.""",
+    )
+    admin_group.add_argument(
         "--remove_dev_id",
+        metavar="DEV_ID",
         nargs="+",
         default=False,
         help="""Clean all devices from list using device part number. Also from all other tables.
@@ -260,7 +266,8 @@ def cli_parser() -> AbbreviationParser:
     )
     admin_group.add_argument(
         "--remove_shop_id",
-        nargs="*",
+        metavar="SHOP_ID",
+        nargs="+",
         default=False,
         help="""Remove shop part number from shop table.
                 You can read part number from csv file, see --csv option.
@@ -270,7 +277,7 @@ def cli_parser() -> AbbreviationParser:
         "-F",
         "--force",
         action="store_true",
-        help="Force remove all devices from list. Including project tables.",
+        help="Force remove all devices from list. Including devices in project tables.",
     )
     cli_admin.add_argument(
         "--csv",
@@ -293,6 +300,42 @@ def cli_parser() -> AbbreviationParser:
         help="What value use to filter in filter_col in csv file.",
     )
     cli_admin.set_defaults(func=admin)
+
+
+def cli_parser() -> AbbreviationParser:
+    """command line parser definition"""
+    cli = AbbreviationParser(
+        description=f"""
+        INVentory management system.
+        Store information about available stock, devices info, and shop cost.
+        Also store BOM projects (list of devices).
+        
+        Typical workflow can be:
+        Scan all BOM files from location (including subfolders) and put 
+        into BOM table (each element into separate row). Scan only files 
+        inside 'bom|BOM' folder. Can be changed in config.py. Each imported file 
+        will be treated as project. You can combine multiple project and export to
+        file suitable for importing into shop cart. There is also a function to 
+        import Shoping cart with prices. If you import shop cart from many shops,
+        BOM can export separate file for each shop considering best cost combination.
+        Finaly, you can commit the selected projects, which will store the
+        devices in the STOCK table.
+
+        Output is written in stock.sql db file. If the file is not found, it will be
+        created based on sql_scheme.jsonc file.
+        Application can import exccel files in different formats (from different)
+        shops. Format description is in config file. Should be easy to extend.
+        Each execution of app is writing used arguments into log file. You cen setup 
+        in {conf.config_file()} file.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    command_parser = cli.add_subparsers(title="commands", dest="command")
+
+    _add_bom_import_parser(command_parser)
+    _add_shop_cart_import_parser(command_parser)
+    _add_transact_parser(command_parser)
+    _add_stock_parser(command_parser)
+    _add_admin_parser(command_parser)
 
     return cli
 

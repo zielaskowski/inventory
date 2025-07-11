@@ -338,14 +338,25 @@ def check_dir_file(args: argparse.Namespace) -> list[str]:
     return files
 
 
-def unpack_foreign(foreign: dict[str, str]) -> tuple[str, str, str]:
+def unpack_foreign(foreign: dict[str, str] | None | list) -> tuple[str, str, str]:
     """
     read foreign key from sql_scheme
+    expected input:
+        sql_scheme[tab].get('FOREIGN') -> list[dict] | None
+        for foreign in sql_scheme[tab].get('FOREIGN',[]) -> dict
+    tab without FOREIGN key will return None: mean DEVICE tab
     returns col which is connected and destination table and column
     """
-    col = list(foreign.keys())[0]
+    # DEVICE is very special: do not have FOREIGN key
+    if foreign is None:
+        return "hash", "", ""
+    if isinstance(foreign, list):
+        foreign_dict = foreign[0]
+    else:
+        foreign_dict = foreign
+    col = list(foreign_dict.keys())[0]
     # get foreign table and column
-    f_tab_col = list(foreign.values())[0]
+    f_tab_col = list(foreign_dict.values())[0]
 
     # get foreign_tab
     (
@@ -422,8 +433,7 @@ def foreign_tabs(tab: str) -> list[str]:
     tab_exists(tab)  # will raise sql_tabError if not
     sql_scheme = read_json_dict(conf.SQL_SCHEME)
     tabs = []
-    f_keys = sql_scheme[tab].get("FOREIGN", [])
-    for k in f_keys:
+    for k in sql_scheme[tab].get("FOREIGN", []):
         _, f_tab, _ = unpack_foreign(k)
         tabs += [f_tab]
     return tabs

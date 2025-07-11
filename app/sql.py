@@ -152,6 +152,12 @@ def getDF_other_tabs(
 
 def rm_all_tabs(hash_list: list[str]) -> None:
     """remove from all tabs per hash list"""
+    sql_schem = read_json_dict(conf.SQL_SCHEME)
+    tabs = list(sql_schem.keys())
+    tab_hash = []
+    for t in tabs:
+        th, _, _ = unpack_foreign(sql_schem[t].get("FOREIGN"))
+        tab_hash.append(th)
     for table, hash_col in {
         "BOM": BOM_HASH,
         "SHOP": SHOP_HASH,
@@ -205,7 +211,7 @@ def getL(
     return [] if df.empty else list(df.to_dict(orient="list").values())[0]
 
 
-def norm_to_set_str(
+def norm_to_list_str(
     norm: List[str] | List[int] | List[bool] | Set[str] | pd.Series,
 ) -> list[str]:
     """
@@ -251,13 +257,13 @@ def get(
     if where is None:
         where = all_cols
     else:
-        where = set(norm_to_set_str(where))
+        where = set(norm_to_list_str(where))
     if get_col is None:
         get_col = all_cols
     else:
-        get_col = set(norm_to_set_str(get_col))
+        get_col = set(norm_to_list_str(get_col))
     if search is not None:
-        search = norm_to_set_str(search)
+        search = norm_to_list_str(search)
         search = __escape_quote__(search)
 
     sql_scheme = read_json_dict(conf.SQL_SCHEME)
@@ -266,18 +272,24 @@ def get(
         follow = False
 
     if follow:
-        resp = __get_tab__(tab=tab, get_col=all_cols, search=search, where=where)
-        for r, r_tab in resp.items():
-            if not r_tab.empty:
-                for f in sql_scheme[tab]["FOREIGN"]:
-                    col, f_tab, f_col = unpack_foreign(f)
-                    f_df = getDF(tab=f_tab)
-                    r_tab = r_tab.merge(f_df, left_on=col, right_on=f_col)
-                    if get_col != all_cols:
-                        if any(c not in r_tab.columns for c in get_col):
-                            raise SqlGetError(get_col, r_tab.columns.to_list())
-                        r_tab = r_tab[list(get_col)]
-                    resp[r] = r_tab  # type: ignore
+        # get tab DF and all that follow
+        base_tab = getDF(tab=tab)
+        for f in sql_scheme[tab].get("FOREIGN", []):
+            col, f_tab, f_col = unpack_foreign(f)
+            f_df = getDF(tab=f_tab)
+            base_tab = base_tab.merge(f_df, left_on=col, right_on=f_col)
+        # mock __get_tab__ response
+        # key for each column to search and value for DF
+        resp = {}
+        for w in where:
+            if search:
+                resp[w] = base_tab.loc[base_tab[w].isin(search), :]
+            else:
+                resp[w] = base_tab
+            if get_col != all_cols:
+                if any(c not in resp[w].columns for c in get_col):
+                    raise SqlGetError(get_col, resp[w].columns.to_list())
+                resp[w] = resp[w].loc[:, list(get_col)]
 
     else:
         if any(g not in all_cols for g in get_col):
@@ -332,8 +344,8 @@ def rm(
         __sql_execute__([cmd])
         return
 
-    value = norm_to_set_str(value)
-    column = norm_to_set_str(column)
+    value = norm_to_list_str(value)
+    column = norm_to_list_str(column)
     for c in column:
         placeholders = ",".join("?" * len(value))
         cmd = f"DELETE FROM {tab} WHERE {c} IN ({placeholders})"

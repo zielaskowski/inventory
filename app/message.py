@@ -62,7 +62,7 @@ class MessageHandler:
 
     def file_already_imported(self, file: str) -> bool:
         """message method"""
-        if config.DEBUG == "pytest":
+        if config.DEBUG in ["pytest", "debugpy"]:
             return True
         self.message.append(f"File {file} was already imported.")
         self.message.append("Consider using option --overwrite.")
@@ -76,7 +76,7 @@ class MessageHandler:
 
     def inform_alternatives(self, alternatives: pd.DataFrame) -> bool:
         """found manufacturer alternatives. Do you accept?"""
-        if config.DEBUG == "pytest":
+        if config.DEBUG in ["pytest", "debugpy"]:
             return True
         self.message.append("Found manufacturer alternative names for incoming data")
         self.message.append(
@@ -103,6 +103,13 @@ class MessageHandler:
     def bom_remove(self, project: list[str]) -> None:
         """message method"""
         self.message.append(f"Removed data from BOM table where project == '{project}'")
+        self.__exec__()
+
+    def bom_commit(self, project: list[str]) -> None:
+        """message method"""
+        self.message.append(
+            f"Commited data from BOM table where project == '{project}'"
+        )
         self.__exec__()
 
     def bom_prepare_projects(

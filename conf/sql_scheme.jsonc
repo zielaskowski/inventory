@@ -15,7 +15,7 @@
     //** ON_CONFLICT 	 describes action to perform on conflict on table level 
     //**             	 (so can be only one). If missing REAPLCE is default
     //**		{
-    //**		'action': UPDATE SET|REPLACE|NOTHING|FAIL|ABORT|ROLLBACK
+    //**		'action': UPDATE SET|REPLACE|IGNORE|FAIL|ABORT|ROLLBACK
     //**		'unique_col':[cols] //may be from UNIQUE or PRIMARY KEY
     //**		'add_col':[cols] //UPDATE will add new value to existing
     //**		}
@@ -36,7 +36,7 @@
 	"dev_category2": "TEXT",
         "ON_CONFLICT": 
             {
-                "action": "REPLACE"
+                "action": "IGNORE"
             }
         ,
 	//** 'hash' col must be present in table

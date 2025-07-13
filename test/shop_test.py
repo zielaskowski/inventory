@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from app.common import DEV_MAN
-from app.shop import shop_import
+from app.import_dat import shop_import
 from app.sql import getDF, put, sql_check
 from app.tabs import align_manufacturers, columns_align, foreign_tabs, prepare_tab
 from inv import cli_parser
@@ -206,7 +206,7 @@ def test_shop_import_csv7(monkeypatch, tmpdir, cli):
     with open(test3, "w", encoding="UTF8") as f:
         f.write("device_id,device_manufacturer,device_description,order_qty,price\n")
         f.write("aa,ab,desc2,1,10\n")
-        f.write("aa,aa,desc3,1,10")
+        f.write("aa,aa,desc1,1,10")
 
     inp = pd.read_csv(test3)
     exp = getDF(tab="DEVICE")

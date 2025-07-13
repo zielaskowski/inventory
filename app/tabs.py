@@ -63,12 +63,6 @@ def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:
         args=args,
     )
 
-    # if 'price' in columns and device_id
-    if "price" in dat.columns and tab == "BOM":
-        print('Add shop cart with "shop_cart_import" command.')
-        print("skiping this file.")
-        return
-
     # existing device for summary info reasons
     ex_devs = sql.getL(tab="DEVICE", get_col=[DEV_HASH])
 
@@ -99,9 +93,13 @@ def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:
     # just inform that alignment can be done with admin functions
     align_data(dat=dat, just_inform=True)
 
+    # inform if data useful for other tabs is present
     tabs = tabs_in_data(dat)
-    # write aligned data back to SQL
-    for t in tabs:
+    if "SHOP" in tabs and tab != 'SHOP':
+        msg.msg("Detected data usefull also for SHOP table.")
+        msg.msg("Consider importing with 'shop_cart_import' option.")
+    # write aligned data to SQL
+    for t in ["DEVICE", tab]:
         sql.put(dat=dat, tab=t)
 
     # SUMMARY
@@ -270,7 +268,7 @@ def columns_align(n_stock: pd.DataFrame, file: str, args: Namespace) -> pd.DataF
     n_stock[BOM_FORMAT] = args.format
     n_stock[SHOP_DATE] = date.today().strftime("%Y-%m-%d")
     if SHOP_SHOP not in n_stock.columns:
-        n_stock[SHOP_SHOP] = args.format
+        n_stock[SHOP_SHOP] = conf.import_format[args.format].get("shop", args.format)
 
     return n_stock
 
@@ -624,7 +622,7 @@ def check_existing_data(dat: pd.DataFrame, args: Namespace, file: str) -> bool:
     return True
 
 
-def prepare_project(projects: list[str], commited: bool) -> list[str]:
+def prepare_project(projects: list[str], committed: bool) -> list[str]:
     """
     prepare list of projects based on provided args:
     - '%' all projects
@@ -632,7 +630,7 @@ def prepare_project(projects: list[str], commited: bool) -> list[str]:
     if 'commited==False', limit search to not commited projects only
     can abreviate names
     """
-    if commited:
+    if committed:
         commit_search = ["%"]
     else:
         commit_search = [False]
@@ -721,7 +719,7 @@ def scan_files(args) -> list[str]:
     return list(set(files))
 
 
-def bom_info(tab: str, silent: bool = False) -> list[str]:
+def tab_info(tab: str, silent: bool = False) -> list[str]:
     """diplay info about columns in BOM table"""
     try:
         must_col, nice_col = tab_cols(tab)
@@ -735,9 +733,9 @@ def bom_info(tab: str, silent: bool = False) -> list[str]:
     return must_col + nice_col
 
 
-def bom_template(tab: str, args: Namespace) -> None:
+def tab_template(tab: str, args: Namespace) -> None:
     """save csv tempalete to a file"""
-    cols = pd.Series(bom_info(tab=tab, silent=True))
+    cols = pd.Series(tab_info(tab=tab, silent=True))
     csv = pd.DataFrame(columns=cols)
     csv.to_csv(args.csv_template, index=False)
     msg.msg(f"template written to {args.csv_template}")

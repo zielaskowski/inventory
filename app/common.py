@@ -67,7 +67,7 @@ NO_EXPORT_COLS = [
     SHOP_HASH,
     "id",
 ]  # columns not exported
-IMPORT_FORMAT_SPECIAL_KEYS = ["cols", "dtype", "func", "file_ext"]
+IMPORT_FORMAT_SPECIAL_KEYS = ["cols", "dtype", "func", "file_ext", "shop"]
 
 msg = MessageHandler()
 
@@ -297,7 +297,7 @@ def find_files(directory: str, file_format: str) -> list:
     console_width = shutil.get_terminal_size().columns
     match_files = []
     file_ext = conf.import_format[file_format]["file_ext"]
-    s_dir = conf.SCAN_DIR
+    s_dir = conf.SCAN_DIR.upper()
     msg.msg(f"searching for *.{file_ext} files in {s_dir} folder:")
     for folder, _, files in os.walk(directory):
         for file in files:
@@ -309,7 +309,7 @@ def find_files(directory: str, file_format: str) -> list:
             cur_dir = cur_dir.split("/")[-1].upper()
             if s_dir == "":
                 s_dir = cur_dir
-            if cur_dir == s_dir.upper():
+            if cur_dir == s_dir or (conf.INCLUDE_SUB_DIR and s_dir in folder.upper()):
                 if any(file.endswith(e) for e in file_ext):
                     match_files.append(os.path.join(folder, file))
     print(" " * 200, end="\r")
@@ -334,6 +334,7 @@ def check_dir_file(args: argparse.Namespace) -> list[str]:
                 file=args.file,
                 directory=args.dir,
                 project=getattr(args, "project", args.file),
+                scan_dir=conf.SCAN_DIR,
             )
     return files
 

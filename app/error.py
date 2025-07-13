@@ -68,12 +68,12 @@ class CheckDirError(Exception):
     ) -> None:
         if not project:
             self.message = (
-                f"{directory} is not existing."
-                + f"or no {scan_dir} folder in {directory} directory"
+                f"'{directory}' is not existing, "
+                + f"or no '{scan_dir}' folder in '{directory}' directory"
             )
         else:
             self.message = (
-                f"For project '{project}', " 
+                f"For project '{project}', "
                 + f"file '{file}' is missing or corrupted,\n"
         )# fmt: skip
         super().__init__(*args)

@@ -27,7 +27,7 @@ App developed with followin workflow in mind:
 5. export BOM again, after adding cost and avaialbility, to use as import file for
 web_shop. This allow split between shops considering best cost.
 
-6. finally all data can be stored in project table and stock table.
+6. finally all data can be stored stock table.
 
 ## FUZZY SEARCH
 
@@ -53,12 +53,19 @@ bindkey '^s' fuzzy_search_inventory
 ```
 
 FZF and zsh do some magic with scripts and it was not possible to define all in `.zshrc`
-So column extraction, copying to clipboard and notification is separated ino bash script.
-Clipboard coping and notification is very platform dependent, here WAYLAND and KDE.
+So column extraction, copying to clipboard and notification is separated ino
+bash script. Clipboard coping and notification is very platform dependent, here
+WAYLAND and KDE.
 
-## NOT IMPLEMENTED
+## NOT IMPLEMENTED / PROBLEMS
 
-BOM can be comited to write a project, and fill stock table based on ordered quantity
+1. remove commited column and related functions
+2. change stock --commit with --use: remove all devs from project from stock
+3. remove single dev from stock (with fuzzy search)
+4. when file not present in search, very misleading info about missing folder
+5. by default devices are not updated. add option to call align_other_cols()
+on upcoming data
+6. warn when adding existing devs to stock: similar like BOM, add --overwrite option
 
 ## WISH LIST
 

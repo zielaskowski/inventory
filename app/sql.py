@@ -35,7 +35,7 @@ DB structure is described in ./conf/sql_scheme.json
 """
 
 
-def put(dat: pd.DataFrame, tab: str) -> Dict:
+def put(dat: pd.DataFrame, tab: str, on_conflict: dict | None = None) -> Dict:
     """
     put DataFrame into sql at table=tab
     takes from DataFrame only columns present in sql table
@@ -53,7 +53,8 @@ def put(dat: pd.DataFrame, tab: str) -> Dict:
     )
     # define action on conflict
     # on_conflict is a list of dictionary defined in sql_scheme.jsonc
-    on_conflict = sql_scheme[tab].get("ON_CONFLICT", {})
+    if on_conflict is None:
+        on_conflict = sql_scheme[tab].get("ON_CONFLICT", {})
     # add new data to sql
     sql_columns = tab_columns(tab)
     # take only columns applicable to table
@@ -350,6 +351,19 @@ def rm(
         placeholders = ",".join("?" * len(value))
         cmd = f"DELETE FROM {tab} WHERE {c} IN ({placeholders})"
         __sql_execute__([cmd], value)
+
+
+def edit(
+    tab: str,
+    new_val: str,
+    col: str,
+    search: list[str],
+    where: str,
+) -> None:
+    """Update table in db"""
+    placeholder = ",".join("?" * len(search))
+    cmd = f"UPDATE {tab} SET {col} = {new_val} WHERE {where} IN ({placeholder})"
+    __sql_execute__([cmd], search)
 
 
 def tab_columns(tab: str) -> set[str]:

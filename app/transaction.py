@@ -34,7 +34,7 @@ def trans(args: Namespace):
     Can split into available shops based on best price
     Will inform if device_id in shop but with different manufacturer
     """
-    project = prepare_project(args.project, commited=False)
+    project = prepare_project(args.project, committed=False)
     if project == []:
         return
     # read BOM table from sql

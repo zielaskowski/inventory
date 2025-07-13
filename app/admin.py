@@ -12,16 +12,12 @@ from app.common import (
     BOM_PROJECT,
     DEV_HASH,
     DEV_ID,
-    DEV_MAN,
     SHOP_ID,
-    get_alternatives,
     print_file,
-    read_json_dict,
     tab_cols,
 )
 from app.message import MessageHandler
-from app.tabs import NA_rows, align_data, hash_tab, prepare_project, tabs_in_data
-from conf import config as conf
+from app.tabs import NA_rows, align_data, prepare_project, tabs_in_data
 
 msg = MessageHandler()
 
@@ -50,7 +46,7 @@ def admin(args: Namespace) -> None:
     if args.remove_dev_id:
         if not ids:
             ids = args.remove_dev_id
-        dev = remove_dev(ids, "device_id", args.force)
+        dev = remove_dev(ids, args.force)
         msg.msg(f"removed {len(dev)} devices")
         sys.exit(1)
 
@@ -73,7 +69,7 @@ def remove_project(args: Namespace) -> None:
     if (
         projects := prepare_project(
             projects=args.remove_project,
-            commited=False,
+            committed=False,
         )
     ) == []:
         return
@@ -132,4 +128,7 @@ def align() -> None:
     for t in tabs:
         must_cols, nice_cols = tab_cols(t)
         tab_dat = NA_rows(dat, must_cols, nice_cols, inform=False)
-        sql.put(dat=tab_dat, tab=t)
+        on_conflict = None
+        if t == "DEVICE":
+            on_conflict = {"action": "REPLACE"}
+        sql.put(dat=tab_dat, tab=t, on_conflict=on_conflict)

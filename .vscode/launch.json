@@ -195,6 +195,16 @@
             "console": "integratedTerminal",
             "args": ["./test/admin_test.py"],
 	    "justMyCode":true
+	},
+	{
+
+            "name": "pytest-stock",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "console": "integratedTerminal",
+            "args": ["./test/stock_test.py"],
+	    "justMyCode":true
 	}
     ]
 }

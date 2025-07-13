@@ -5,8 +5,7 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-from app.bom import bom_import
-from app.shop import shop_import
+from app.import_dat import bom_import, shop_import
 from app.sql import sql_check
 from app.transaction import trans
 from conf.config import DISP_CURR

@@ -6,9 +6,8 @@ import pandas as pd
 import pytest
 
 from app.admin import admin, align, remove_dev
-from app.bom import bom_import
 from app.common import DEV_DESC, DEV_MAN
-from app.shop import shop_import
+from app.import_dat import bom_import, shop_import
 from app.sql import getDF, rm, sql_check
 from inv import cli_parser
 

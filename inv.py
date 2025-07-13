@@ -6,13 +6,11 @@ import os
 import sys
 
 from app.admin import admin
-from app.bom import bom_import
 from app.common import AbbreviationParser, log, write_json
 from app.error import SqlCheckError, SqlCreateError
+from app.import_dat import bom_import, shop_import, stock_import
 from app.message import MessageHandler
-from app.shop import shop_import
 from app.sql import sql_check
-from app.stock import stock
 from app.transaction import trans
 from conf import config as conf
 
@@ -133,8 +131,26 @@ def _add_shop_cart_import_parser(command_parser):
         default=list(conf.import_format.keys())[0],  # LCSC
     )
     cli_import_cart.add_argument(
+        "-e",
+        "--export",
+        action="store_true",
+        default=None,
+        help="""Print data from STOCK table, you can use abbreviations.
+                If --file is given, write to file as csv in --dir folder.""",
+        required=False,
+    )
+    cli_import_cart.add_argument(
+        "--hide_columns",
+        metavar="COL",
+        required=False,
+        nargs="+",
+        type=str,
+        help="hide columns during export",
+        default=None,
+    )
+    cli_import_cart.add_argument(
         "--info",
-        help="""Display info about necessery and acceptable columns for BOM table.""",
+        help="""Display info about necessery and acceptable columns for SHOP table.""",
         required=False,
         action="store_true",
     )
@@ -206,6 +222,47 @@ def _add_stock_parser(command_parser):
         help="""stock operations: add, remove, display.""",
     )
     cli_stock.add_argument(
+        "-d",
+        "--dir",
+        help="""Directory to start scaning for files to be imported.
+                Scan only in 'BOM' folder (can be change in config.py)""",
+        required=False,
+    )
+    cli_stock.add_argument(
+        "-f",
+        "--file",
+        help="""xls/xlsx/csv file to import. Select proper format (can be extendeed in config.py).
+                Will import only files where FILE is within file name. Case sensitive.
+                Default: all files.""",
+        required=False,
+    )
+    cli_stock.add_argument(
+        "-F",
+        "--format",
+        help=f"format of file to import, possible values: {list(conf.import_format.keys())}.\
+                Default is {list(conf.import_format.keys())[4]}",
+        required=False,
+        default=list(conf.import_format.keys())[4],  # csv_LCSC
+    )
+    cli_stock.add_argument(
+        "-e",
+        "--export",
+        action="store_true",
+        default=None,
+        help="""Print data from STOCK table, you can use abbreviations.
+                If --file is given, write to file as csv in --dir folder.""",
+        required=False,
+    )
+    cli_stock.add_argument(
+        "--hide_columns",
+        metavar="COL",
+        required=False,
+        nargs="+",
+        type=str,
+        help="hide columns during export",
+        default=None,
+    )
+    cli_stock.add_argument(
         "-p",
         "--project",
         nargs="+",
@@ -223,7 +280,21 @@ def _add_stock_parser(command_parser):
         required=False,
         help="""Quantity used to multiply device qty inside projects for commit.""",
     )
-    cli_stock.set_defaults(func=stock)
+    cli_stock.add_argument(
+        "--info",
+        help="""Display info about necessery and acceptable columns for STOCK table.""",
+        required=False,
+        action="store_true",
+    )
+    cli_stock.add_argument(
+        "--csv_template",
+        help="Save template csv with all columns to a file. Default is './template.csv'",
+        required=False,
+        nargs="?",
+        const="./template.csv",
+        default=None,
+    )
+    cli_stock.set_defaults(func=stock_import)
 
 
 def _add_admin_parser(command_parser):

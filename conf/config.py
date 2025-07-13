@@ -34,6 +34,8 @@ MAN_ALT = module_path() + "/conf/manufacturer_alternatives.jsonc"
 # not case sensitive
 SCAN_DIR = "BOM"
 # scan_dir = ""
+# to include subdirectories in SCAN_DIR?
+INCLUDE_SUB_DIR = True
 
 # display currency
 # only for display, no any conversion is made
@@ -82,6 +84,13 @@ def easyEDA(row: pd.Series) -> pd.Series:
     return row
 
 
+def csvLCSC(row: pd.Series) -> pd.Series:
+    """merge column 'value' with 'description'"""
+    if "order_qty" in row.index:
+        row["order_qty"] = row["order_qty"].split("\\")[0]
+    return row
+
+
 # pased to pandas read_excel() function as args and kwargs
 # csv format is passed to read_csv()
 # special keys, not passed to pandas import:
@@ -111,6 +120,7 @@ import_format = {
             "price": float,
         },
         "func": None,
+        "shop": "LCSC",
     },
     "easyEDA": {
         "file_ext": ["xls", "xlsx"],
@@ -147,6 +157,7 @@ import_format = {
             "price": float,
         },
         "func": mouser,
+        "shop": "mouser",
     },
     "csv": {
         "file_ext": ["csv"],
@@ -155,5 +166,23 @@ import_format = {
         "na_values": "-",
         "dtype": {"qty": int, "price": float},
         "func": None,
+    },
+    "csv_LCSC": {
+        "file_ext": ["csv"],
+        "header": 0,
+        "index_col": None,
+        "na_values": "-",
+        "cols": {
+            "manufacture part number": "device_id",
+            "manufacturer": "device_manufacturer",
+            "order qty.": "stock_qty",
+            "lcsc part number": "shop_id",
+            "description": "device_description",
+            "unit price($)": "price",
+            "min\\mult order qty.": "order_qty",
+        },
+        "dtype": {"qty": int, "price": float},
+        "func": csvLCSC,
+        "shop": "LCSC",
     },
 }

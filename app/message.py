@@ -6,6 +6,7 @@ import pandas as pd
 
 from conf import config
 from conf.config import DISP_CURR, config_file
+from conf.sql_colnames import *
 
 
 class MessageHandler:
@@ -60,14 +61,29 @@ class MessageHandler:
             self.message.append(rows)
         self.__exec__(warning=True)
 
-    def file_already_imported(self, file: str) -> bool:
+    def project_already_imported(self, project: str) -> bool:
         """message method"""
         if config.DEBUG in ["pytest", "debugpy"]:
             return True
-        self.message.append(f"File {file} was already imported.")
+        self.message.append(f"Project '{project}' was already imported.")
         self.message.append("Consider using option --overwrite.")
         self.message.append(
             "Are you sure you want to add this file again (will add to qty.)? (y/n)"
+        )
+        self.__exec__(warning=True)
+        if input().lower() == "y":
+            return True
+        return False
+
+    def data_already_imported(self, dat: pd.DataFrame) -> bool:
+        """message method"""
+        if config.DEBUG in ["pytest", "debugpy"]:
+            return True
+        self.message.append("These devices were already imported:")
+        self.message.append(dat.loc[:, [DEV_ID, DEV_MAN]].to_string())
+        self.message.append("Consider using option --overwrite.")
+        self.message.append(
+            "Are you sure you want to add this file again (will add to stock_qty.)? (y/n)"
         )
         self.__exec__(warning=True)
         if input().lower() == "y":
@@ -105,34 +121,62 @@ class MessageHandler:
         self.message.append(f"Removed data from BOM table where project == '{project}'")
         self.__exec__()
 
-    def bom_commit(self, project: list[str]) -> None:
+    def stock_commit(self, project: list[str]) -> None:
         """message method"""
         self.message.append(
-            f"Commited data from BOM table where project == '{project}'"
+            f"Added to stock data from BOM table where project == {project}"
         )
+        self.__exec__()
+
+    def stock_use(
+        self,
+        project: list[str] | None = None,
+        dev_id: str = "",
+        dev_man: str = "",
+        no_devs: bool = False,
+        no_stock: bool = False,
+        not_enough: bool = False,
+    ) -> None:
+        """message method"""
+        if no_devs:
+            self.message.append(f"No device {dev_id} from {dev_man}. Skiped.")
+            self.__exec__()
+            return
+        if no_stock:
+            self.message.append("No devices in stock. Stock is empty.")
+            self.__exec__()
+            return
+        if not_enough:
+            if project:
+                self.message.append(f"Not enough stock for project: {project}.")
+            else:
+                self.message.append(
+                    f"Not enough stock for device {dev_id} from {dev_man}."
+                )
+            self.__exec__()
+            return
+        if project:
+            self.message.append(f"Removed from stock data for project: {project}.")
+        else:
+            self.message.append(f"Removed device {dev_id} from {dev_man}.")
         self.__exec__()
 
     def bom_prepare_projects(
         self,
         project: list[str],
-        available: list[str],
         all_projects: list[str],
     ) -> None:
-        """message method"""
-        project_not_available = [
-            p for p in project if p not in available and p in all_projects
-        ]
-        project_not_exist = [p for p in project if p not in all_projects]
-        if project_not_available:
-            self.message.append(
-                f"Project '{project_not_available}' already commited. Skipping."
-            )
-        if project_not_exist:
-            self.message.append(f"No project {project_not_exist} in BOM.")
-        if available:
-            self.message.append(f"Available projects are: {available}.")
-        else:
-            self.message.append("No available not-commited projects.")
+        """
+        if empty projects and all_projects: no projects
+        show all projects when user request
+        or matched projects when user abreviated
+        """
+        if not project and not all_projects:
+            self.message.append("No projects in BOM table")
+        if project != []:
+            self.message.append(f"Matched projects:'{project}'")
+        if all_projects != []:
+            self.message.append(f"Available projects are: {all_projects}")
         self.__exec__()
 
     def bom_import_summary(self, dat: pd.DataFrame, ex_devs: int = 0) -> None:

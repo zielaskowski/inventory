@@ -16,17 +16,6 @@ from pandas.core.dtypes.cast import NAType
 
 from app import sql
 from app.common import (
-    BOM_COMMITTED,
-    BOM_DIR,
-    BOM_FILE,
-    BOM_FORMAT,
-    BOM_HASH,
-    BOM_PROJECT,
-    DEV_HASH,
-    DEV_ID,
-    DEV_MAN,
-    SHOP_DATE,
-    SHOP_SHOP,
     check_dir_file,
     first_diff_index,
     foreign_tabs,
@@ -49,6 +38,7 @@ from app.error import (
 )
 from app.message import MessageHandler
 from conf import config as conf
+from conf.sql_colnames import *
 
 msg = MessageHandler()
 
@@ -79,15 +69,17 @@ def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:
         msg.msg(str(e))
         return
 
-    # check if data already in sql, only for BOM tab
-    if tab == "BOM" and not check_existing_data(dat, args, file):
-        return  # user do not want to overwrite nor add to existing data
-
     # if we have stored alternatives, use it
     dat.loc[:, DEV_MAN], _ = get_alternatives(dat[DEV_MAN].to_list())
 
     # hash columns - must be last so all columns aligned and present
     dat = hash_tab(dat=dat)
+
+    # check if data already in sql, only for BOM tab
+    if tab == "BOM" and not check_existing_project(dat, args):
+        return  # user do not want to overwrite nor add to existing data
+    if tab == "STOCK" and not check_existing_data(dat, args):
+        return
 
     # check for different manufacturer on the same dev_id
     # just inform that alignment can be done with admin functions
@@ -95,7 +87,7 @@ def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:
 
     # inform if data useful for other tabs is present
     tabs = tabs_in_data(dat)
-    if "SHOP" in tabs and tab != 'SHOP':
+    if "SHOP" in tabs and tab != "SHOP":
         msg.msg("Detected data usefull also for SHOP table.")
         msg.msg("Consider importing with 'shop_cart_import' option.")
     # write aligned data to SQL
@@ -262,7 +254,6 @@ def columns_align(n_stock: pd.DataFrame, file: str, args: Namespace) -> pd.DataF
     n_stock = n_stock.map(lambda x: x.strip() if isinstance(x, str) else x)
 
     # add column with path and file name and supplier
-    n_stock[BOM_COMMITTED] = False
     n_stock[BOM_DIR] = os.path.abspath(args.dir)
     n_stock[BOM_FILE] = os.path.basename(file)
     n_stock[BOM_FORMAT] = args.format
@@ -597,16 +588,15 @@ def vimdiff_selection(
     return chosen
 
 
-def check_existing_data(dat: pd.DataFrame, args: Namespace, file: str) -> bool:
+def check_existing_project(dat: pd.DataFrame, args: Namespace) -> bool:
     """
-    check if data already present in sql
+    check if project already present in BOM
     if -overwrite, remove existing data
     other way ask for confirmation
     return True if we can continue
     """
-    file_name = os.path.basename(file)
-    old_files = sql.getL(tab="BOM", get_col=[BOM_FILE])
     old_project = sql.getL(tab="BOM", get_col=[BOM_PROJECT])
+    project = dat.loc[0, BOM_PROJECT]
     if args.overwrite:
         # remove all old data
         sql.rm(
@@ -616,59 +606,67 @@ def check_existing_data(dat: pd.DataFrame, args: Namespace, file: str) -> bool:
         )
         return True
     # warn about adding qty
-    if file_name in old_files or dat[BOM_PROJECT].unique() in old_project:
-        if not msg.file_already_imported(file_name):
+    if project in old_project:
+        if not msg.project_already_imported(project):
             return False
     return True
 
 
-def prepare_project(projects: list[str], committed: bool) -> list[str]:
+def check_existing_data(dat: pd.DataFrame, args: Namespace) -> bool:
+    """
+    check if data already present in STOCK
+    if -overwrite, remove existing data
+    other way ask for confirmation
+    return True if we can continue
+    """
+    if args.dont_ask:
+        return True
+    old_data = sql.getL(tab="STOCK", get_col=[STOCK_HASH])
+    overlap_data = dat.loc[dat[STOCK_HASH].isin(old_data), :]
+    # warn about adding qty
+    if not overlap_data.empty:
+        if not msg.data_already_imported(overlap_data):
+            return False
+    return True
+
+
+def prepare_project(projects: list[str]) -> list[str]:
     """
     prepare list of projects based on provided args:
     - '%' all projects
     - '?' just list projects
-    if 'commited==False', limit search to not commited projects only
     can abreviate names
     """
-    if committed:
-        commit_search = ["%"]
-    else:
-        commit_search = [False]
-    available = sql.getL(
-        tab="BOM",
-        get_col=[BOM_PROJECT],
-        search=commit_search,
-        where=[BOM_COMMITTED],
-    )
     all_projects = sql.getL(
         tab="BOM",
         get_col=[BOM_PROJECT],
     )
+    if not all_projects:
+        msg.bom_prepare_projects([], [])
+        return []
     if projects == ["?"]:
         msg.bom_prepare_projects(
-            project=available,
-            available=available,
+            project=[],
             all_projects=all_projects,
         )
         return []
     if projects == ["%"]:
-        projects = available
+        projects = all_projects
     match_projects = []
     for project in projects:
         try:
-            match_projects += [match_from_list(project, available)]
+            match_projects += [match_from_list(project, all_projects)]
         except AmbigousMatchError as err:
             print(err)
         except NoMatchError as err:
             print(err)
 
-    if not any(p in available for p in match_projects):
+    if match_projects != projects:
         msg.bom_prepare_projects(
             project=match_projects,
-            available=available,
-            all_projects=all_projects,
+            all_projects=[],
         )
-    return [p for p in match_projects if p in available]
+    return match_projects
 
 
 def scan_files(args) -> list[str]:
@@ -694,8 +692,6 @@ def scan_files(args) -> list[str]:
         locations = sql.getDF(
             tab="BOM",
             get_col=[BOM_DIR, BOM_FILE, BOM_PROJECT, BOM_FORMAT],
-            search=[False],
-            where=[BOM_COMMITTED],
         )
         if locations.empty:
             msg.reimport_missing_file()
@@ -722,7 +718,7 @@ def scan_files(args) -> list[str]:
 def tab_info(tab: str, silent: bool = False) -> list[str]:
     """diplay info about columns in BOM table"""
     try:
-        must_col, nice_col = tab_cols(tab)
+        must_col, nice_col = tab_cols(tab,all_cols=True)
     except SqlTabError as err:
         msg.msg(str(err))
         sys.exit(1)

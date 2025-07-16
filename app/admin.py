@@ -64,14 +64,8 @@ def admin(args: Namespace) -> None:
 def remove_project(args: Namespace) -> None:
     """
     Remove from BOM table based on match on project column
-    Remove only not commited projects.
     """
-    if (
-        projects := prepare_project(
-            projects=args.remove_project,
-            committed=False,
-        )
-    ) == []:
+    if (projects := prepare_project(projects=args.remove_project)) == []:
         return
     sql.rm(tab="BOM", value=projects, column=[BOM_PROJECT])
     msg.bom_remove(projects)

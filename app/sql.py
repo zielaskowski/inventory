@@ -1,17 +1,13 @@
 import os
 import re
 import sqlite3
-from typing import Any, Dict, Iterable, List, Sequence, Set, Union
+from typing import Any, Dict, List, Sequence, Set
 
 import pandas as pd
 
 import conf.config as conf
 from app.common import (
-    BOM_HASH,
-    DEV_HASH,
-    SHOP_HASH,
     SQL_KEYWORDS,
-    STOCK_HASH,
     read_json_dict,
     tab_exists,
     unpack_foreign,
@@ -27,6 +23,7 @@ from app.error import (
     SqlTabError,
 )
 from app.message import MessageHandler
+from conf.sql_colnames import *
 
 msg = MessageHandler()
 
@@ -275,6 +272,8 @@ def get(
     if follow:
         # get tab DF and all that follow
         base_tab = getDF(tab=tab)
+        if base_tab.empty:
+            return {"": pd.DataFrame()}
         for f in sql_scheme[tab].get("FOREIGN", []):
             col, f_tab, f_col = unpack_foreign(f)
             f_df = getDF(tab=f_tab)
@@ -355,15 +354,18 @@ def rm(
 
 def edit(
     tab: str,
-    new_val: str,
+    new_val: list[str],
     col: str,
     search: list[str],
     where: str,
 ) -> None:
     """Update table in db"""
-    placeholder = ",".join("?" * len(search))
-    cmd = f"UPDATE {tab} SET {col} = {new_val} WHERE {where} IN ({placeholder})"
-    __sql_execute__([cmd], search)
+    if len(new_val) != len(search):
+        return
+    cmd = []
+    for nv, s in zip(new_val, search):
+        cmd.append(f"UPDATE {tab} SET {col} = '{nv}' WHERE {where} = '{s}'")
+    __sql_execute__(cmd)
 
 
 def tab_columns(tab: str) -> set[str]:

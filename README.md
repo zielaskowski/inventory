@@ -53,22 +53,44 @@ bindkey '^s' fuzzy_search_inventory
 ```
 
 FZF and zsh do some magic with scripts and it was not possible to define all in `.zshrc`
-So column extraction, copying to clipboard and notification is separated ino
+So column extraction, copying to clipboard and notification is separated into
 bash script. Clipboard coping and notification is very platform dependent, here
 WAYLAND and KDE.
 
 ## NOT IMPLEMENTED / PROBLEMS
 
-1. remove commited column and related functions
-2. change stock --commit with --use: remove all devs from project from stock
-3. remove single dev from stock (with fuzzy search)
-4. when file not present in search, very misleading info about missing folder
-5. by default devices are not updated. add option to call align_other_cols()
+1. remove single dev from stock (with fuzzy search)
+
+2. when file not present in search, very misleading info about missing folder
+
+3. by default devices are not updated. add option to call align_other_cols()
 on upcoming data
-6. warn when adding existing devs to stock: similar like BOM, add --overwrite option
 
-## WISH LIST
+4. summary: cost of devs in stock, projects coverage by stock
 
-1. when preparing shipping list with transaction option, minimum order quantity
-should be considered and it's multiplication (if ord_qty is 20, you can't
-order 23, must be 40)
+5. add selection to alternative_manufacturers also when there is a multiple selection
+
+6. add audit_log table:
+
+```sql
+CREATE TABLE audit_log (
+    id INTEGER PRIMARY KEY,
+    table_name TEXT,
+    row_id INTEGER,
+    operation TEXT,
+    old_data TEXT,
+    new_data TEXT,
+    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TRIGGER log_update
+AFTER UPDATE ON my_table
+BEGIN
+  INSERT INTO audit_log(table_name, row_id, operation, old_data, new_data)
+  VALUES (
+    'my_table', OLD.id, 'UPDATE',
+    json_object('col1', OLD.col1, 'col2', OLD.col2),
+    json_object('col1', NEW.col1, 'col2', NEW.col2)
+  );
+END;
+```

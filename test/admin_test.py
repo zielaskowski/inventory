@@ -597,7 +597,7 @@ def test_admin_project_remove1(cli, monkeypatch, tmpdir, capsys):
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
     bom_import(args)
     out, _ = capsys.readouterr()
-    assert "no available not-commited projects." in out.lower()
+    assert "no projects in bom table" in out.lower()
 
 
 def test_admin_project_remove2(cli, monkeypatch, tmpdir):

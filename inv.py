@@ -53,34 +53,38 @@ def _add_bom_import_parser(command_parser):
         metavar="PROJECT",
         nargs="+",
         default=None,
-        help="""Print data from BOM table, you can use abbreviations.
+        help=f"""Print data from BOM table, you can use abbreviations.
+                By default show {conf.BOM_EXPORT_COL} columns.
+                See --show_columns to change.
                 If --file is given, write to file as csv in --dir folder.
                 Use '%%' if you want to export all projects. Use '?'
                 (including single quote!) to list available projects.""",
         required=False,
     )
     cli_import_bom.add_argument(
-        "--hide_columns",
+        "--export_columns",
         metavar="COL",
         required=False,
         nargs="+",
         type=str,
-        help="hide columns during export",
+        help="""Show columns during export (overwrite default columns).
+                See --import for columns description.""",
         default=None,
     )
     cli_import_bom.add_argument(
         "-o",
         "--overwrite",
         action="store_true",
-        help="""During import: replace items already imported from the same file.
-                If omitted, items will be added to existing items from the same file.""",
+        help="""During import: replace existing project (whole project!).
+                If omitted, devices will be added to existing project.""",
         required=False,
     )
     cli_import_bom.add_argument(
         "-r",
         "--reimport",
         action="store_true",
-        help="""Import again (and replace) items in BOM table if not yet commited.""",
+        help="""Import again (and replace, see --overwrite) items in BOM table.
+              Replacement is based on file name""",
     )
     cli_import_bom.add_argument(
         "--info",
@@ -245,26 +249,35 @@ def _add_stock_parser(command_parser):
         default=list(conf.import_format.keys())[4],  # csv_LCSC
     )
     cli_stock.add_argument(
+        "--dont_ask",
+        action="store_true",
+        help="""During import: do not ask when adding to existing data.
+                If omitted, user will be prompted when device already in stock.""",
+        required=False,
+    )
+    cli_stock.add_argument(
         "-e",
         "--export",
         action="store_true",
         default=None,
-        help="""Print data from STOCK table, you can use abbreviations.
+        help=f"""Print data from STOCK table. By default {conf.STOCK_EXPORT_COL}
+                columns are displayed. Use --show columns to change.
                 If --file is given, write to file as csv in --dir folder.""",
         required=False,
     )
     cli_stock.add_argument(
-        "--hide_columns",
+        "--export_columns",
         metavar="COL",
         required=False,
         nargs="+",
         type=str,
-        help="hide columns during export",
+        help="""Show columns during export (overwrite default columns).
+                See --info for column description.""",
         default=None,
     )
     cli_stock.add_argument(
-        "-p",
-        "--project",
+        "--add_project",
+        metavar="PROJECT",
         nargs="+",
         default=None,
         help="""Commit PROJECTs. Add all devices from selected projects
@@ -273,12 +286,36 @@ def _add_stock_parser(command_parser):
                 Use '?' (including single quote!) to list available projects.""",
     )
     cli_stock.add_argument(
+        "--use_project",
+        metavar="PROJECT",
+        nargs="+",
+        default=None,
+        help="""Remove PROJECTs devices from stock, use --qty option to multiply quantity.
+                Use '%%' if you want to remove all projects.
+                Use '?' (including single quote!) to list available projects.""",
+    )
+    cli_stock.add_argument(
+        "--use_device_id",
+        metavar="DEV_ID",
+        default=None,
+        help="""Remove single DEVICE by its ID, usually connects with --use_device_manufacturer.
+                See README.md to see how to use with fuzzy search.""",
+    )
+    cli_stock.add_argument(
+        "--use_device_manufacturer",
+        metavar="DEV_MAN",
+        default=None,
+        help="""Remove single DEVICE by its MAUNUFACTURER, usually connects with --use_device_id.
+                See README.md to see how to use with fuzzy search.""",
+    )
+    cli_stock.add_argument(
         "-q",
         "--qty",
         type=int,
         default=1,
         required=False,
-        help="""Quantity used to multiply device qty inside projects for commit.""",
+        help="""Quantity used to multiply device qty inside projects for commit.
+                Default equal to 1.""",
     )
     cli_stock.add_argument(
         "--info",
@@ -320,8 +357,7 @@ def _add_admin_parser(command_parser):
         metavar="PROJECT",
         nargs="+",
         default=None,
-        help="""Remove from BOM table all items from PROJECTs. Alowed are only
-                projects which are not commited, ore use --force option.
+        help="""Remove from BOM table all items from PROJECTs.
                 Use '%%' if you want to remove all not commited projects.
                 Use '?' (including single quote!) to list available projects.
                 Do not touch any other table in DB.""",
@@ -331,9 +367,10 @@ def _add_admin_parser(command_parser):
         metavar="DEV_ID",
         nargs="+",
         default=False,
-        help="""Clean all devices from list using device part number. Also from all other tables.
-                You can read part number from csv file, see --csv option.
-                Refuse to remove devices used in project; use force to overcome.""",
+        help="""Clean all devices from list using device part number. Also from
+                all other tables. You can read part number from csv file,
+                see --csv option. Refuse to remove devices used in project;
+                use force to overcome.""",
     )
     admin_group.add_argument(
         "--remove_shop_id",
@@ -344,11 +381,10 @@ def _add_admin_parser(command_parser):
                 You can read part number from csv file, see --csv option.
                 Usefull when item not in shop stock any more""",
     )
-    cli_admin.add_argument(
-        "-F",
+    admin_group.add_argument(
         "--force",
         action="store_true",
-        help="Force remove all devices from list. Including devices in project tables.",
+        help="Force device removal also when used in project",
     )
     cli_admin.add_argument(
         "--csv",

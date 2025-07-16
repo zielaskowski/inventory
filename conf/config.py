@@ -4,6 +4,8 @@ import os
 
 import pandas as pd
 
+from conf.sql_colnames import *
+
 
 def module_path():
     """
@@ -43,6 +45,11 @@ DISP_CURR = "$"
 
 # directory for temporary files
 TEMP_DIR = "/tmp/"
+
+# columns to export
+BOM_EXPORT_COL = [BOM_PROJECT, BOM_QTY, DEV_ID, DEV_MAN, DEV_PACK, DEV_DESC]
+STOCK_EXPORT_COL = [STOCK_QTY, DEV_ID, DEV_MAN, DEV_PACK, DEV_DESC]
+
 
 # handle behavior of user interctive components
 # - 'none'      normal interaction

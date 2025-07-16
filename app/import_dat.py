@@ -10,14 +10,11 @@ from argparse import Namespace
 import pandas as pd
 from pandas.errors import EmptyDataError, ParserError
 
+import conf.config as conf
 from app import sql
 from app.common import (
-    BOM_COMMITTED,
-    BOM_PROJECT,
-    BOM_QTY,
     IMPORT_FORMAT_SPECIAL_KEYS,
     NO_EXPORT_COLS,
-    STOCK_QTY,
 )
 from app.message import MessageHandler
 from app.tabs import (
@@ -28,14 +25,18 @@ from app.tabs import (
     tab_template,
 )
 from conf.config import import_format
+from conf.sql_colnames import *
 
 msg = MessageHandler()
 
 
 def stock_import(args: Namespace) -> None:
     """Main stock function"""
-    if args.project:
+    if args.add_project:
         commit_project(args=args)
+        return
+    if args.use_project or args.use_device_id or args.use_device_manufacturer:
+        use_stock(args=args)
         return
     if args.info:
         tab_info(tab="STOCK")
@@ -179,18 +180,27 @@ def import_file(args: Namespace, file: str) -> pd.DataFrame:
 def export(args: Namespace, tab: str) -> None:
     """print or export data in BOM table"""
     if tab == "BOM":
-        if (projects := prepare_project(args.export, committed=False)) == []:
+        if (projects := prepare_project(args.export)) == []:
             return
         df = sql.getDF(tab=tab, search=projects, where=[BOM_PROJECT], follow=True)
+        cols = conf.BOM_EXPORT_COL
     else:
         df = sql.getDF(tab=tab, follow=True)
+        cols = conf.STOCK_EXPORT_COL
+    if df.empty:
+        msg.msg(f"No data in table {tab}.")
+        sys.exit(1)
     df.drop(columns=NO_EXPORT_COLS, inplace=True, errors="ignore")
-    if args.hide_columns:
-        cols = [c for c in args.hide_columns if c in df.columns]
-        df.drop(columns=cols, inplace=True)
-    # replace 0/1 in commit column with True/False
-    if BOM_COMMITTED in df.columns:
-        df[BOM_COMMITTED] = df[BOM_COMMITTED].astype(bool)
+    if args.export_columns:
+        try:
+            df = df[args.export_columns]
+        except KeyError as e:
+            msg.msg(str(e))
+            msg.msg("Here columns info:")
+            tab_info(tab)
+            sys.exit(1)
+    else:
+        df = df[cols]
     if not args.file:
         with pd.option_context(
             "display.max_rows",
@@ -207,21 +217,99 @@ def export(args: Namespace, tab: str) -> None:
 
 def commit_project(args: Namespace) -> None:
     """commit projects"""
-    if (projects := prepare_project(projects=args.project, committed=False)) == []:
+    if (projects := prepare_project(projects=args.add_project)) == []:
         return
     dat = sql.getDF(
         tab="BOM",
         search=projects,
         where=[BOM_PROJECT],
     )
-    sql.edit(
-        tab="BOM",
-        new_val=str(1),
-        col=BOM_COMMITTED,
-        search=projects,
-        where=BOM_PROJECT,
-    )
     dat.rename(columns={BOM_QTY: STOCK_QTY}, inplace=True)
     dat[STOCK_QTY] = dat[STOCK_QTY] * args.qty
     sql.put(dat, tab="STOCK")
-    msg.bom_commit(projects)
+    msg.stock_commit(projects)
+
+
+def use_stock(args: Namespace) -> None:
+    """
+    remove devices from stock
+    base on project or dev_id or dev_man
+    """
+    projects = []
+    # prepare devices to use
+    if args.use_project:
+        if (projects := prepare_project(projects=args.use_project)) == []:
+            return
+        dat = sql.getDF(
+            tab="BOM",
+            search=projects,
+            where=[BOM_PROJECT],
+            follow=True,
+        )
+        dat["use_qty"] = dat[BOM_QTY] * args.qty
+    else:
+        dat = sql.getDF("DEVICE")
+    if args.use_device_id:
+        dat = dat.loc[dat[DEV_ID] == args.use_device_id, :]
+        dat["use_qty"] = 1
+    if args.use_device_manufacturer:
+        dat = dat.loc[dat[DEV_MAN] == args.use_device_manufacturer, :]
+        dat["use_qty"] = 1
+    if dat.empty:
+        msg.stock_use(
+            dev_id=args.use_device_id,
+            dev_man=args.use_device_manufacturer,
+            no_devs=True,
+        )
+        return
+    # collect stock
+    stock = sql.getDF(tab="STOCK")
+    if stock.empty:
+        msg.stock_use(no_stock=True)
+        return
+    # merge and substract
+    dat = pd.merge(
+        left=dat,
+        left_on=DEV_HASH,
+        right=stock,
+        right_on=STOCK_HASH,
+        how="left",
+    )
+    dat[STOCK_QTY] = dat[STOCK_QTY] - dat["use_qty"]
+    # do we have enough stock?
+    dat_missing = dat.loc[(dat[STOCK_QTY] < 0) | (dat[STOCK_QTY].isna()), :]
+    if not dat_missing.empty:
+        if BOM_PROJECT in dat_missing.columns:
+            missing_proj = dat_missing[BOM_PROJECT].unique()
+        else:
+            missing_proj = None
+        msg.stock_use(
+            project=missing_proj,
+            dev_id=args.use_device_id,
+            dev_man=args.use_device_manufacturer,
+            not_enough=True,
+        )
+        return
+    # remove what zeroed
+    stock_end = dat.loc[dat[STOCK_QTY] == 0, :]
+    if not stock_end.empty:
+        sql.rm(tab="STOCK", value=stock_end[DEV_HASH], column=[STOCK_HASH])
+        msg.stock_use(
+            project=projects,
+            dev_id=args.use_device_id,
+            dev_man=args.use_device_manufacturer,
+        )
+        return
+    new_stock = dat.loc[dat[STOCK_QTY] > 0, :]
+    sql.edit(
+        tab="STOCK",
+        new_val=new_stock[STOCK_QTY].to_list(),
+        col=STOCK_QTY,
+        search=new_stock[DEV_HASH].to_list(),
+        where=STOCK_HASH,
+    )
+    msg.stock_use(
+        project=projects,
+        dev_id=args.use_device_id,
+        dev_man=args.use_device_manufacturer,
+    )

@@ -27,34 +27,14 @@ from app.error import (
     WriteJsonError,
 )
 from app.message import MessageHandler
+from conf.sql_colnames import *
 
 # list of keywords to be ignored during reading columns from tab
 SQL_KEYWORDS = ["FOREIGN", "UNIQUE", "ON_CONFLICT", "HASH_COLS", "COL_DESCRIPTION"]
-DEV_ID = "device_id"
-DEV_MAN = "device_manufacturer"
-DEV_DESC = "device_description"
-DEV_PACK = "package"
-DEV_HASH = "hash"
-BOM_FILE = "import_file"
-BOM_DIR = "project_dir"
-BOM_COMMITTED = "committed"
-BOM_PROJECT = "project"
-BOM_HASH = "device_hash"
-BOM_FORMAT = "file_format"
-BOM_QTY = "qty"
-SHOP_HASH = "device_hash"
-SHOP_SHOP = "shop"
-SHOP_DATE = "date"
-SHOP_QTY = "order_qty"
-SHOP_PRICE = "price"
-SHOP_ID = "shop_id"
-STOCK_QTY = "stock_qty"
-STOCK_HASH = "device_hash"
 TAKE_LONGER_COLS = [DEV_MAN, DEV_DESC, DEV_PACK]
 HIDDEN_COLS = [
     BOM_DIR,
     BOM_FILE,
-    BOM_COMMITTED,
     BOM_FORMAT,
     "id",
     DEV_HASH,
@@ -229,7 +209,7 @@ def log(args) -> None:
 
 def write_json(file: str, content: dict[str, dict] | dict[str, list[str]]) -> None:
     """
-    write content to afile in json format
+    write content to a file in json format
     overwrite existing file
     """
     try:
@@ -380,6 +360,7 @@ def tab_exists(tab: str) -> None:
 
 def tab_cols(
     tab: str,
+    all_cols: bool = False,
 ) -> tuple[list[str], list[str]]:
     """
     return list of columns that are required for the given tab
@@ -422,10 +403,14 @@ def tab_cols(
     # remove duplicates
     must_cols = list(set(must_cols))
     nice_cols = list(set(nice_cols))
-
-    # remove COMMANDS and ['id', 'hash] column
-    nice_cols = [c for c in nice_cols if c not in SQL_KEYWORDS + HIDDEN_COLS]
-    must_cols = [c for c in must_cols if c not in HIDDEN_COLS]
+    if not all_cols:
+        # remove COMMANDS which are filled utomatically
+        nice_cols = [c for c in nice_cols if c not in SQL_KEYWORDS + HIDDEN_COLS]
+        must_cols = [c for c in must_cols if c not in HIDDEN_COLS]
+    else:
+        nice_cols = [c for c in nice_cols if c not in SQL_KEYWORDS]
+        if "id" in must_cols:
+            must_cols.remove("id")
     return (must_cols, nice_cols)
 
 

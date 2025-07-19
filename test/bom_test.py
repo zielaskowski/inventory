@@ -175,21 +175,28 @@ def test_bom_import_csv3(cli, monkeypatch, tmpdir, capsys):
     monkeypatch.setattr("conf.config.DEBUG", "pytest")
     sql_check()
     csv = tmpdir.join("test.csv")
-    csv.write("device_id,device_manufacturer,qty,project\n")
-    csv.write("aa,bb,1,test\n", mode="a")
-    csv.write(",bb,1,test\n", mode="a")
-    csv.write("aa,,1,test\n", mode="a")
-    csv.write("aa,bb,1,test\n", mode="a")
+    with open(csv, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,qty,project\n"
+            + "aa,bb,1,test\n"
+            + ",bb,1,test\n"
+            + "aa,,1,test\n"
+            + "aa,bb,1,test\n"
+        )
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
     bom_import(args)
+
     out, _ = capsys.readouterr()
     assert "missing necessery" in out.lower()
+
     exp = tmpdir.join("exp.csv")
-    exp.write("")
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
     bom_import(args)
-    csv.write("device_id,device_manufacturer,qty,project\n", mode="w")
-    csv.write("aa,bb,2,test\n", mode="a")
+    with open(csv, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,qty,project\n" 
+            +"aa,bb,2,test\n"
+        )  # fmt: skip
     inp = pd.read_csv(csv)
     exp = pd.read_csv(exp)
     common_cols = exp.columns.intersection(inp.columns)

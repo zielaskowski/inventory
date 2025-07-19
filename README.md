@@ -63,14 +63,9 @@ WAYLAND and KDE.
 
 2. when file not present in search, very misleading info about missing folder
 
-3. by default devices are not updated. add option to call align_other_cols()
-on upcoming data
+3. summary: cost of devs in stock, projects coverage by stock
 
-4. summary: cost of devs in stock, projects coverage by stock
-
-5. add selection to alternative_manufacturers also when there is a multiple selection
-
-6. add audit_log table:
+4. add audit_log table:
 
 ```sql
 CREATE TABLE audit_log (

@@ -535,7 +535,7 @@ def test_align_manufacturers_complex2(monkeypatch, tmpdir, cli):
         side_effect=[
             ["MAN_A"] * 5,
             ["MAN_A"] * 5,
-            ["desc"],
+            [],  # none in keep_dat so will use rm_dat without asking
             ["desc"],
             ["desc"],
             ["desc"],

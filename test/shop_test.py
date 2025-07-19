@@ -172,6 +172,8 @@ def test_shop_import_csv6(monkeypatch, tmpdir, cli):
             ref_col=alternatives["ref_col"],
             change_col=alternatives["change_col"],
             opt_col=alternatives["opt_col"],
+            what_differ=DEV_MAN,
+            dev_id="",
             exit_on_change=True,
             start_line=1,
         )
@@ -196,17 +198,21 @@ def test_shop_import_csv7(monkeypatch, tmpdir, cli):
 
     test2 = tmpdir.join("test2.csv")
     with open(test2, "w", encoding="UTF8") as f:
-        f.write("device_id,device_manufacturer,device_description,order_qty,price\n")
-        f.write("aa,aa,desc3,1,10")
+        f.write(
+                "device_id,device_manufacturer,device_description,order_qty,price\n"
+                +"aa,aa,desc3,1,10"
+        )# fmt: skip
 
     args = cli.parse_args(["shop", "-d", tmpdir.strpath, "-F", "csv", "-f", "test2"])
     shop_import(args)
 
     test3 = tmpdir.join("test3.csv")
     with open(test3, "w", encoding="UTF8") as f:
-        f.write("device_id,device_manufacturer,device_description,order_qty,price\n")
-        f.write("aa,ab,desc2,1,10\n")
-        f.write("aa,aa,desc1,1,10")
+        f.write(
+                "device_id,device_manufacturer,device_description,order_qty,price\n"
+                +"aa,ab,desc2,1,10\n"
+                +"aa,aa,desc3,1,10"
+        ) # fmt: skip
 
     inp = pd.read_csv(test3)
     exp = getDF(tab="DEVICE")

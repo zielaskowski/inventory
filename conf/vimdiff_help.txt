@@ -1,8 +1,8 @@
 INVentory app
 
-During import found existing devices but with different {{ALTERNATE_COL}}
+During import found existing devices {{DEV_ID}} but with different {{WHAT_DIFFER}}
 What is in left panel will be saved and imported.
-You can copy {{ALTERNATE_COL}} from left panel or leave as is.
+You can copy {{WHAT_DIFFER}} from right panel or leave as is.
 
 !!DO NOT CHANGE LINE ORDER, ADD OR REMOVE LINES !! 
 if you mess up, <ESC>u undo the changes ;)

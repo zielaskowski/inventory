@@ -87,6 +87,16 @@ def _add_bom_import_parser(command_parser):
               Replacement is based on file name""",
     )
     cli_import_bom.add_argument(
+        "--dont_align_columns",
+        action="store_true",
+        default=False,
+        help="""During import, by default user will be asked if different 
+                values are imported for other columns (description, category,
+                package, etc.) on existing devices. If this option given,
+                existing values will be kept (importing data will not change existing devices).""",
+        required=False,
+    )
+    cli_import_bom.add_argument(
         "--info",
         help="""Display info about necessery and acceptable columns for BOM table.""",
         required=False,
@@ -151,6 +161,16 @@ def _add_shop_cart_import_parser(command_parser):
         type=str,
         help="hide columns during export",
         default=None,
+    )
+    cli_import_cart.add_argument(
+        "--dont_align_columns",
+        action="store_true",
+        default=False,
+        help="""During import, by default user will be asked if different 
+                values are imported for other columns (description, category,
+                package, etc.) on existing devices. If this option given,
+                existing values will be kept (importing data will not change existing devices).""",
+        required=False,
     )
     cli_import_cart.add_argument(
         "--info",
@@ -316,6 +336,16 @@ def _add_stock_parser(command_parser):
         required=False,
         help="""Quantity used to multiply device qty inside projects for commit.
                 Default equal to 1.""",
+    )
+    cli_stock.add_argument(
+        "--dont_align_columns",
+        action="store_true",
+        default=False,
+        help="""During import, by default user will be asked if different 
+                values are imported for other columns (description, category,
+                package, etc.) on existing devices. If this option given,
+                existing values will be kept (importing data will not change existing devices).""",
+        required=False,
     )
     cli_stock.add_argument(
         "--info",

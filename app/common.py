@@ -65,7 +65,6 @@ def store_alternatives(
     alt_keys = list(alternatives.keys())
     alt_len = len(alternatives[alt_keys[0]])
     alt_from = alternatives[alt_keys[0]]
-    alt_options = alternatives[alt_keys[1]]
     try:
         alt_exist = read_json_list(conf.MAN_ALT)
     except ReadJsonError as e:
@@ -74,7 +73,7 @@ def store_alternatives(
 
     for i in range(alt_len):
         # only one-to-one alternatives and changed
-        if alt_from[i] != selection[i] and len(alt_options[i].split(" | ")) == 1:
+        if alt_from[i] != selection[i]:
             # remove alternative if already exists
             for k in list(alt_exist.keys()):
                 if alt_from[i] in alt_exist[k]:
@@ -132,7 +131,8 @@ def vimdiff_config(
     ref_col: str,
     change_col: str,
     opt_col: str,
-    alternate_col: str,
+    what_differ: str,
+    dev_id: str,
     exit_on_change: bool,
     start_line: int = 1,
 ):
@@ -143,8 +143,9 @@ def vimdiff_config(
                                  will be displayed
     alternate_col is the name of column, displayed in help, when
                   equal DEV_MAN will turn on option selection help and options
+    dev_id, used during attributes alignment, to inform about device
     exit_on_change if True, will exit vim after each change
-                   (to change context for exmple)
+                   (to update file context for exmple)
     """
     with open(
         conf.module_path() + "/conf/vimdiff_help.txt",
@@ -164,9 +165,10 @@ def vimdiff_config(
         "TEMP_DIR": conf.TEMP_DIR,
         "LEFT_NAME": opt_col,
         "RIGHT_NAME": change_col,
-        "ALTERNATE_COL": alternate_col,
+        "WHAT_DIFFER": what_differ,
+        "DEV_ID": dev_id,
         "REF_COL": ref_col,
-        "MULTIPLE_MANUFACTURERS": DEV_MAN == alternate_col,
+        "MULTIPLE_MANUFACTURERS": DEV_MAN == what_differ,
         "EXIT_ON_CHANGE": exit_on_change,
     }
     vimrc_txt = vimrc_temp.render(substitutions)

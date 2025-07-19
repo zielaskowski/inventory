@@ -75,7 +75,28 @@ def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:
     # hash columns - must be last so all columns aligned and present
     dat = hash_tab(dat=dat)
 
-    # check if data already in sql, only for BOM tab
+    # align other cols before skipping data in incoming data
+    on_conflict = None
+    if not args.dont_align_columns:
+        on_conflict = {"action": "REPLACE"}
+        existing_data = sql.getDF(
+            tab="DEVICE",
+            search=dat.loc[:, DEV_HASH],
+            where=[DEV_HASH],
+        )
+        try:
+            miss_cols = existing_data.columns.difference(dat.columns)
+            dat[miss_cols] = pd.DataFrame(None, index=dat.index, columns=miss_cols, dtype=object)
+            existing_data["dev_rm"] = existing_data[DEV_ID]
+            existing_data["man_rm"] = existing_data[DEV_MAN]
+            dat = align_other_cols(rm_dat=existing_data, keep_dat=dat)
+        except ValueError as e:
+            # wrong input for align_other_cols()
+            print(e)
+        except KeyError:
+            # no existing data
+            pass
+    # check if data already in sql
     if tab == "BOM" and not check_existing_project(dat, args):
         return  # user do not want to overwrite nor add to existing data
     if tab == "STOCK" and not check_existing_data(dat, args):
@@ -92,7 +113,10 @@ def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:
         msg.msg("Consider importing with 'shop_cart_import' option.")
     # write aligned data to SQL
     for t in ["DEVICE", tab]:
-        sql.put(dat=dat, tab=t)
+        if t == "DEVICE":
+            sql.put(dat=dat, tab=t, on_conflict=on_conflict)
+        else:
+            sql.put(dat=dat, tab=t)
 
     # SUMMARY
     if tab == "BOM":
@@ -245,9 +269,9 @@ def columns_align(n_stock: pd.DataFrame, file: str, args: Namespace) -> pd.DataF
 
     # change columns type
     # only for existing cols
+    n_stock = n_stock.astype(object)
     if dtype := conf.import_format[args.format].get("dtype"):
-        exist_col = [c in n_stock.columns for c in dtype.keys()]
-        exist_col_dtypes = {k: v for k, v in dtype.items() if k in exist_col}
+        exist_col_dtypes = {k: v for k, v in dtype.items() if k in n_stock.columns}
         n_stock = n_stock.astype(exist_col_dtypes)
 
     # Strip whitespace from all string elements in the DataFrame
@@ -296,6 +320,7 @@ def align_data(dat: pd.DataFrame, just_inform: bool = False) -> pd.DataFrame:
     )
     # user abort
     if align_dat.empty:
+        msg.msg("User abort.")
         return align_dat
     if just_inform:
         return dat
@@ -303,6 +328,10 @@ def align_data(dat: pd.DataFrame, just_inform: bool = False) -> pd.DataFrame:
     differ_row = dat[DEV_MAN] != align_dat[DEV_MAN]
     # create new hash after possibly changing manufacturer
     align_dat = hash_tab(dat=align_dat).loc[differ_row, :]
+    # if all differ_row is False, no change (data aligned or align manufacture did the job)
+    if align_dat.empty:
+        msg.msg("Data is aligned. Nothing done.")
+        return align_dat
     # keep new device in separate dataframe
     keep_dev_hash = align_dat[DEV_HASH].drop_duplicates().to_list()
     keep_dev = dat[dat[DEV_HASH].isin(keep_dev_hash)]
@@ -358,15 +387,27 @@ def align_data(dat: pd.DataFrame, just_inform: bool = False) -> pd.DataFrame:
 def align_other_cols(rm_dat: pd.DataFrame, keep_dat: pd.DataFrame) -> pd.DataFrame:
     """
     expect DataFrame with one pair replacement per row:
-    and columns: dev_rm | man_rm | DEV_HASH | DEV_MAN
-    display all other attributes of device to user to choose
+    and columns:
+        rm_dat: dev_rm | man_rm | DEV_HASH | DEV_MAN + must_cols
+        keep_dat: must_cols+nice_cols
+    display all "nice" attributes of device to user to choose
     dispalay only not empty and attributes that differ
+    if keep_attr empty, replace with rm_attr
     return selected attributes attached in row to input dat
     """
-    necessery_cols = ["dev_rm", "man_rm", DEV_HASH, DEV_MAN]
-    must_cols, _ = tab_cols(tab="DEVICE")
-    if not all(c for c in rm_dat.columns if c in must_cols + necessery_cols):
-        sys.exit(1)
+    if rm_dat.empty or keep_dat.empty:
+        raise ValueError("Input DataFrame can not be empty.")
+
+    extra_cols = ["dev_rm", "man_rm"]
+    must_cols, nice_cols = tab_cols(tab="DEVICE")
+
+    missing_rm_cols = [c for c in must_cols + extra_cols if c not in rm_dat.columns]
+    if any(missing_rm_cols):
+        raise ValueError(f"Missing necessery columns in rm_dat: {missing_rm_cols}")
+    missing_keep_cols = [c for c in must_cols + nice_cols if c not in keep_dat.columns]
+    if any(missing_keep_cols):
+        raise ValueError(f"Missing necessery columns in keep_dat: {missing_keep_cols}")
+
     keep_dat.set_index(DEV_HASH, inplace=True)
     # collect all useful data from devices we are about to remove
     for idx in rm_dat.index:
@@ -375,30 +416,16 @@ def align_other_cols(rm_dat: pd.DataFrame, keep_dat: pd.DataFrame) -> pd.DataFra
         keep_attr = keep_dat.loc[keep_dat.index == rm_attr[DEV_HASH]].iloc[0, :]
         change_man = keep_attr[DEV_MAN]
         opt_man = rm_attr["man_rm"]
-        # if NA in rm_attr or missing col, take from add_attr if present
-        for idx, val in keep_attr.items():
-            if idx not in rm_attr:
-                rm_attr[idx] = val
-            if rm_attr[idx] is None:
-                rm_attr[idx] = keep_attr[idx]
-        # and oposite, then will be easy to remove the same
-        # keep nulls in add_attr, so user can change
-        for idx, val in rm_attr.items():
-            if idx not in keep_attr:
-                keep_attr[idx] = val
-        # hide attributes which are already aligned
-        for idx, val in rm_attr.items():
-            if val == keep_attr[idx]:
-                rm_attr.pop(idx)
-                keep_attr.pop(idx)
-        if not keep_attr.empty:
-            rm_attr.sort_index(inplace=True)
-            keep_attr.sort_index(inplace=True)
+        ref_id = rm_attr[DEV_ID]
+        rm_attr, keep_attr, keep_nones = align_attributes(rm_attr, keep_attr)
+        if not keep_attr.empty or not keep_nones.empty:
             try:
                 aligned_dat = vimdiff_selection(
-                    ref_col={"column": rm_attr.index.to_list()},
+                    ref_col={"columns": rm_attr.index.to_list()},
                     change_col={change_man: keep_attr.to_list()},
                     opt_col={opt_man: rm_attr.to_list()},
+                    what_differ="attributes",
+                    dev_id=ref_id,
                     exit_on_change=False,
                 )
             except KeyboardInterrupt:
@@ -408,11 +435,54 @@ def align_other_cols(rm_dat: pd.DataFrame, keep_dat: pd.DataFrame) -> pd.DataFra
                 # if no change from user, skip
                 print(str(err))
                 if err.interact:
+                    # raised when user mess up with lines order or number
                     input("Press any key....")
                 continue
             keep_attr.iloc[:] = aligned_dat
-            keep_dat.update(pd.DataFrame([keep_attr]))
+            # in case keep_attr is missing indexes
+            keep_attr = keep_attr.reindex(keep_attr.index.union(keep_nones.index))
+            keep_attr.update(keep_nones)
+            # update will put NaN in missing cols, which will brake on int columns
+            # so update on common cols only
+            keep_attr_df = pd.DataFrame([keep_attr])
+            common_col = keep_dat.columns.intersection(keep_attr_df.columns)
+            keep_dat.loc[keep_attr_df.index,common_col] = keep_attr_df
     return keep_dat.reset_index()
+
+
+def align_attributes(rm_attr: pd.Series, keep_attr: pd.Series) -> tuple:
+    """
+    Align attributes of devices:
+        rm_attr: this attrbutes will lost if not aligned
+        keep_attr: this we optionaly may want to keep
+    """
+    # if NA in rm_attr or missing col, take from keep_attr if present
+    for idx, val in keep_attr.items():
+        if idx not in rm_attr:
+            rm_attr[idx] = val
+        if rm_attr[idx] is None:
+            rm_attr[idx] = keep_attr[idx]
+    # and oposite, then will be easy to remove the same
+    for idx, val in rm_attr.items():
+        if idx not in keep_attr:
+            keep_attr[idx] = val
+    # hide attributes which are already aligned
+    for idx in rm_attr.index:
+        rm, keep = rm_attr[idx], keep_attr[idx]
+        # IEEE754: NaN is not equal to anything, inluding itself!
+        if (rm == keep) or (pd.isna(rm) & pd.isna(keep)):
+            rm_attr.pop(idx)
+            keep_attr.pop(idx)
+    # if None in keep_dat and not in rm_dat, use and write separate Series
+    index_none = rm_attr.loc[keep_attr.isna() & rm_attr.notna()].index
+    keep_none = rm_attr[index_none]
+    rm_attr.drop(index_none, inplace=True, errors="ignore")
+    keep_attr.drop(index_none, inplace=True, errors="ignore")
+    return (
+        rm_attr.sort_index(),
+        keep_attr.sort_index(),
+        keep_none,
+    )
 
 
 def align_manufacturers(dat: pd.DataFrame, just_inform: bool = False) -> pd.DataFrame:
@@ -492,6 +562,8 @@ def align_manufacturers(dat: pd.DataFrame, just_inform: bool = False) -> pd.Data
                 ref_col={"devices": dat_dup.loc[:, DEV_ID].to_list()},
                 change_col={DEV_MAN: dat_dup.loc[:, DEV_MAN].to_list()},
                 opt_col={man_grp_col: dat_dup.loc[:, man_grp_col].to_list()},
+                what_differ=DEV_MAN,
+                dev_id="",
                 exit_on_change=True,
                 start_line=start_line,
             )
@@ -518,10 +590,16 @@ def vimdiff_selection(
     ref_col: dict[str, list[str]],
     change_col: dict[str, list[str]],
     opt_col: dict[str, list[str]],
+    what_differ:str,
+    dev_id:str,
     exit_on_change: bool,
     start_line: int = 1,
 ) -> list[str]:
-    """present alternatives in vimdiff"""
+    """
+    present alternatives in vimdiff
+    input is dict, wher key is column_name and values are to be displayed
+    column_name is also used to name the file where values are written and then displayed by vimdiff
+    """
     cols = []
     for col in [ref_col, change_col, opt_col]:
         cols.append(next(iter(col)))
@@ -529,11 +607,17 @@ def vimdiff_selection(
     ref_k, ref_v = (0, 1)
     change_k, change_v = (2, 3)
     opt_k, opt_v = (4, 5)
+    # if empty list (nothing to write, nothing to show)
+    # just return
+    if cols[change_v] == [] or cols[opt_v] == []:
+        return []
+
     for key in [ref_k, change_k, opt_k]:
         # remove forbiden chars: / \ : * ? " < > |
         cols[key] = re.sub(r'[\/\\:\*\?"<>\|\r\n\t]', "_", cols[key])
         with open(
-            conf.TEMP_DIR + cols[key] + ".txt",
+            # in case manufacturers are the same, need to add suffix to file name
+            conf.TEMP_DIR + cols[key] + "_" + str(key) + ".txt",
             mode="w",
             encoding="UTF8",
         ) as f:
@@ -542,10 +626,11 @@ def vimdiff_selection(
                 # other way diff may shift rows to align data between columns
 
     vimdiff_config(
-        ref_col=cols[ref_k],
-        change_col=cols[change_k],
-        opt_col=cols[opt_k],
-        alternate_col=cols[change_k],
+        ref_col=cols[ref_k] + "_0",
+        change_col=cols[change_k] + "_2",
+        opt_col=cols[opt_k] + "_4",
+        what_differ=what_differ,
+        dev_id=dev_id,
         exit_on_change=exit_on_change,
         start_line=start_line,
     )
@@ -557,12 +642,14 @@ def vimdiff_selection(
         with subprocess.Popen("konsole -e " + vim_cmd, shell=True) as p:
             p.wait()
 
-    with open(conf.TEMP_DIR + cols[change_k] + ".txt", mode="r", encoding="UTF8") as f:
+    with open(
+        conf.TEMP_DIR + cols[change_k] + "_2.txt", mode="r", encoding="UTF8"
+    ) as f:
         chosen = f.read().splitlines()
 
     # clean up files
     for key in [ref_k, change_k, opt_k]:
-        os.remove(conf.TEMP_DIR + cols[key] + ".txt")
+        os.remove(conf.TEMP_DIR + cols[key] + "_" + str(key) + ".txt")
 
     if chosen == []:  # user interrupt
         raise KeyboardInterrupt
@@ -576,7 +663,7 @@ def vimdiff_selection(
         cols[opt_v] += [None] * (max_len - len(cols[opt_v]))
         df = pd.DataFrame({"selected": chosen, "opts": cols[opt_v]})
         raise VimdiffSelError(select=df, interact=DEV_MAN != cols[change_k])
-    # write 1to1 matches selected by user, so next time save some time
+    # write matches selected by user, so next time save some time
     if DEV_MAN == cols[change_k]:
         store_alternatives(
             alternatives={
@@ -718,7 +805,7 @@ def scan_files(args) -> list[str]:
 def tab_info(tab: str, silent: bool = False) -> list[str]:
     """diplay info about columns in BOM table"""
     try:
-        must_col, nice_col = tab_cols(tab,all_cols=True)
+        must_col, nice_col = tab_cols(tab, all_cols=True)
     except SqlTabError as err:
         msg.msg(str(err))
         sys.exit(1)

@@ -281,7 +281,7 @@ def test_store_alternatives2(tmpdir, monkeypatch):
     with open(man_json, "r", encoding="UTF8") as f:
         exp = json.load(f)
     imp = {
-        "aa": ["a1", "a2", "a3"],
+        "aa": ["a1", "a2", "a3", "a4"],
         "bb": ["b1", "b2", "b3"],
         "d": ["dd"],
         "e": ["ee"],

@@ -112,7 +112,7 @@ def align() -> None:
     # - align all columns before merge
     devs = sql.getDF(tab="DEVICE")
     dat = align_data(dat=devs)
-    # aborted by user
+    # aborted by user or data aligned
     if dat.empty:
         sys.exit(0)
     # remove old hashes of changed devices

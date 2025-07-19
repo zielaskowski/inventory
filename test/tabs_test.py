@@ -10,7 +10,8 @@ import pytest
 
 from app.common import tab_cols
 from app.error import SqlTabError, VimdiffSelError
-from app.tabs import ASCII_txt, NA_rows, vimdiff_selection
+from app.tabs import ASCII_txt, NA_rows, align_other_cols, vimdiff_selection
+from conf.sql_colnames import *
 from inv import cli_parser
 
 
@@ -125,6 +126,8 @@ def test_vimdiff_selection_handles_none_input():
             ref_col=ref_col,
             change_col=change_col,
             opt_col=opt_col,
+            what_differ=DEV_MAN,
+            dev_id="",
             exit_on_change=True,
         )
 
@@ -171,9 +174,140 @@ def test_vimdiff_selection_raises_on_length_mismatch():
                 ref_col=ref_col,
                 change_col=change_col,
                 opt_col=opt_col,
+                what_differ=DEV_MAN,
+                dev_id="",
                 exit_on_change=True,
             )
     # 4. Assert that the error message contains the user's incorrect data
     assert "val1" in str(excinfo.value)
     assert "val3" in str(excinfo.value)
     assert "val2" not in str(excinfo.value)
+
+
+@patch("app.tabs.vimdiff_selection")
+@patch("app.tabs.tab_cols")
+def test_align_other_cols_user_selects_rm_dat(mock_tab_cols, mock_vimdiff):
+    """
+    GIVEN rm_dat and keep_dat with different device_description,
+    WHEN align_other_cols is called,
+    AND user selects the description from rm_dat via vimdiff,
+    THEN the returned dataframe contains the description from rm_dat.
+    """
+    # 1. Setup mocks
+    # Mock tab_cols to control the columns being processed
+    mock_tab_cols.return_value = (
+        [DEV_ID, DEV_MAN],  # must_cols
+        [DEV_DESC, DEV_PACK],  # nice_cols
+    )
+
+    # Mock vimdiff_selection to simulate user choosing the 'rm_dat' (optional) value
+    # The values from rm_dat are passed in the `opt_col` argument.
+    # We return those values to simulate the user's choice.
+    def vimdiff_side_effect(
+        ref_col,
+        change_col,
+        opt_col,
+        what_differ,
+        dev_id,
+        exit_on_change,
+        start_line=1,
+    ):
+        # The value of the dict is the list of column values to show.
+        return next(iter(opt_col.values()))
+
+    mock_vimdiff.side_effect = vimdiff_side_effect
+
+    # 2. Setup test data
+    rm_dat = pd.DataFrame(
+        {
+            "dev_rm": ["device_A"],
+            "man_rm": ["manuf_Y"],
+            DEV_HASH: ["hash123"],
+            DEV_ID: ["device_A"],
+            DEV_MAN: ["manuf_Y"],
+            DEV_DESC: ["Description from RM"],
+            DEV_PACK: ["pckg1"],
+        }
+    )
+
+    keep_dat = pd.DataFrame(
+        {
+            DEV_HASH: ["hash123"],
+            DEV_ID: ["device_A"],
+            DEV_MAN: ["manuf_Y"],
+            DEV_DESC: ["Description from KEEP"],
+            DEV_PACK: ["pckg1"],
+        }
+    )
+
+    # 3. Execute the function under test
+    result_df = align_other_cols(rm_dat=rm_dat.copy(), keep_dat=keep_dat.copy())
+
+    # 4. Assert the outcome
+    assert not result_df.empty
+    # Check that the description from rm_dat was chosen
+    assert result_df.loc[0, DEV_DESC] == "Description from RM"
+    # Check that other columns are untouched
+    assert result_df.loc[0, DEV_PACK] == "pckg1"
+    assert result_df.loc[0, DEV_HASH] == "hash123"
+    assert result_df.loc[0, DEV_MAN] == "manuf_Y"
+
+    # 5. Verify mock was called correctly
+    mock_vimdiff.assert_called_once()
+    # The call to vimdiff should only contain the differing column
+    _, call_kwargs = mock_vimdiff.call_args
+    assert call_kwargs["change_col"]["manuf_Y"] == ["Description from KEEP"]
+    assert call_kwargs["opt_col"]["manuf_Y"] == ["Description from RM"]
+
+
+@patch("app.tabs.tab_cols")
+def test_align_other_cols_replace_none1(mock_tab_cols):
+    """
+    GIVEN rm_dat and keep_dat with different device_description,
+    incoming data with None in description
+    WHEN align_other_cols is called,
+    AND user selects the description from rm_dat via vimdiff,
+    THEN the returned dataframe contains the description from rm_dat.
+    automatically fill None in description, without user interraction.
+    """
+    # 1. Setup mocks
+    # Mock tab_cols to control the columns being processed
+    mock_tab_cols.return_value = (
+        [DEV_ID, DEV_MAN],  # must_cols
+        [DEV_DESC, DEV_PACK],  # nice_cols
+    )
+
+    # 2. Setup test data
+    rm_dat = pd.DataFrame(
+        {
+            "dev_rm": ["device_A"],
+            "man_rm": ["manuf_Y"],
+            DEV_HASH: ["hash123"],
+            DEV_ID: ["device_A"],
+            DEV_MAN: ["manuf_Y"],
+            DEV_DESC: ["Description from RM"],
+            DEV_PACK: ["pckg1"],
+        }
+    )
+
+    keep_dat = pd.DataFrame(
+        {
+            DEV_HASH: ["hash123"],
+            DEV_ID: ["device_A"],
+            DEV_MAN: ["manuf_Y"],
+            DEV_DESC: [None],
+            DEV_PACK: ["pckg1"],
+        }
+    )
+
+    # 3. Execute the function under test
+    result_df = align_other_cols(rm_dat=rm_dat.copy(), keep_dat=keep_dat.copy())
+
+    # 4. Assert the outcome
+    assert not result_df.empty
+    # Check that the description from rm_dat was chosen
+    assert result_df.loc[0, DEV_DESC] == "Description from RM"
+    # Check that other columns are untouched
+    assert result_df.loc[0, DEV_PACK] == "pckg1"
+    assert result_df.loc[0, DEV_HASH] == "hash123"
+    assert result_df.loc[0, DEV_MAN] == "manuf_Y"

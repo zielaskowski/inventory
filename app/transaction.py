@@ -1,4 +1,5 @@
 import os
+import sys
 from argparse import Namespace
 
 import pandas as pd
@@ -62,6 +63,10 @@ def trans(args: Namespace):
         bom[BOM_QTY] = bom[BOM_QTY] - bom[STOCK_QTY]
         bom = bom[bom[BOM_QTY] > 0]
         bom.drop(columns=[STOCK_QTY], inplace=True)
+        if bom.empty:
+            # all necessery devices in stock
+            msg.msg("You have all devices in stock. Aborted.")
+            sys.exit(0)
 
     # split BOM based on SHOP table data,
     # choose cheaper shop to export if device available in many

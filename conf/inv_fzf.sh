@@ -10,12 +10,12 @@ export DEV_ID=2
 # 2. DEV_MAN column number
 export DEV_MAN=3
 # 2. columns width
-WIDTH="4 17 10 8 10 15 15 10 10"
+export WIDTH="4 17 10 8 10 15 15 10 10"
 # 3. std column width
-STD_WIDTH=70
+export STD_WIDTH=70
 # 4. color every other column
-COLOR1="\033[38;5;76m"; # green
-COLOR2="\033[38;5;85m"; # slightly lighter green
+export COLOR1="\033[38;5;76m"; # green
+export COLOR2="\033[38;5;85m"; # slightly lighter green
 #
 # The awk script creates a visually clean and aligned display line based on defined widths,
 # with alternating colors for each column to improve readability.
@@ -75,11 +75,61 @@ device_remove(){
 		tr -d '\n')
 	inv stock --use_device_id "$dev_id" --use_device_manufacturer "$dev_man" | \
 		xargs -I{} notify-send {}
+	# update stock
+	inv stock --fzf
 }
 export -f device_remove
 
+# This function encapsulates the data formatting logic.
+# It reads the data file and formats it for fzf.
+format_data_for_fzf() {
+    cat "$DATA_FILE" | awk -F'|' \
+        -v width_str="$WIDTH" \
+        -v std_width_str="$STD_WIDTH" \
+        -v color1_str="$COLOR1" \
+        -v color2_str="$COLOR2" \
+    'BEGIN {
+        # --- ADJUST COLUMN WIDTHS HERE ---
+        # Add or remove numbers to match the number of columns in your output.
+        # Each number represents the width of a column.
+        split(width_str, widths, " ");
+        
+        # A default width for any columns beyond the ones specified above.
+        default_width = std_width_str;
+
+        # --- DEFINE ALTERNATING COLORS HERE ---
+        # ANSI escape codes for colors. You can change these to your preference.
+        # For example, "36" for cyan, "33" for yellow, etc.
+        color1 = color1_str; # green
+        color2 = color2_str; # slightly lighter green
+        reset_color = "\033[0m";
+    }
+    {
+        display_line = ""
+        # Iterate over each field to build the colored and formatted display line.
+        for (i = 1; i <= NF; i++) {
+            # Determine the width for the current column.
+            width = (i in widths) ? widths[i] : default_width;
+
+            # Choose the color for the current column.
+            color = (i % 2) ? color1 : color2;
+
+            # Trim leading/trailing whitespace from the field.
+            gsub(/^[ \t]+|[ \t]+$/, "", $i);
+
+            # Format the field with color and fixed width.
+            display_line = display_line sprintf("%s%-" width "s%s ", color, $i, reset_color);
+        }
+
+        # Print the original line, a tab, and formatted display line.
+        print $0 "\t" display_line 
+    }'
+}
+export -f format_data_for_fzf
+
 
 # Get the data file from the main inventory script.
+export DATA_FILE
 DATA_FILE=$(inv stock --fzf)
 
 # If the data file is empty or doesn't exist, exit gracefully.
@@ -93,60 +143,24 @@ export HEADER
 HEADER=$(head -n 1 "$DATA_FILE" | tr '|' '\n')
 
 # Cat the file and pipe it to awk for formatting and then to fzf.
-cat "$DATA_FILE" | awk -F'|' \
-	-v width_str="$WIDTH" \
-	-v std_width_str="$STD_WIDTH" \
-	-v color1_str="$COLOR1" \
-	-v color2_str="$COLOR2" \
-'BEGIN {
-    # --- ADJUST COLUMN WIDTHS HERE ---
-    # Add or remove numbers to match the number of columns in your output.
-    # Each number represents the width of a column.
-    split(width_str, widths, " ");
-    
-    # A default width for any columns beyond the ones specified above.
-    default_width = std_width_str;
-
-    # --- DEFINE ALTERNATING COLORS HERE ---
-    # ANSI escape codes for colors. You can change these to your preference.
-    # For example, "36" for cyan, "33" for yellow, etc.
-    color1 = color1_str; # green
-    color2 = color2_str; # slightly lighter green
-    reset_color = "\033[0m";
-}
-{
-    display_line = ""
-    # Iterate over each field to build the colored and formatted display line.
-    for (i = 1; i <= NF; i++) {
-        # Determine the width for the current column.
-        width = (i in widths) ? widths[i] : default_width;
-
-        # Choose the color for the current column.
-        color = (i % 2) ? color1 : color2;
-
-        # Trim leading/trailing whitespace from the field.
-        gsub(/^[ \t]+|[ \t]+$/, "", $i);
-
-        # Format the field with color and fixed width.
-        display_line = display_line sprintf("%s%-" width "s%s ", color, $i, reset_color);
-    }
-
-    # Print the original line, a tab, and formatted display line.
-    print $0 "\t" display_line 
-}' | fzf --ansi \
+format_data_for_fzf | fzf --ansi \
 	--delimiter='\t' \
 	--with-nth=2 \
 	--header-lines=1 \
 	--preview-window=top:30%:wrap \
 	--preview='bash -c "generate_preview \"{}\""' \
 	--border='horizontal' \
-	--border-label='ctrl-c to copy device_id to clipboard  |  ctrl-d to delete device from stock' \
+	--border-label='ctrl-c to copy ID | ctrl-d to delete' \
 	--border-label-pos=-1:bottom \
 	--bind='ctrl-c:execute-silent(bash -c "device_copy \"{}\"")' \
-	--bind='ctrl-d:execute-silent(bash -c "device_remove \"{}\"")'
+	--bind='ctrl-d:execute-silent(bash -c "device_remove \"{}\"")+reload-sync(bash -c "format_data_for_fzf")'
 	# recognize color codes
 	# delimiter
 	# display only second column (first is used for preview)
 	# keep header line
 	# preview location
-	# split each column into new line
+	# generate_preview(): split each column into new line
+	# add border (necessery to allow labels)
+	# add lables describing bindkeys
+	# label position
+	# key bindings

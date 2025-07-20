@@ -58,9 +58,13 @@ require WAYLAND and KDE (very platform dependent).
 
 1. when file not present in search, very misleading info about missing folder
 
-2. summary: cost of devs in stock, projects coverage by stock
+2. add summary:
 
-3. add audit_log table:
+    - cost of devs in stock,
+    - projects coverage by stock
+    - project cost
+
+3. add audit_log table and undo for stock manipulation (only stock!):
 
 ```sql
 CREATE TABLE audit_log (

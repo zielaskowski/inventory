@@ -271,7 +271,7 @@ def _add_stock_parser(command_parser):
     cli_stock.add_argument(
         "--dont_ask",
         action="store_true",
-        help="""During import: do not ask when adding to existing data.
+        help="""During import: do not ask when adding qty to existing data.
                 If omitted, user will be prompted when device already in stock.""",
         required=False,
     )

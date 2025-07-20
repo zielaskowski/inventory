@@ -4,6 +4,7 @@ import sqlite3
 from typing import Any, Dict, List, Sequence, Set
 
 import pandas as pd
+from audite import track_changes
 
 import conf.config as conf
 from app.common import (
@@ -553,6 +554,17 @@ def sql_create() -> None:
         if os.path.isfile(conf.DB_FILE):
             os.remove(conf.DB_FILE)
         raise SqlCreateError(conf.SQL_SCHEME)
+    if "STOCK" in sql_scheme.keys():
+        sql_audit(tab="STOCK")
+
+
+def sql_audit(tab: str) -> None:
+    """add loging tables to sql"""
+    db = sqlite3.connect(
+        conf.DB_FILE,
+        detect_types=sqlite3.PARSE_COLNAMES | sqlite3.PARSE_DECLTYPES,
+    )
+    track_changes(db, tables=[tab])
 
 
 def __escape_quote__(txt: list[str]) -> list[str]:

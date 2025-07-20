@@ -111,7 +111,11 @@ def align() -> None:
     # - take old dev_hash lines, remove dev_hash and change manufacturer, add again
     # - align all columns before merge
     devs = sql.getDF(tab="DEVICE")
-    dat = align_data(dat=devs)
+    try:
+        dat = align_data(dat=devs)
+    except KeyboardInterrupt as e:
+        print(e)
+        sys.exit(1)
     # aborted by user or data aligned
     if dat.empty:
         sys.exit(0)

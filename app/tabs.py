@@ -96,6 +96,9 @@ def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:
         except KeyError:
             # no existing data
             pass
+        except KeyboardInterrupt as e:
+            print(e)
+            sys.exit(1)
     # check if data already in sql
     if tab == "BOM" and not check_existing_project(dat, args):
         return  # user do not want to overwrite nor add to existing data
@@ -313,15 +316,12 @@ def align_data(dat: pd.DataFrame, just_inform: bool = False) -> pd.DataFrame:
     if just_inform==True, just collect duplication and display, no action
     return dataframe with changed devices with aditional column 'dev_rm'
     with device hashes before change
+    raise KeyboardInterrupt when user abort
     """
     align_dat = align_manufacturers(
         dat.copy(deep=True),
         just_inform=just_inform,
     )
-    # user abort
-    if align_dat.empty:
-        msg.msg("User abort.")
-        return align_dat
     if just_inform:
         return dat
     # select rows where change
@@ -364,9 +364,6 @@ def align_data(dat: pd.DataFrame, just_inform: bool = False) -> pd.DataFrame:
     )  # fmt: ignore
     # align all other dev cols
     keep_dev = align_other_cols(rm_dat=align_dat, keep_dat=keep_dev)  # pyright: ignore
-    # user abort
-    if keep_dev.empty:
-        return keep_dev
     # add data from other tabs for devs we are going to remove
     # don't take old hashes, but rehash again
     keep_dev = pd.merge(
@@ -394,6 +391,7 @@ def align_other_cols(rm_dat: pd.DataFrame, keep_dat: pd.DataFrame) -> pd.DataFra
     dispalay only not empty and attributes that differ
     if keep_attr empty, replace with rm_attr
     return selected attributes attached in row to input dat
+    raise KeyboardInterrupt when user abort
     """
     if rm_dat.empty or keep_dat.empty:
         raise ValueError("Input DataFrame can not be empty.")
@@ -428,9 +426,6 @@ def align_other_cols(rm_dat: pd.DataFrame, keep_dat: pd.DataFrame) -> pd.DataFra
                     dev_id=ref_id,
                     exit_on_change=False,
                 )
-            except KeyboardInterrupt:
-                msg.msg("Interupted by user. Changes discarded.")
-                return pd.DataFrame()
             except VimdiffSelError as err:
                 # if no change from user, skip
                 print(str(err))
@@ -652,7 +647,7 @@ def vimdiff_selection(
         os.remove(conf.TEMP_DIR + cols[key] + "_" + str(key) + ".txt")
 
     if chosen == []:  # user interrupt
-        raise KeyboardInterrupt
+        raise KeyboardInterrupt("Interupted by user. Changes discarded.")
     # remove line numbers
     chosen = [re.sub(r"^\d+\|\s*", "", c) for c in chosen]
     chosen = [c.strip() for c in chosen]

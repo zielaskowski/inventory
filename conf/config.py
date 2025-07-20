@@ -122,7 +122,10 @@ def csvLCSC(row: pd.Series) -> pd.Series:
 # csv format is passed to read_csv()
 # special keys, not passed to pandas import:
 # 'cols' - columns renaming with pandas.rename()
-# 'dtype' - columns type, passed to pandas.dtypes()
+# 'dtype' - columns type, passed to pandas.asype()
+#           use pandas object, Int64 (capital I !!)
+#           or float64 (also for int) to allow proper
+#           NaN handling (Int64 do not have NaN)
 # 'func' - function performed on each row with pandas.apply()
 # 'file_ext' - file extension for file searching functions
 import_format = {
@@ -142,9 +145,9 @@ import_format = {
             "unit price(usd)": "price",
         },
         "dtype": {  # lower case only, after cols rename!
-            "qty": int,
-            "order_qty": int,
-            "price": float,
+            "qty": "Int64",
+            "order_qty": "Int64",
+            "price": "float64",
         },
         "func": None,
         "shop": "LCSC",
@@ -163,7 +166,10 @@ import_format = {
             "primary category": "dev_category1",
             "secondary category": "dev_category2",
         },
-        "dtype": {"qty": int, "package": str},  # lower case only, after cols rename!
+        "dtype": {
+            "qty": "Int64",
+            "package": str,
+        },  # lower case only, after cols rename!
         "func": easyEDA,
     },
     "mouser": {
@@ -180,8 +186,8 @@ import_format = {
             "price (usd)": "price",
         },
         "dtype": {  # lower case only, after cols rename!
-            "qty": int,
-            "price": float,
+            "qty": "Int64",
+            "price": "float64",
         },
         "func": mouser,
         "shop": "mouser",
@@ -191,7 +197,7 @@ import_format = {
         "header": 0,
         "index_col": None,
         "na_values": "-",
-        "dtype": {"qty": int, "price": float},
+        "dtype": {"qty": "Int64", "price": "float64"},
         "func": None,
     },
     "csv_LCSC": {
@@ -208,7 +214,7 @@ import_format = {
             "unit price($)": "price",
             "min\\mult order qty.": "order_qty",
         },
-        "dtype": {"qty": int, "price": float},
+        "dtype": {"qty": "Int64", "price": "float64"},
         "func": csvLCSC,
         "shop": "LCSC",
     },

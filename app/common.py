@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import sys
+from datetime import datetime
 from json import JSONDecodeError
 from typing import Dict
 
@@ -191,6 +192,8 @@ def log(args) -> None:
         return
 
     cmd = ["python -m inv"] + args
+    now = datetime.now()
+    cmd = [now.strftime("%Y-%m-%d %H:%M:%S")] + cmd
 
     # check if path exists, if not create
     path = os.path.dirname(conf.LOG_FILE)

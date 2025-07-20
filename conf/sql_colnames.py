@@ -6,6 +6,8 @@ DEV_MAN = "device_manufacturer"
 DEV_DESC = "device_description"
 DEV_PACK = "package"
 DEV_HASH = "hash"
+DEV_CAT1 = "dev_category1"
+DEV_CAT2 = "dev_category2"
 # BOM table
 BOM_FILE = "import_file"
 BOM_DIR = "project_dir"

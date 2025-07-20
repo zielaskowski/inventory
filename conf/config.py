@@ -47,9 +47,29 @@ DISP_CURR = "$"
 TEMP_DIR = "/tmp/"
 
 # columns to export
-BOM_EXPORT_COL = [BOM_PROJECT, BOM_QTY, DEV_ID, DEV_MAN, DEV_PACK, DEV_DESC]
-STOCK_EXPORT_COL = [STOCK_QTY, DEV_ID, DEV_MAN, DEV_PACK, DEV_DESC]
-
+BOM_EXPORT_COL = [
+    BOM_PROJECT,
+    BOM_QTY,
+    DEV_ID,
+    DEV_MAN,
+    DEV_PACK,
+    DEV_DESC,
+    DEV_CAT1,
+    DEV_CAT2,
+]
+STOCK_EXPORT_COL = [STOCK_QTY, DEV_ID, DEV_MAN, DEV_PACK, DEV_DESC, DEV_CAT1, DEV_CAT2]
+COL_WIDTH = {
+    STOCK_QTY: 4,
+    DEV_ID: 17,
+    DEV_MAN: 15,
+    DEV_PACK: 8,
+    DEV_DESC: 30,
+    DEV_CAT1: 25,
+    DEV_CAT2: 25,
+    BOM_PROJECT: 12,
+    BOM_QTY: 3,
+    SHOP_ID: 17,
+}
 
 # handle behavior of user interctive components
 # - 'none'      normal interaction

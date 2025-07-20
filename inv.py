@@ -361,6 +361,14 @@ def _add_stock_parser(command_parser):
         const="./template.csv",
         default=None,
     )
+    cli_stock.add_argument(
+        "--fzf",
+        help=f"""
+        Used by script as input for fuzzy finder. Use script itself: {conf.module_path()}/conf/inv_fzf.sh
+        """,
+        required=False,
+        action="store_true",
+    )
     cli_stock.set_defaults(func=stock_import)
 
 

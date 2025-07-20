@@ -3,9 +3,16 @@
 Inventory managing app. Created for tracking electronics component in home
 projects but probably usefull for any other (small) inventory.
 
-Version 0.5.0 , for testing
+Version 0.9.0 , should be fully functional.
 
 Applcation is interfaced by comand line.
+
+Data require vim to be installed. For fuzzy search there are also other dependencies:
+
+- FZF
+- wl-copy (WAYLAND)
+- notify-send (KDE)
+- awk, cut, tr, cat
 
 Data stored in sqlite. SQL cheme described in configuration file so should
 be resonably easy to fine tune.
@@ -27,45 +34,33 @@ App developed with followin workflow in mind:
 5. export BOM again, after adding cost and avaialbility, to use as import file for
 web_shop. This allow split between shops considering best cost.
 
-6. finally all data can be stored stock table.
+6. finally all data can be stored in stock table.
 
 ## FUZZY SEARCH
 
-Exporting can work very well in pipe with FZF:
+Exporting can work very well in pipe with FZF. Bash script is in conf folder:
+inv_fzf.sh. Most convinient is to plug it to zshrc keybinding:
 
 ```bash
-#inventory_device_copy.sh
-dev_id=$(echo "$1" | awk '{print $8}' | tr -d '\n')
-echo -n "$dev_id" | wl-copy 			# copy to clipboard, wayland only
-notify-send "Copied to clipboard:" "$dev_id"	# notify what copied KDE only
-
 #.zshrc
 fuzzy_search_inventory()
 {
-    inv bom -e % | \
-        fzf --bind "enter:execute-silent(\
-                echo {} | \
-                xargs -I{} inventory_device_copy.sh {})" \
-            --header 'press ENTER to copy to clipboard'
+    ./conf/inf_fzf.sh
 }
 zle -N fuzzy_search_inventory
 bindkey '^s' fuzzy_search_inventory
 ```
 
-FZF and zsh do some magic with scripts and it was not possible to define all in `.zshrc`
-So column extraction, copying to clipboard and notification is separated into
-bash script. Clipboard coping and notification is very platform dependent, here
-WAYLAND and KDE.
+For full functionality (clipboard copying and notifcations), the script
+require WAYLAND and KDE (very platform dependent).
 
-## NOT IMPLEMENTED / PROBLEMS
+## NOT IMPLEMENTED / WISH LIST
 
-1. remove single dev from stock (with fuzzy search)
+1. when file not present in search, very misleading info about missing folder
 
-2. when file not present in search, very misleading info about missing folder
+2. summary: cost of devs in stock, projects coverage by stock
 
-3. summary: cost of devs in stock, projects coverage by stock
-
-4. add audit_log table:
+3. add audit_log table:
 
 ```sql
 CREATE TABLE audit_log (

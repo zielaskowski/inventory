@@ -24,7 +24,7 @@ from app.tabs import (
     tab_info,
     tab_template,
 )
-from conf.config import import_format
+from conf.config import COL_WIDTH, import_format
 from conf.sql_colnames import *
 
 msg = MessageHandler()
@@ -44,7 +44,7 @@ def stock_import(args: Namespace) -> None:
     if args.csv_template:
         tab_template(args=args, tab="STOCK")
         return
-    if args.export:
+    if args.export or args.fzf:
         export(args, "STOCK")
         return
     files = scan_files(args)
@@ -184,9 +184,34 @@ def export(args: Namespace, tab: str) -> None:
             return
         df = sql.getDF(tab=tab, search=projects, where=[BOM_PROJECT], follow=True)
         cols = conf.BOM_EXPORT_COL
+    elif tab == "STOCK":
+        df = sql.getDF(tab=tab, follow=True)
+        # add shop id and projects
+        df_shop = sql.getDF(tab="SHOP")
+        df_bom = sql.getDF(tab="BOM")
+        df = pd.merge(
+            left=df,
+            right=df_shop,
+            left_on=DEV_HASH,
+            right_on=SHOP_HASH,
+            suffixes=("", "_drop"),
+            how="left",
+        )
+        df = pd.merge(
+            left=df,
+            right=df_bom,
+            left_on=DEV_HASH,
+            right_on=BOM_HASH,
+            suffixes=("", "_drop"),
+            how="left",
+        )
+        df.drop(
+            columns=[col for col in df.columns if col.endswith("_drop")], inplace=True
+        )
+        cols = conf.STOCK_EXPORT_COL + [SHOP_ID, BOM_PROJECT]
     else:
         df = sql.getDF(tab=tab, follow=True)
-        cols = conf.STOCK_EXPORT_COL
+        cols = df.columns
     if df.empty:
         msg.msg(f"No data in table {tab}.")
         sys.exit(1)
@@ -201,16 +226,30 @@ def export(args: Namespace, tab: str) -> None:
             sys.exit(1)
     else:
         df = df[cols]
+    if getattr(args, "fzf", False):
+        file = conf.TEMP_DIR + "stock_export.csv"
+        df.to_csv(
+            file,
+            columns=[c for c in cols if c != DEV_DESC] + [DEV_DESC],
+            sep="|",
+            index=False,
+        )
+        print(file)
+        return
     if not args.file:
-        with pd.option_context(
-            "display.max_rows",
-            None,
-            "display.max_columns",
-            None,
-            "display.width",
-            500,
-        ):
-            print(df)
+
+        def truncate(width):
+            return lambda x: str(x)[:width] + (".." if len(str(x)) > width else "")
+
+        formatter = {c: truncate(w) for c, w in COL_WIDTH.items() if c in df.columns}
+        col_width = {c: w + 4 for c, w in COL_WIDTH.items() if c in df.columns}
+        print(
+            df.to_string(
+                index=False,
+                formatters=formatter,  # pyright: ignore
+                col_space=col_width,  # pyright: ignore
+            )
+        )
         return
     df.to_csv(os.path.join(args.dir, args.file), index=False)
 

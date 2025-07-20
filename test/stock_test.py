@@ -226,3 +226,35 @@ def test_missing_project(monkeypatch, tmpdir, cli, capsys):
     stock_import(args)
     out, _ = capsys.readouterr()
     assert "not enough stock for project: ['proj2']" in out.lower()
+
+
+def test_use_one_dev(monkeypatch, tmpdir, cli, capsys):
+    """
+    try use project not present in stock
+    """
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    sql_check()
+    _setup_bom_for_commit_test2(cli, tmpdir)
+    #     "device_id,device_manufacturer,qty,project\n"
+    #     + "dev1,MAN_A,40,proj1\n"
+    #     + "dev2,MAN_B,20,proj1\n"
+    #     + "dev3,MAN_C,30,proj2\n"
+    _setup_stock_for_import2(cli, tmpdir)
+    # "device_id,device_manufacturer,stock_qty\n"
+    # + "dev1,MAN_A,20\n"
+    # + "dev2,MAN_B,40\n"
+
+    # 1. use project
+    args = cli.parse_args(
+        [
+            "stock",
+            "--use_device_id",
+            "dev1",
+            "--use_device_manufacturer",
+            "MAN_A",
+        ]
+    )
+    stock_import(args)
+    out, _ = capsys.readouterr()
+    assert "removed device dev1 from man_a" in out.lower()

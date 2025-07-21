@@ -7,7 +7,7 @@ Version 0.9.0 , should be fully functional.
 
 Applcation is interfaced by comand line.
 
-Data require vim to be installed. For fuzzy search there are also other dependencies:
+Application require vim to be installed. For fuzzy search there are also other dependencies:
 
 - FZF
 - wl-copy (WAYLAND)
@@ -38,8 +38,9 @@ web_shop. This allow split between shops considering best cost.
 
 ## FUZZY SEARCH
 
-Exporting can work very well in pipe with FZF. Bash script is in conf folder:
-inv_fzf.sh. Most convinient is to plug it to zshrc keybinding:
+Exploring stock (copy or removing single device) can work very well in pipe
+with FZF. Bash script is in ./conf folder: inv_fzf.sh.
+Most convinient is to plug it to zshrc keybinding:
 
 ```bash
 #.zshrc

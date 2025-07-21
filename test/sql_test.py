@@ -15,6 +15,7 @@ from app.sql import sql_check, sql_create
 def test_sql_create1(monkeypatch, tmpdir):
     """should be fine"""
     monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.LOG_FILE", "")
     sql_create()
     sql_check()
 
@@ -23,6 +24,7 @@ def test_sql_create2(monkeypatch):
     """wrong DB_FILE path"""
     db_file = ".test//db_test.sql"
     monkeypatch.setattr("conf.config.DB_FILE", db_file)
+    monkeypatch.setattr("conf.config.LOG_FILE", "")
     with pytest.raises(CheckDirError) as err_info:
         sql_create()
     assert err_info.match(".test")
@@ -34,6 +36,7 @@ def test_sql_create3(monkeypatch):
     sql_json = "./test/sql.json"
     monkeypatch.setattr("conf.config.DB_FILE", db_file)
     monkeypatch.setattr("conf.config.SQL_SCHEME", sql_json)
+    monkeypatch.setattr("conf.config.LOG_FILE", "")
     with pytest.raises(SqlCreateError) as err_info:
         sql_create()
     assert err_info.match(sql_json)
@@ -52,6 +55,7 @@ def test_sql_create4(monkeypatch, tmpdir):
     jfile.write(json_txt)
     monkeypatch.setattr("conf.config.DB_FILE", tmpdir + "db.sql")
     monkeypatch.setattr("conf.config.SQL_SCHEME", jfile)
+    monkeypatch.setattr("conf.config.LOG_FILE", "")
     with pytest.raises(SqlCreateError) as err_info:
         sql_create()
     assert err_info.match(jfile.strpath)
@@ -70,6 +74,7 @@ def test_sql_create5(monkeypatch, tmpdir):
     jfile.write(json_txt)
     monkeypatch.setattr("conf.config.DB_FILE", tmpdir + "db.sql")
     monkeypatch.setattr("conf.config.SQL_SCHEME", jfile)
+    monkeypatch.setattr("conf.config.LOG_FILE", "")
     with pytest.raises(SqlCreateError) as err_info:
         sql_create()
     assert err_info.match(jfile.basename)
@@ -97,6 +102,7 @@ def test_sql_check1(monkeypatch, tmpdir):
     jfile.write(json.dumps(json_txt))
     monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
     monkeypatch.setattr("conf.config.SQL_SCHEME", jfile)
+    monkeypatch.setattr("conf.config.LOG_FILE", "")
     sql_create()
     json_txt["BOM"]["FOREIGN"].pop()
     jfile2 = tmpdir.join("json2.txt")

@@ -18,16 +18,23 @@ def cli_fixture():
     return cli_parser()
 
 
-def test_trans1(monkeypatch, cli, tmpdir):
+@pytest.fixture(name="inv_set")
+def inv_set_fixture(monkeypatch, tmpdir):
+    """Initializes a temporary database for testing."""
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
+    monkeypatch.setattr("conf.config.LOG_FILE", "")
+    sql_check()
+    return tmpdir
+
+
+def test_trans1(cli, inv_set):
     """
     standard transaction or selected project with split on shops
     also consider min qty and price calculation
     """
-    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("conf.config.SCAN_DIR", "")
-    monkeypatch.setattr("conf.config.DEBUG", "pytest")
-    sql_check()
-    bom = tmpdir.join("bom.csv")
+    bom = inv_set.join("bom.csv")
     with open(bom, "w", encoding="UTF8") as f:
         f.write(
             "device_id,device_manufacturer,qty,project\n"
@@ -36,10 +43,10 @@ def test_trans1(monkeypatch, cli, tmpdir):
             + "cc,cc,1,test\n"
         )# fmt: skip
 
-    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "bom", "-F", "csv"])
+    args = cli.parse_args(["bom", "-d", inv_set.strpath, "-f", "bom", "-F", "csv"])
     bom_import(args)
 
-    shop = tmpdir.join("shop.csv")
+    shop = inv_set.join("shop.csv")
     with open(shop, "w", encoding="UTF8") as f:
         f.write(
             "device_id,device_manufacturer,order_qty,price,shop\n"
@@ -51,15 +58,15 @@ def test_trans1(monkeypatch, cli, tmpdir):
             + "cc,cc,30,10,pytest2\n"
             ) # fmt:skip
 
-    args = cli.parse_args(["shop", "-d", tmpdir.strpath, "-f", "shop", "-F", "csv"])
+    args = cli.parse_args(["shop", "-d", inv_set.strpath, "-f", "shop", "-F", "csv"])
     shop_import(args)
 
-    args = cli.parse_args(["trans", "-d", tmpdir.strpath, "-f", "pytest"])
+    args = cli.parse_args(["trans", "-d", inv_set.strpath, "-f", "pytest"])
     with patch("app.transaction.msg.trans_summary") as mock_trans_summary:
         trans(args)
         mock_arg, _ = mock_trans_summary.call_args
 
-    imp1_f = tmpdir.join("imp1.csv")
+    imp1_f = inv_set.join("imp1.csv")
     with open(imp1_f, "w", encoding="UTF8") as f:
         f.write(
             "order_qty,device_id,device_manufacturer,device_description,shop,shop_id\n"
@@ -67,15 +74,15 @@ def test_trans1(monkeypatch, cli, tmpdir):
             + "10,cc,cc,,pytest1,-\n"
         )
 
-    imp2_f = tmpdir.join("imp2.csv")
+    imp2_f = inv_set.join("imp2.csv")
     with open(imp2_f, "w", encoding="UTF8") as f:
         f.write(
             "order_qty,device_id,device_manufacturer,device_description,shop,shop_id\n"
             + "16,bb,bb,,pytest2,-"
         )
 
-    exp1 = pd.read_csv(tmpdir.strpath + "/pytest_pytest1.csv")
-    exp2 = pd.read_csv(tmpdir.strpath + "/pytest_pytest2.csv")
+    exp1 = pd.read_csv(inv_set.strpath + "/pytest_pytest1.csv")
+    exp2 = pd.read_csv(inv_set.strpath + "/pytest_pytest2.csv")
     imp1 = pd.read_csv(imp1_f)
     imp2 = pd.read_csv(imp2_f)
     pd.testing.assert_frame_equal(exp1, imp1, check_dtype=False)
@@ -84,13 +91,9 @@ def test_trans1(monkeypatch, cli, tmpdir):
     assert mock_arg[0][1]["price"] == str(16 * 10) + DISP_CURR  # shop: pytest2
 
 
-def test_trans2(monkeypatch, cli, tmpdir):
+def test_trans2(cli, inv_set):
     """standard transaction or selected project without split on shops"""
-    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("conf.config.SCAN_DIR", "")
-    monkeypatch.setattr("conf.config.DEBUG", "pytest")
-    sql_check()
-    bom = tmpdir.join("bom.csv")
+    bom = inv_set.join("bom.csv")
     with open(bom, "w", encoding="UTF8") as f:
         f.write(
             "device_id,device_manufacturer,qty,project\n"
@@ -99,10 +102,10 @@ def test_trans2(monkeypatch, cli, tmpdir):
             + "cc,cc,1,test\n"
         )# fmt: skip
 
-    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "bom", "-F", "csv"])
+    args = cli.parse_args(["bom", "-d", inv_set.strpath, "-f", "bom", "-F", "csv"])
     bom_import(args)
 
-    shop = tmpdir.join("shop.csv")
+    shop = inv_set.join("shop.csv")
     with open(shop, "w", encoding="UTF8") as f:
         f.write(
             "device_id,device_manufacturer,order_qty,price,shop\n"
@@ -114,15 +117,15 @@ def test_trans2(monkeypatch, cli, tmpdir):
             + "cc,cc,30,10,pytest2\n"
             ) # fmt:skip
 
-    args = cli.parse_args(["shop", "-d", tmpdir.strpath, "-f", "shop", "-F", "csv"])
+    args = cli.parse_args(["shop", "-d", inv_set.strpath, "-f", "shop", "-F", "csv"])
     shop_import(args)
 
-    args = cli.parse_args(["trans", "-d", tmpdir.strpath, "-f", "pytest", "-s"])
+    args = cli.parse_args(["trans", "-d", inv_set.strpath, "-f", "pytest", "-s"])
     with patch("app.transaction.msg.trans_summary") as mock_trans_summary:
         trans(args)
         mock_arg, _ = mock_trans_summary.call_args
 
-    imp1_f = tmpdir.join("imp1.csv")
+    imp1_f = inv_set.join("imp1.csv")
     with open(imp1_f, "w", encoding="UTF8") as f:
         f.write(
             "order_qty,device_id,device_manufacturer,device_description,shop,shop_id\n"
@@ -131,23 +134,19 @@ def test_trans2(monkeypatch, cli, tmpdir):
             + "1,cc,cc,,any,-\n"
         )
 
-    exp1 = pd.read_csv(tmpdir.strpath + "/pytest_any.csv")
+    exp1 = pd.read_csv(inv_set.strpath + "/pytest_any.csv")
     imp1 = pd.read_csv(imp1_f)
     pd.testing.assert_frame_equal(exp1, imp1, check_dtype=False)
     assert mock_arg[0][0]["price"] == "-"  # shop: pytest1
 
 
-def test_trans3(monkeypatch, cli, tmpdir):
+def test_trans3(cli, inv_set):
     """
     multiply qty
     standard transaction or selected project with split on shops
     also consider min qty and price calculation
     """
-    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("conf.config.SCAN_DIR", "")
-    monkeypatch.setattr("conf.config.DEBUG", "pytest")
-    sql_check()
-    bom = tmpdir.join("bom.csv")
+    bom = inv_set.join("bom.csv")
     with open(bom, "w", encoding="UTF8") as f:
         f.write(
             "device_id,device_manufacturer,qty,project\n"
@@ -156,10 +155,10 @@ def test_trans3(monkeypatch, cli, tmpdir):
             + "cc,cc,1,test\n"
         )# fmt: skip
 
-    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "bom", "-F", "csv"])
+    args = cli.parse_args(["bom", "-d", inv_set.strpath, "-f", "bom", "-F", "csv"])
     bom_import(args)
 
-    shop = tmpdir.join("shop.csv")
+    shop = inv_set.join("shop.csv")
     with open(shop, "w", encoding="UTF8") as f:
         f.write(
             "device_id,device_manufacturer,order_qty,price,shop\n"
@@ -171,15 +170,15 @@ def test_trans3(monkeypatch, cli, tmpdir):
             + "cc,cc,30,10,pytest2\n"
             ) # fmt:skip
 
-    args = cli.parse_args(["shop", "-d", tmpdir.strpath, "-f", "shop", "-F", "csv"])
+    args = cli.parse_args(["shop", "-d", inv_set.strpath, "-f", "shop", "-F", "csv"])
     shop_import(args)
 
-    args = cli.parse_args(["trans", "-d", tmpdir.strpath, "-f", "pytest", "-q", "10"])
+    args = cli.parse_args(["trans", "-d", inv_set.strpath, "-f", "pytest", "-q", "10"])
     with patch("app.transaction.msg.trans_summary") as mock_trans_summary:
         trans(args)
         mock_arg, _ = mock_trans_summary.call_args
 
-    imp1_f = tmpdir.join("imp1.csv")
+    imp1_f = inv_set.join("imp1.csv")
     with open(imp1_f, "w", encoding="UTF8") as f:
         f.write(
             "order_qty,device_id,device_manufacturer,device_description,shop,shop_id\n"
@@ -187,15 +186,15 @@ def test_trans3(monkeypatch, cli, tmpdir):
             + "10,cc,cc,,pytest1,-\n"
         )
 
-    imp2_f = tmpdir.join("imp2.csv")
+    imp2_f = inv_set.join("imp2.csv")
     with open(imp2_f, "w", encoding="UTF8") as f:
         f.write(
             "order_qty,device_id,device_manufacturer,device_description,shop,shop_id\n"
             + "96,bb,bb,,pytest2,-"
         )
 
-    exp1 = pd.read_csv(tmpdir.strpath + "/pytest_pytest1.csv")
-    exp2 = pd.read_csv(tmpdir.strpath + "/pytest_pytest2.csv")
+    exp1 = pd.read_csv(inv_set.strpath + "/pytest_pytest1.csv")
+    exp2 = pd.read_csv(inv_set.strpath + "/pytest_pytest2.csv")
     imp1 = pd.read_csv(imp1_f)
     imp2 = pd.read_csv(imp2_f)
     pd.testing.assert_frame_equal(exp1, imp1, check_dtype=False)
@@ -206,17 +205,13 @@ def test_trans3(monkeypatch, cli, tmpdir):
     assert mock_arg[0][1]["price"] == str(96 * 10) + DISP_CURR  # shop: pytest2
 
 
-def test_trans4(monkeypatch, cli, tmpdir):
+def test_trans4(cli, inv_set):
     """
     select only one project
     standard transaction or selected project with split on shops
     also consider min qty and price calculation
     """
-    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("conf.config.SCAN_DIR", "")
-    monkeypatch.setattr("conf.config.DEBUG", "pytest")
-    sql_check()
-    bom = tmpdir.join("bom.csv")
+    bom = inv_set.join("bom.csv")
     with open(bom, "w", encoding="UTF8") as f:
         f.write(
             "device_id,device_manufacturer,qty,project\n"
@@ -225,10 +220,10 @@ def test_trans4(monkeypatch, cli, tmpdir):
             + "cc,cc,1,test2\n"
         )# fmt: skip
 
-    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "bom", "-F", "csv"])
+    args = cli.parse_args(["bom", "-d", inv_set.strpath, "-f", "bom", "-F", "csv"])
     bom_import(args)
 
-    shop = tmpdir.join("shop.csv")
+    shop = inv_set.join("shop.csv")
     with open(shop, "w", encoding="UTF8") as f:
         f.write(
             "device_id,device_manufacturer,order_qty,price,shop\n"
@@ -240,30 +235,32 @@ def test_trans4(monkeypatch, cli, tmpdir):
             + "cc,cc,30,10,pytest2\n"
             ) # fmt:skip
 
-    args = cli.parse_args(["shop", "-d", tmpdir.strpath, "-f", "shop", "-F", "csv"])
+    args = cli.parse_args(["shop", "-d", inv_set.strpath, "-f", "shop", "-F", "csv"])
     shop_import(args)
 
-    args = cli.parse_args(["trans", "-d", tmpdir.strpath, "-f", "pytest", "-p", "test"])
+    args = cli.parse_args(
+        ["trans", "-d", inv_set.strpath, "-f", "pytest", "-p", "test"]
+    )
     with patch("app.transaction.msg.trans_summary") as mock_trans_summary:
         trans(args)
         mock_arg, _ = mock_trans_summary.call_args
 
-    imp1_f = tmpdir.join("imp1.csv")
+    imp1_f = inv_set.join("imp1.csv")
     with open(imp1_f, "w", encoding="UTF8") as f:
         f.write(
             "order_qty,device_id,device_manufacturer,device_description,shop,shop_id\n"
             + "5,aa,aa,,pytest1,-\n"
         )
 
-    imp2_f = tmpdir.join("imp2.csv")
+    imp2_f = inv_set.join("imp2.csv")
     with open(imp2_f, "w", encoding="UTF8") as f:
         f.write(
             "order_qty,device_id,device_manufacturer,device_description,shop,shop_id\n"
             + "16,bb,bb,,pytest2,-"
         )
 
-    exp1 = pd.read_csv(tmpdir.strpath + "/pytest_pytest1.csv")
-    exp2 = pd.read_csv(tmpdir.strpath + "/pytest_pytest2.csv")
+    exp1 = pd.read_csv(inv_set.strpath + "/pytest_pytest1.csv")
+    exp2 = pd.read_csv(inv_set.strpath + "/pytest_pytest2.csv")
     imp1 = pd.read_csv(imp1_f)
     imp2 = pd.read_csv(imp2_f)
     pd.testing.assert_frame_equal(exp1, imp1, check_dtype=False)

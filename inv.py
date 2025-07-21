@@ -269,17 +269,26 @@ def _add_stock_parser(command_parser):
         default=list(conf.import_format.keys())[4],  # csv_LCSC
     )
     cli_stock.add_argument(
-        "--dont_ask",
+        "-o",
+        "--overwrite",
         action="store_true",
-        help="""During import: do not ask when adding qty to existing data.
-                If omitted, user will be prompted when device already in stock.""",
+        help="""During import: replace existing project (whole project!).
+                If omitted, devices will be added to existing project.""",
+        required=False,
+    )
+    cli_stock.add_argument(
+        "--dont_align_columns",
+        action="store_true",
+        help="""During import, by default user will be asked if different 
+                values are imported for other columns (description, category,
+                package, etc.) on existing devices. If this option given,
+                existing values will be kept (importing data will not change existing devices).""",
         required=False,
     )
     cli_stock.add_argument(
         "-e",
         "--export",
         action="store_true",
-        default=None,
         help=f"""Print data from STOCK table. By default {conf.STOCK_EXPORT_COL}
                 columns are displayed. Use --show columns to change.
                 If --file is given, write to file as csv in --dir folder.""",
@@ -293,13 +302,11 @@ def _add_stock_parser(command_parser):
         type=str,
         help="""Show columns during export (overwrite default columns).
                 See --info for column description.""",
-        default=None,
     )
     cli_stock.add_argument(
         "--add_project",
         metavar="PROJECT",
         nargs="+",
-        default=None,
         help="""Commit PROJECTs. Add all devices from selected projects
                 to the stock, use --qty option to multiply quantity.
                 Use '%%' if you want to commit all projects.
@@ -309,24 +316,9 @@ def _add_stock_parser(command_parser):
         "--use_project",
         metavar="PROJECT",
         nargs="+",
-        default=None,
         help="""Remove PROJECTs devices from stock, use --qty option to multiply quantity.
                 Use '%%' if you want to remove all projects.
                 Use '?' (including single quote!) to list available projects.""",
-    )
-    cli_stock.add_argument(
-        "--use_device_id",
-        metavar="DEV_ID",
-        default=None,
-        help="""Remove single DEVICE by its ID, usually connects with --use_device_manufacturer.
-                See README.md to see how to use with fuzzy search.""",
-    )
-    cli_stock.add_argument(
-        "--use_device_manufacturer",
-        metavar="DEV_MAN",
-        default=None,
-        help="""Remove single DEVICE by its MAUNUFACTURER, usually connects with --use_device_id.
-                See README.md to see how to use with fuzzy search.""",
     )
     cli_stock.add_argument(
         "-q",
@@ -334,40 +326,49 @@ def _add_stock_parser(command_parser):
         type=int,
         default=1,
         required=False,
-        help="""Quantity used to multiply device qty inside projects for commit.
-                Default equal to 1.""",
+        help="""Quantity used to multiply device qty inside projects when adding
+                or removing (using). Default equal to 1.""",
     )
     cli_stock.add_argument(
-        "--dont_align_columns",
-        action="store_true",
-        default=False,
-        help="""During import, by default user will be asked if different 
-                values are imported for other columns (description, category,
-                package, etc.) on existing devices. If this option given,
-                existing values will be kept (importing data will not change existing devices).""",
-        required=False,
+        "--use_device_id",
+        metavar="DEV_ID",
+        help="""Remove single DEVICE by its ID, usually connects with --use_device_manufacturer.
+                See README.md to see how to use with fuzzy search.""",
+    )
+    cli_stock.add_argument(
+        "--use_device_manufacturer",
+        metavar="DEV_MAN",
+        help="""Remove single DEVICE by its MAUNUFACTURER, usually connects with --use_device_id.
+                See README.md to see how to use with fuzzy search.""",
     )
     cli_stock.add_argument(
         "--info",
         help="""Display info about necessery and acceptable columns for STOCK table.""",
-        required=False,
         action="store_true",
     )
     cli_stock.add_argument(
         "--csv_template",
         help="Save template csv with all columns to a file. Default is './template.csv'",
-        required=False,
         nargs="?",
         const="./template.csv",
-        default=None,
     )
     cli_stock.add_argument(
         "--fzf",
         help=f"""
-        Used by script as input for fuzzy finder. Use script itself: {conf.module_path()}/conf/inv_fzf.sh
+        Used by script as input for fuzzy finder. Rather use script itself: {conf.module_path()}/conf/inv_fzf.sh then this option.
         """,
-        required=False,
         action="store_true",
+    )
+    cli_stock.add_argument(
+        "--history",
+        help="""Display history about operations on stock table. Can be used to undo.""",
+        action="store_true",
+    )
+    cli_stock.add_argument(
+        "--undo",
+        help="""History id to be undone (see --history). Can be single line id
+                or range in format 5..15. When digit missing range from begining
+                or end (begining is on left side): ..5 or 15..""",
     )
     cli_stock.set_defaults(func=stock_import)
 
@@ -394,7 +395,6 @@ def _add_admin_parser(command_parser):
         "--remove_project",
         metavar="PROJECT",
         nargs="+",
-        default=None,
         help="""Remove from BOM table all items from PROJECTs.
                 Use '%%' if you want to remove all not commited projects.
                 Use '?' (including single quote!) to list available projects.
@@ -499,7 +499,6 @@ if __name__ == "__main__":
         write_json(conf.MAN_ALT, {"": [""]})
     parser = cli_parser()
     args = parser.parse_args()
-    log(sys.argv[1:])
 
     # check if we have proper sql file
     try:
@@ -513,5 +512,6 @@ if __name__ == "__main__":
 
     if "func" in args:
         args.func(args)
+        log(args)
     else:
         parser.print_help()

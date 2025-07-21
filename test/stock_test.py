@@ -14,6 +14,17 @@ def cli_fixture():
     return cli_parser()
 
 
+@pytest.fixture(name="inv_set")
+def inv_set_fixture(monkeypatch, tmpdir):
+    """Initializes a temporary database for testing."""
+    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
+    monkeypatch.setattr("conf.config.SCAN_DIR", "")
+    monkeypatch.setattr("conf.config.DEBUG", "pytest")
+    monkeypatch.setattr("conf.config.LOG_FILE", "")
+    sql_check()
+    return tmpdir
+
+
 def _setup_bom_for_commit_test(cli, tmpdir):
     """Helper to import a BOM with two projects for testing."""
     bom_file = tmpdir.join("bom_commit_test.csv")
@@ -46,15 +57,12 @@ def _setup_stock_for_import(cli, tmpdir):
     stock_import(args)
 
 
-def test_commit_project_and_recommit(monkeypatch, tmpdir, cli):
+def test_commit_project_and_recommit(inv_set, cli):
     """
     Tests that a project can be committed, and that attempting to commit it
     again does change the database state (stock_qty).
     """
-    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("conf.config.SCAN_DIR", "")
-    sql_check()
-    _setup_bom_for_commit_test(cli, tmpdir)
+    _setup_bom_for_commit_test(cli, inv_set)
 
     # 1. First Commit
     args = cli.parse_args(["stock", "--add_p", "proj1"])
@@ -88,16 +96,13 @@ def test_commit_project_and_recommit(monkeypatch, tmpdir, cli):
     )
 
 
-def test_commit_project_and_use(monkeypatch, tmpdir, cli):
+def test_commit_project_and_use(inv_set, cli):
     """
     Tests that a project can be used, and that attempting to use it
     once normal, second time zero the stock
     """
-    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("conf.config.SCAN_DIR", "")
-    sql_check()
-    _setup_bom_for_commit_test(cli, tmpdir)
-    _setup_stock_for_import(cli, tmpdir)
+    _setup_bom_for_commit_test(cli, inv_set)
+    _setup_stock_for_import(cli, inv_set)
 
     # 1. standard use
     args = cli.parse_args(["stock", "--use_pro", "proj1"])
@@ -132,9 +137,9 @@ def test_commit_project_and_use(monkeypatch, tmpdir, cli):
     assert stock_after_use.empty
 
 
-def _setup_bom_for_commit_test2(cli, tmpdir):
+def _setup_bom_for_commit_test2(cli, inv_set):
     """Helper to import a BOM with two projects for testing."""
-    bom_file = tmpdir.join("bom_commit_test.csv")
+    bom_file = inv_set.join("bom_commit_test.csv")
     with open(bom_file, "w", encoding="UTF8") as f:
         f.write(
             "device_id,device_manufacturer,qty,project\n"
@@ -143,20 +148,17 @@ def _setup_bom_for_commit_test2(cli, tmpdir):
             + "dev3,MAN_C,30,proj2\n"
         )
     args = cli.parse_args(
-        ["bom", "-d", tmpdir.strpath, "-f", "bom_commit_test", "-F", "csv"]
+        ["bom", "-d", inv_set.strpath, "-f", "bom_commit_test", "-F", "csv"]
     )
     bom_import(args)
 
 
-def test_commit_project_and_use_too_much(monkeypatch, tmpdir, cli, capsys):
+def test_commit_project_and_use_too_much(inv_set, cli, capsys):
     """
     try to use project when not enough stock
     """
-    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("conf.config.SCAN_DIR", "")
-    sql_check()
-    _setup_bom_for_commit_test2(cli, tmpdir)
-    _setup_stock_for_import(cli, tmpdir)
+    _setup_bom_for_commit_test2(cli, inv_set)
+    _setup_stock_for_import(cli, inv_set)
 
     # 1. use more then have
     args = cli.parse_args(["stock", "--use_pro", "proj1"])
@@ -183,9 +185,9 @@ def test_commit_project_and_use_too_much(monkeypatch, tmpdir, cli, capsys):
     )
 
 
-def _setup_stock_for_import2(cli, tmpdir):
+def _setup_stock_for_import2(cli, inv_set):
     """Helper to import a BOM with two projects for testing."""
-    stock_file = tmpdir.join("stock_commit_test.csv")
+    stock_file = inv_set.join("stock_commit_test.csv")
     with open(stock_file, "w", encoding="UTF8") as f:
         f.write(
             "device_id,device_manufacturer,stock_qty\n"
@@ -193,19 +195,16 @@ def _setup_stock_for_import2(cli, tmpdir):
             + "dev2,MAN_B,40\n"
         )
     args = cli.parse_args(
-        ["stock", "-d", tmpdir.strpath, "-f", "stock_commit_test", "-F", "csv"]
+        ["stock", "-d", inv_set.strpath, "-f", "stock_commit_test", "-F", "csv"]
     )
     stock_import(args)
 
 
-def test_missing_project(monkeypatch, tmpdir, cli, capsys):
+def test_missing_project(inv_set, cli, capsys):
     """
     try use project not present in stock
     """
-    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("conf.config.SCAN_DIR", "")
-    sql_check()
-    _setup_bom_for_commit_test2(cli, tmpdir)
+    _setup_bom_for_commit_test2(cli, inv_set)
     #     "device_id,device_manufacturer,qty,project\n"
     #     + "dev1,MAN_A,40,proj1\n"
     #     + "dev2,MAN_B,20,proj1\n"
@@ -218,7 +217,7 @@ def test_missing_project(monkeypatch, tmpdir, cli, capsys):
     assert "no devices in stock. stock is empty." in out.lower()
 
     # 2. use missing project
-    _setup_stock_for_import2(cli, tmpdir)
+    _setup_stock_for_import2(cli, inv_set)
     # "device_id,device_manufacturer,stock_qty\n"
     # + "dev1,MAN_A,20\n"
     # + "dev2,MAN_B,40\n"
@@ -228,19 +227,16 @@ def test_missing_project(monkeypatch, tmpdir, cli, capsys):
     assert "not enough stock for project: ['proj2']" in out.lower()
 
 
-def test_use_one_dev(monkeypatch, tmpdir, cli, capsys):
+def test_use_one_dev(inv_set, cli, capsys):
     """
     try use project not present in stock
     """
-    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("conf.config.SCAN_DIR", "")
-    sql_check()
-    _setup_bom_for_commit_test2(cli, tmpdir)
+    _setup_bom_for_commit_test2(cli, inv_set)
     #     "device_id,device_manufacturer,qty,project\n"
     #     + "dev1,MAN_A,40,proj1\n"
     #     + "dev2,MAN_B,20,proj1\n"
     #     + "dev3,MAN_C,30,proj2\n"
-    _setup_stock_for_import2(cli, tmpdir)
+    _setup_stock_for_import2(cli, inv_set)
     # "device_id,device_manufacturer,stock_qty\n"
     # + "dev1,MAN_A,20\n"
     # + "dev2,MAN_B,40\n"

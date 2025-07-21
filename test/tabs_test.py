@@ -11,7 +11,7 @@ import pytest
 from app.common import tab_cols
 from app.error import SqlTabError, VimdiffSelError
 from app.tabs import ASCII_txt, NA_rows, align_other_cols, vimdiff_selection
-from conf.sql_colnames import *
+from conf.sql_colnames import *  # pylint: disable=unused-wildcard-import,wildcard-import
 from inv import cli_parser
 
 
@@ -21,7 +21,7 @@ def cli_fixture():
     return cli_parser()
 
 
-def test_NA_rows(capsys):
+def test_NA_rows(capsys):  # pylint: disable=invalid-name
     """NA rows in must and nice cols"""
     df = pd.DataFrame(
         {
@@ -42,7 +42,7 @@ def test_NA_rows(capsys):
     assert "none" in out.lower()
 
 
-def test_NA_rows1(capsys):
+def test_NA_rows1(capsys):  # pylint: disable=invalid-name
     """NA rows only in nice col"""
     df = pd.DataFrame(
         {
@@ -85,7 +85,7 @@ def test_tab_cols2(monkeypatch, tmpdir):
     assert err_info.match("test")
 
 
-def test_ASCII_txt_ohm_conversion():
+def test_ASCII_txt_ohm_conversion():  # pylint: disable=invalid-name
     """Test that ASCII_txt correctly converts 'Ω' to 'ohm'."""
 
     # Test with the Omega symbol
@@ -203,14 +203,15 @@ def test_align_other_cols_user_selects_rm_dat(mock_tab_cols, mock_vimdiff):
     # Mock vimdiff_selection to simulate user choosing the 'rm_dat' (optional) value
     # The values from rm_dat are passed in the `opt_col` argument.
     # We return those values to simulate the user's choice.
-    def vimdiff_side_effect(
-        ref_col,
-        change_col,
+    def vimdiff_side_effect(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+        # pyright: ignore
+        ref_col,  # pylint: disable=unused-argument
+        change_col,  # pylint: disable=unused-argument
         opt_col,
-        what_differ,
-        dev_id,
-        exit_on_change,
-        start_line=1,
+        what_differ,  # pylint: disable=unused-argument
+        dev_id,  # pylint: disable=unused-argument
+        exit_on_change,  # pylint: disable=unused-argument
+        start_line=1,  # pylint: disable=unused-argument
     ):
         # The value of the dict is the list of column values to show.
         return next(iter(opt_col.values()))

@@ -9,6 +9,7 @@ from audite import track_changes
 import conf.config as conf
 from app.common import (
     SQL_KEYWORDS,
+    log_create,
     read_json_dict,
     tab_exists,
     unpack_foreign,
@@ -402,6 +403,12 @@ def sql_check() -> None:
     if not os.path.isfile(conf.DB_FILE):
         msg.sql_file_miss(conf.DB_FILE)
         sql_create()
+        # check if path exists, if not create
+        try:
+            log_create()
+        except PermissionError as e:
+            msg.log_path_error(str(e))
+            return
 
     sql_scheme = read_json_dict(conf.SQL_SCHEME)
     for i in range(len(sql_scheme)):

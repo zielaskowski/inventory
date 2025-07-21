@@ -38,7 +38,7 @@ from app.error import (
 )
 from app.message import MessageHandler
 from conf import config as conf
-from conf.sql_colnames import *
+from conf.sql_colnames import *  # pylint: disable=unused-wildcard-import,wildcard-import
 
 msg = MessageHandler()
 
@@ -86,7 +86,9 @@ def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:
         )
         try:
             miss_cols = existing_data.columns.difference(dat.columns)
-            dat[miss_cols] = pd.DataFrame(None, index=dat.index, columns=miss_cols, dtype=object)
+            dat[miss_cols] = pd.DataFrame(
+                None, index=dat.index, columns=miss_cols, dtype=object
+            )
             existing_data["dev_rm"] = existing_data[DEV_ID]
             existing_data["man_rm"] = existing_data[DEV_MAN]
             dat = align_other_cols(rm_dat=existing_data, keep_dat=dat)
@@ -220,7 +222,7 @@ def hash_tab(dat: pd.DataFrame) -> pd.DataFrame:
     return dat
 
 
-def NA_rows(
+def NA_rows(  # pylint: disable=invalid-name
     df: pd.DataFrame,
     must_cols: list[str],
     nice_cols: list[str],
@@ -291,7 +293,9 @@ def columns_align(n_stock: pd.DataFrame, file: str, args: Namespace) -> pd.DataF
     return n_stock
 
 
-def ASCII_txt(txt: str | None | NAType) -> str | None | NAType:
+def ASCII_txt(  # pylint: disable=invalid-name
+    txt: str | None | NAType,
+) -> str | None | NAType:  # pylint: disable=invalid-name
     """remove any chinese signs from string columns"""
     if not isinstance(txt, str):
         return txt
@@ -381,7 +385,10 @@ def align_data(dat: pd.DataFrame, just_inform: bool = False) -> pd.DataFrame:
     return keep_dev
 
 
-def align_other_cols(rm_dat: pd.DataFrame, keep_dat: pd.DataFrame) -> pd.DataFrame:
+def align_other_cols(  # pylint: disable=too-many-locals
+    rm_dat: pd.DataFrame,
+    keep_dat: pd.DataFrame,
+) -> pd.DataFrame:
     """
     expect DataFrame with one pair replacement per row:
     and columns:
@@ -441,7 +448,7 @@ def align_other_cols(rm_dat: pd.DataFrame, keep_dat: pd.DataFrame) -> pd.DataFra
             # so update on common cols only
             keep_attr_df = pd.DataFrame([keep_attr])
             common_col = keep_dat.columns.intersection(keep_attr_df.columns)
-            keep_dat.loc[keep_attr_df.index,common_col] = keep_attr_df
+            keep_dat.loc[keep_attr_df.index, common_col] = keep_attr_df
     return keep_dat.reset_index()
 
 
@@ -480,7 +487,10 @@ def align_attributes(rm_attr: pd.Series, keep_attr: pd.Series) -> tuple:
     )
 
 
-def align_manufacturers(dat: pd.DataFrame, just_inform: bool = False) -> pd.DataFrame:
+def align_manufacturers(  # pylint: disable=too-many-return-statements
+    dat: pd.DataFrame,
+    just_inform: bool = False,
+) -> pd.DataFrame:
     """
     For device_id duplication, collect manufacturer name if different
     create dictionary with list of manufacturers as values for device_id as key:
@@ -581,12 +591,12 @@ def align_manufacturers(dat: pd.DataFrame, just_inform: bool = False) -> pd.Data
     return dat
 
 
-def vimdiff_selection(
+def vimdiff_selection(  # pylint: disable=too-many-positional-arguments,too-many-locals,too-many-arguments
     ref_col: dict[str, list[str]],
     change_col: dict[str, list[str]],
     opt_col: dict[str, list[str]],
-    what_differ:str,
-    dev_id:str,
+    what_differ: str,
+    dev_id: str,
     exit_on_change: bool,
     start_line: int = 1,
 ) -> list[str]:
@@ -701,10 +711,16 @@ def check_existing_data(dat: pd.DataFrame, args: Namespace) -> bool:
     other way ask for confirmation
     return True if we can continue
     """
-    if args.dont_ask:
-        return True
     old_data = sql.getL(tab="STOCK", get_col=[STOCK_HASH])
     overlap_data = dat.loc[dat[STOCK_HASH].isin(old_data), :]
+    if args.overwrite:
+        # remove all old data
+        sql.rm(
+            tab="STOCK",
+            value=overlap_data[STOCK_HASH].to_list(),
+            column=[STOCK_HASH],
+        )
+        return True
     # warn about adding qty
     if not overlap_data.empty:
         if not msg.data_already_imported(overlap_data):

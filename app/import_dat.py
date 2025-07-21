@@ -15,6 +15,7 @@ from app import sql
 from app.common import (
     IMPORT_FORMAT_SPECIAL_KEYS,
     NO_EXPORT_COLS,
+    log_read,
 )
 from app.message import MessageHandler
 from app.tabs import (
@@ -25,7 +26,7 @@ from app.tabs import (
     tab_template,
 )
 from conf.config import COL_WIDTH, import_format
-from conf.sql_colnames import *
+from conf.sql_colnames import *  # pylint: disable=unused-wildcard-import,wildcard-import
 
 msg = MessageHandler()
 
@@ -46,6 +47,9 @@ def stock_import(args: Namespace) -> None:
         return
     if args.export or args.fzf:
         export(args, "STOCK")
+        return
+    if args.history:
+        print(log_read(tab="STOCK"))
         return
     files = scan_files(args)
     for file in files:

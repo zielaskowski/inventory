@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import sys
+from argparse import Namespace
 from datetime import datetime
 from json import JSONDecodeError
 from typing import Dict
@@ -28,7 +29,7 @@ from app.error import (
     WriteJsonError,
 )
 from app.message import MessageHandler
-from conf.sql_colnames import *
+from conf.sql_colnames import *  # pylint: disable=unused-wildcard-import,wildcard-import
 
 # list of keywords to be ignored during reading columns from tab
 SQL_KEYWORDS = ["FOREIGN", "UNIQUE", "ON_CONFLICT", "HASH_COLS", "COL_DESCRIPTION"]
@@ -180,36 +181,99 @@ def vimdiff_config(
         f.write(help_txt)
 
 
-def log(args) -> None:
+def log_create() -> None:
     """
-    log command in ./conf/log.txt
-    skip  -h and --help commands
-    check if attribute 'help' exists in com namespac
+    remove old file and check if dir exists
+    create dir if possible
+    raises PermissionError
     """
     if conf.LOG_FILE == "":
         return
-    if any(a for a in args if a in ["--help", "-h"]):
-        return
-
-    cmd = ["python -m inv"] + args
-    now = datetime.now()
-    cmd = [now.strftime("%Y-%m-%d %H:%M:%S")] + cmd
-
-    # check if path exists, if not create
     path = os.path.dirname(conf.LOG_FILE)
     if not os.path.exists(path):
-        try:
-            os.makedirs(path)
-        except PermissionError as e:
-            msg.log_path_error(str(e))
-            return
+        os.makedirs(path)
+    if os.path.exists(conf.LOG_FILE):
+        os.remove(conf.LOG_FILE)
+    with open(conf.LOG_FILE, "w", encoding="UTF8") as f:
+        f.close()
 
+
+def log(args: Namespace) -> None:
+    """
+    log command in ./conf/log.txt
+    """
+    if conf.LOG_FILE == "":
+        return
+
+    cmd = ["python -m inv"]
+    for var, val in vars(args).items():
+        if callable(val):
+            continue
+        if val:
+            if var == "command":
+                cmd += [val]
+            else:
+                if isinstance(val, list):
+                    val = " ".join(f"'{v}'" for v in val)
+                cmd += [
+                    "--" + var + " " + (str(val) if not isinstance(val, bool) else "")
+                ]
+
+    now = datetime.now()
+    cmd = [now.strftime("%Y-%m-%d %H:%M:%S")] + cmd
+    log_write(cmd)
+
+
+def log_write(txt: list[str]) -> None:
+    """
+    write to log
+    can rise IsDirectoryError and FileNotFoundError
+    """
     try:
         with open(conf.LOG_FILE, "a", encoding="UTF8") as f:
-            f.write(f"{' '.join(cmd)}\n")
+            f.write(f"{' '.join(txt)}\n")
     except IsADirectoryError as e:
-        msg.log_path_error(str(e) + ". missing filename.")
+        msg.log_path_error(str(e) + ". Missing filename.")
         return
+    except FileNotFoundError as e:
+        msg.log_path_error(str(e))
+        return
+
+
+def log_read(tab: str) -> str:
+    """
+    read from log, return string
+    filter for tab only
+    can rise IsDirectoryError and FileNotFoundError
+    """
+
+    def parse_line(line):
+        cols = line.strip().split(" ")
+        mid = " ".join(cols[2:5])
+        args = " ".join(cols[6:])
+        return cols[0:2] + [mid] + [cols[5]] + [args]
+
+    try:
+        with open(conf.LOG_FILE, "r", encoding="UTF8") as f:
+            line = [parse_line(line) for line in f]
+    except IsADirectoryError as e:
+        msg.log_path_error(str(e) + ". Missing filename.")
+        return ""
+    except FileNotFoundError as e:
+        msg.log_path_error(str(e))
+        return ""
+    log_df = pd.DataFrame(
+        line,
+        columns=[  # pyright: ignore[reportArgumentType]
+            "date",
+            "time",
+            "python",
+            "table",
+            "args",
+        ],
+    )
+    log_df = log_df[log_df["table"] == tab.lower()].reset_index(drop=True)
+    return log_df.to_string(index=False)
 
 
 def write_json(file: str, content: dict[str, dict] | dict[str, list[str]]) -> None:
@@ -457,7 +521,11 @@ def match_from_list(cmd: str, choices: Dict | list) -> str:
 class AbbreviationParser(argparse.ArgumentParser):
     """override argparser to provide arguments abbrevation"""
 
-    def _get_abbreviation(self, cmd: str, choices: Dict) -> str:
+    def _get_abbreviation(  # pylint: disable=inconsistent-return-statements
+        self,
+        cmd: str,
+        choices: Dict,
+    ) -> str:
         if cmd in ["-h", "--help"]:
             return cmd
         try:
@@ -476,7 +544,12 @@ class AbbreviationParser(argparse.ArgumentParser):
 
         # in case choices are None
         try:
-            choices: Dict = self._subparsers._actions[1].choices
+            choices = (
+                    self # pylint: disable=protected-access
+                    ._subparsers
+                    ._actions[1]  # pyright: ignore[reportAssignmentType,reportOptionalMemberAccess]
+                    .choices
+                    ) # fmt: skip
         except AttributeError:
             self.error("No arguments added to argparser")
 
@@ -485,6 +558,9 @@ class AbbreviationParser(argparse.ArgumentParser):
             return super().parse_args(args, namespace)
 
         if args and args[0]:
-            full_cmd = self._get_abbreviation(args[0], choices)
+            full_cmd = self._get_abbreviation(
+                args[0],
+                choices,  # pyright: ignore[reportArgumentType]
+            )
             args[0] = full_cmd  # pyright: ignore
         return super().parse_args(args, namespace)

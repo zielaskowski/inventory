@@ -1,6 +1,7 @@
 """common function tests"""
 
 import json
+from argparse import Namespace
 
 import pytest
 
@@ -20,7 +21,7 @@ from conf.config import SQL_SCHEME
 from inv import cli_parser
 
 
-def sort_dict(dat: dict[str, list[str]]) -> dict[str, list[str]]:
+def _sort_dict(dat: dict[str, list[str]]) -> dict[str, list[str]]:
     """sort dict values (list)"""
     return {k: sorted(v) for k, v in dat.items()}
 
@@ -105,7 +106,8 @@ def test_read_json6(tmpdir):
 def test_log1(monkeypatch, capsys):
     """permission error"""
     monkeypatch.setattr("conf.config.LOG_FILE", "/home/nonexistinguser/log")
-    log(["test", "test"])
+    args = Namespace(test=True, log=True)
+    log(args)
     out, _ = capsys.readouterr()
     assert "nonexistinguser" in out.lower()
 
@@ -114,14 +116,17 @@ def test_log3(monkeypatch, tmpdir):
     """loging normaly"""
     f = tmpdir.join("log.txt")
     monkeypatch.setattr("conf.config.LOG_FILE", f)
-    log(["test", "log"])
-    assert "test log" in f.read()
+    args = Namespace(test=True, log=True)
+    log(args)
+    assert "--test" in f.read()
+    assert "--log" in f.read()
 
 
 def test_log4(monkeypatch, capsys):
     """no file"""
     monkeypatch.setattr("conf.config.LOG_FILE", "./test/")
-    log(["test"])
+    args = Namespace(test=True, log=True)
+    log(args)
     out, _ = capsys.readouterr()
     assert "missing filename" in out.lower()
 
@@ -255,8 +260,8 @@ def test_store_alternatives1(tmpdir, monkeypatch):
         "d": ["dd"],
         "e": ["ee"],
     }
-    exp = sort_dict(exp)
-    imp = sort_dict(imp)
+    exp = _sort_dict(exp)
+    imp = _sort_dict(imp)
     assert exp == imp
 
 
@@ -286,8 +291,8 @@ def test_store_alternatives2(tmpdir, monkeypatch):
         "d": ["dd"],
         "e": ["ee"],
     }
-    exp = sort_dict(exp)
-    imp = sort_dict(imp)
+    exp = _sort_dict(exp)
+    imp = _sort_dict(imp)
     assert exp == imp
 
 
@@ -319,8 +324,8 @@ def test_store_alternatives3(tmpdir, monkeypatch):
         "e": ["ee"],
         "ff": ["a1"],
     }
-    exp = sort_dict(exp)
-    imp = sort_dict(imp)
+    exp = _sort_dict(exp)
+    imp = _sort_dict(imp)
     assert exp == imp
 
 

@@ -117,11 +117,22 @@ class MessageHandler:  # pylint: disable=too-many-public-methods
         self.message.append(f"Removed data from BOM table where project == '{project}'")
         self.__exec__()
 
-    def stock_commit(self, project: list[str]) -> None:
+    def stock_add(  # pylint: disable=too-many-positional-arguments,too-many-arguments
+        self,
+        project: list[str] | None = None,
+        dev_id: str = "",
+        dev_man: str = "",
+        no_devs: bool = False,
+    ) -> None:
         """message method"""
-        self.message.append(
-            f"Added to stock data from BOM table where project == {project}"
-        )
+        if no_devs:
+            self.message.append(f"No device {dev_id} from {dev_man}. Skiped.")
+            self.__exec__()
+            return
+        if project:
+            self.message.append(f"Added stock data for project: {project}.")
+        else:
+            self.message.append(f"Added device {dev_id} from {dev_man}.")
         self.__exec__()
 
     def stock_use(  # pylint: disable=too-many-positional-arguments,too-many-arguments

@@ -2,9 +2,9 @@
 
 import pytest
 
-from app.import_dat import bom_import, commit_project, stock_import
+from app.import_dat import add_stock, bom_import, stock_import
 from app.sql import getDF
-from conf.config import DEV_ID, STOCK_QTY
+from conf.config import DEV_ID, DEV_MAN, STOCK_QTY
 
 
 def _setup_bom_for_commit_test(cli, tmpdir, db_setup):
@@ -48,7 +48,7 @@ def test_commit_project_and_recommit(db_setup, cli, tmpdir):
 
     # 1. First Commit
     args = cli.parse_args(["stock", "--add_p", "proj1"])
-    commit_project(args)
+    add_stock(args)
 
     # 2. Verify State After First Commit
     stock_after_first_commit = getDF(tab="STOCK", follow=True)
@@ -65,7 +65,7 @@ def test_commit_project_and_recommit(db_setup, cli, tmpdir):
     )
 
     # 3. Second (Duplicate) Commit
-    commit_project(args)
+    add_stock(args)
 
     # 4. Verify State After Second Commit (should be unchanged)
     stock_after_second_commit = getDF(tab="STOCK", follow=True)
@@ -254,3 +254,114 @@ def test_use_one_dev(db_setup, cli, tmpdir, capsys):
     stock_import(args)
     out, _ = capsys.readouterr()
     assert "removed device dev1 from man_a" in out.lower()
+
+
+def test_use_one_dev_too_much(db_setup, cli, tmpdir, capsys):
+    """
+    try use project not present in stock
+    """
+    _setup_bom_for_commit_test2(cli, tmpdir, db_setup)
+    #     "device_id,device_manufacturer,qty,project\n"
+    #     + "dev1,MAN_A,40,proj1\n"
+    #     + "dev2,MAN_B,20,proj1\n"
+    #     + "dev3,MAN_C,30,proj2\n"
+    _setup_stock_for_import2(cli, tmpdir, db_setup)
+    # "device_id,device_manufacturer,stock_qty\n"
+    # + "dev1,MAN_A,20\n"
+    # + "dev2,MAN_B,40\n"
+
+    # 1. use project
+    args = cli.parse_args(
+        [
+            "stock",
+            "--use_device_id",
+            "dev1",
+            "--use_device_manufacturer",
+            "MAN_A",
+        ]
+    )
+    stock_import(args)
+    stock_after_use = getDF("STOCK", follow=True)
+    assert (
+        stock_after_use.loc[stock_after_use[DEV_ID] == "dev1", STOCK_QTY].iloc[0] == 19
+    )
+    out, _ = capsys.readouterr()
+    assert "removed device dev1 from man_a" in out.lower()
+
+
+def test_add_one_dev(db_setup, cli, tmpdir, capsys):
+    """
+    try use project not present in stock
+    """
+    _setup_bom_for_commit_test2(cli, tmpdir, db_setup)
+    #     "device_id,device_manufacturer,qty,project\n"
+    #     + "dev1,MAN_A,40,proj1\n"
+    #     + "dev2,MAN_B,20,proj1\n"
+    #     + "dev3,MAN_C,30,proj2\n"
+    _setup_stock_for_import2(cli, tmpdir, db_setup)
+    # "device_id,device_manufacturer,stock_qty\n"
+    # + "dev1,MAN_A,20\n"
+    # + "dev2,MAN_B,40\n"
+
+    # 1. use project
+    args = cli.parse_args(
+        [
+            "stock",
+            "--add_device_id",
+            "dev1",
+            "--add_device_manufacturer",
+            "MAN_A",
+        ]
+    )
+    stock_import(args)
+    stock_after_use = getDF("STOCK", follow=True)
+    assert (
+        stock_after_use.loc[stock_after_use[DEV_ID] == "dev1", STOCK_QTY].iloc[0] == 21
+    )
+    out, _ = capsys.readouterr()
+    assert "added device dev1 from man_a" in out.lower()
+
+
+def test_add_device_id_and_manufacturer(db_setup, cli, tmpdir):
+    """
+    Tests adding a device to stock by its ID and manufacturer.
+    """
+    _setup_bom_for_commit_test2(cli, tmpdir, db_setup)
+    #     "device_id,device_manufacturer,qty,project\n"
+    #     + "dev1,MAN_A,40,proj1\n"
+    #     + "dev2,MAN_B,20,proj1\n"
+    #     + "dev3,MAN_C,30,proj2\n"
+    # 1. Add a new device
+    args = cli.parse_args(
+        [
+            "stock",
+            "--add_device_id",
+            "dev1",
+            "--add_device_manufacturer",
+            "MAN_A",
+        ]
+    )
+    add_stock(args)
+
+    # 2. Verify the device is in stock with quantity 1
+    stock_after_add = getDF(tab="STOCK", follow=True)
+    assert len(stock_after_add) == 1
+    assert "dev1" in stock_after_add[DEV_ID].to_list()
+    assert "MAN_A" in stock_after_add[DEV_MAN].to_list()
+    assert (
+        stock_after_add.loc[stock_after_add[DEV_ID] == "dev1", STOCK_QTY].iloc[0] == 1
+    )
+
+    # 3. Add the same device again
+    add_stock(args)
+
+    # 4. Verify the stock quantity is now 2
+    stock_after_second_add = getDF(tab="STOCK", follow=True)
+    assert len(stock_after_second_add) == 1
+    assert (
+        stock_after_second_add.loc[
+            stock_after_second_add[DEV_ID] == "dev1", STOCK_QTY
+        ].iloc[0]
+        == 2
+    )
+

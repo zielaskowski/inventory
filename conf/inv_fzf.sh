@@ -80,6 +80,24 @@ device_remove(){
 }
 export -f device_remove
 
+# action for FZF to remove selected dev from stock
+device_add(){
+	# The first field (tab-separated) is the original data line.
+	original_line=$(echo "$1" | cut -f1)
+	# ADJUST DEV_ID and/or DEV_MAN COLUMN NUMBER IF NEEDED
+	dev_id=$(echo "$original_line" | \
+		awk -F '|' -v dev_id_col="$DEV_ID" '{print $dev_id_col}' | \
+		tr -d '\n')
+	dev_man=$(echo "$original_line" | \
+		awk -F '|' -v dev_man_col="$DEV_MAN" '{print $dev_man_col}' | \
+		tr -d '\n')
+	inv stock --add_device_id "$dev_id" --add_device_manufacturer "$dev_man" | \
+		xargs -I{} notify-send {}
+	# update stock
+	inv stock --fzf
+}
+export -f device_add
+
 # This function encapsulates the data formatting logic.
 # It reads the data file and formats it for fzf.
 format_data_for_fzf() {
@@ -151,10 +169,11 @@ format_data_for_fzf | fzf --ansi \
 	--preview-window=top:30%:wrap \
 	--preview='bash -c "generate_preview \"{}\""' \
 	--border='horizontal' \
-	--border-label='ctrl-c to copy ID | ctrl-d to delete' \
+	--border-label='ctrl-c to copy ID | ctrl-d to delete | ctrl-a to add' \
 	--border-label-pos=-1:bottom \
 	--bind='ctrl-c:execute-silent(bash -c "device_copy \"{}\"")' \
-	--bind='ctrl-d:execute-silent(bash -c "device_remove \"{}\"")+reload-sync(bash -c "format_data_for_fzf")'
+	--bind='ctrl-d:execute-silent(bash -c "device_remove \"{}\"")+reload-sync(bash -c "format_data_for_fzf")' \
+	--bind='ctrl-a:execute-silent(bash -c "device_add \"{}\"")+reload-sync(bash -c "format_data_for_fzf")'
 	# recognize color codes
 	# delimiter
 	# display only second column (first is used for preview)

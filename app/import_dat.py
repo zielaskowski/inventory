@@ -26,8 +26,8 @@ msg = MessageHandler()
 
 def stock_import(args: Namespace) -> None:
     """Main stock function"""
-    if args.add_project:
-        commit_project(args=args)
+    if args.add_project or args.add_device_id or args.add_device_manufacturer:
+        add_stock(args=args)
         return
     if args.use_project or args.use_device_id or args.use_device_manufacturer:
         use_stock(args=args)
@@ -256,19 +256,67 @@ def export(args: Namespace, tab: str) -> None:  # pylint: disable=too-many-branc
     df.to_csv(os.path.join(args.dir, args.file), index=False)
 
 
-def commit_project(args: Namespace) -> None:
+def add_stock(args: Namespace) -> None:
     """commit projects"""
-    if (projects := prepare_project(projects=args.add_project)) == []:
+    projects = []
+    if args.add_project:
+        if (projects := prepare_project(projects=args.add_project)) == []:
+            return
+        dat = sql.getDF(
+            tab="BOM",
+            search=projects,
+            where=[BOM_PROJECT],
+            follow=True,
+        )
+        dat["use_qty"] = dat[BOM_QTY] * args.qty
+        if dat.empty:
+            msg.msg('No devices in database')
+            sys.exit(1)
+    else:
+        dat = sql.getDF("DEVICE",follow=True)
+    if args.add_device_id:
+        dat = dat.loc[dat[DEV_ID] == args.add_device_id, :]
+        dat["use_qty"] = 1
+    if args.add_device_manufacturer:
+        dat = dat.loc[dat[DEV_MAN] == args.add_device_manufacturer, :]
+        dat["use_qty"] = 1
+    if dat.empty:
+        msg.stock_add(
+            dev_id=args.use_device_id,
+            dev_man=args.use_device_manufacturer,
+            no_devs=True,
+        )
         return
-    dat = sql.getDF(
-        tab="BOM",
-        search=projects,
-        where=[BOM_PROJECT],
+    # collect stock
+    # add 'empty' devices that we want to use
+    # other way we have problem with adding to missing devs in stock
+    zero_stock = dat.copy(deep=True)
+    zero_stock[STOCK_QTY] = 0
+    zero_stock[STOCK_HASH] = zero_stock[DEV_HASH]
+    sql.put(zero_stock, "STOCK", on_conflict={"action": "IGNORE"})
+    stock = sql.getDF(tab="STOCK")
+    # merge and add
+    dat = pd.merge(
+        left=dat,
+        left_on=DEV_HASH,
+        right=stock,
+        right_on=STOCK_HASH,
+        how="left",
     )
-    dat.rename(columns={BOM_QTY: STOCK_QTY}, inplace=True)
-    dat[STOCK_QTY] = dat[STOCK_QTY] * args.qty
-    sql.put(dat, tab="STOCK")
-    msg.stock_commit(projects)
+
+    dat[STOCK_QTY] = dat[STOCK_QTY] + dat["use_qty"]
+    sql.edit(
+        tab="STOCK",
+        new_val=dat[STOCK_QTY].to_list(),
+        col=STOCK_QTY,
+        search=dat[DEV_HASH].to_list(),
+        where=STOCK_HASH,
+    )
+    msg.stock_add(
+        project=projects,
+        dev_id=args.add_device_id,
+        dev_man=args.add_device_manufacturer,
+    )
 
 
 def use_stock(args: Namespace) -> None:

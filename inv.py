@@ -290,7 +290,7 @@ def _add_stock_parser(command_parser):
         "--export",
         action="store_true",
         help=f"""Print data from STOCK table. By default {conf.STOCK_EXPORT_COL}
-                columns are displayed. Use --show columns to change.
+                columns are displayed. Use --export_columns to change.
                 If --file is given, write to file as csv in --dir folder.""",
         required=False,
     )
@@ -328,6 +328,18 @@ def _add_stock_parser(command_parser):
         required=False,
         help="""Quantity used to multiply device qty inside projects when adding
                 or removing (using). Default equal to 1.""",
+    )
+    cli_stock.add_argument(
+        "--add_device_id",
+        metavar="DEV_ID",
+        help="""Add single DEVICE by its ID, usually connects with --add_device_manufacturer.
+                See README.md to see how to use with fuzzy search.""",
+    )
+    cli_stock.add_argument(
+        "--add_device_manufacturer",
+        metavar="DEV_MAN",
+        help="""Add single DEVICE by its MAUNUFACTURER, usually connects with --add_device_id.
+                See README.md to see how to use with fuzzy search.""",
     )
     cli_stock.add_argument(
         "--use_device_id",

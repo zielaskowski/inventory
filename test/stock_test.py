@@ -3,29 +3,11 @@
 import pytest
 
 from app.import_dat import bom_import, commit_project, stock_import
-from app.sql import getDF, sql_check
-from conf.sql_colnames import DEV_ID, STOCK_QTY
-from inv import cli_parser
+from app.sql import getDF
+from conf.config import DEV_ID, STOCK_QTY
 
 
-@pytest.fixture(name="cli")
-def cli_fixture():
-    """command line parser"""
-    return cli_parser()
-
-
-@pytest.fixture(name="inv_set")
-def inv_set_fixture(monkeypatch, tmpdir):
-    """Initializes a temporary database for testing."""
-    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("conf.config.SCAN_DIR", "")
-    monkeypatch.setattr("conf.config.DEBUG", "pytest")
-    monkeypatch.setattr("conf.config.LOG_FILE", "")
-    sql_check()
-    return tmpdir
-
-
-def _setup_bom_for_commit_test(cli, tmpdir):
+def _setup_bom_for_commit_test(cli, tmpdir, db_setup):
     """Helper to import a BOM with two projects for testing."""
     bom_file = tmpdir.join("bom_commit_test.csv")
     with open(bom_file, "w", encoding="UTF8") as f:
@@ -41,7 +23,7 @@ def _setup_bom_for_commit_test(cli, tmpdir):
     bom_import(args)
 
 
-def _setup_stock_for_import(cli, tmpdir):
+def _setup_stock_for_import(cli, tmpdir, db_setup):
     """Helper to import a BOM with two projects for testing."""
     stock_file = tmpdir.join("stock_commit_test.csv")
     with open(stock_file, "w", encoding="UTF8") as f:
@@ -57,12 +39,12 @@ def _setup_stock_for_import(cli, tmpdir):
     stock_import(args)
 
 
-def test_commit_project_and_recommit(inv_set, cli):
+def test_commit_project_and_recommit(db_setup, cli, tmpdir):
     """
     Tests that a project can be committed, and that attempting to commit it
     again does change the database state (stock_qty).
     """
-    _setup_bom_for_commit_test(cli, inv_set)
+    _setup_bom_for_commit_test(cli, tmpdir, db_setup)
 
     # 1. First Commit
     args = cli.parse_args(["stock", "--add_p", "proj1"])
@@ -96,13 +78,13 @@ def test_commit_project_and_recommit(inv_set, cli):
     )
 
 
-def test_commit_project_and_use(inv_set, cli):
+def test_commit_project_and_use(db_setup, cli, tmpdir):
     """
     Tests that a project can be used, and that attempting to use it
     once normal, second time zero the stock
     """
-    _setup_bom_for_commit_test(cli, inv_set)
-    _setup_stock_for_import(cli, inv_set)
+    _setup_bom_for_commit_test(cli, tmpdir, db_setup)
+    _setup_stock_for_import(cli, tmpdir, db_setup)
 
     # 1. standard use
     args = cli.parse_args(["stock", "--use_pro", "proj1"])
@@ -137,9 +119,9 @@ def test_commit_project_and_use(inv_set, cli):
     assert stock_after_use.empty
 
 
-def _setup_bom_for_commit_test2(cli, inv_set):
+def _setup_bom_for_commit_test2(cli, tmpdir, db_setup):
     """Helper to import a BOM with two projects for testing."""
-    bom_file = inv_set.join("bom_commit_test.csv")
+    bom_file = tmpdir.join("bom_commit_test.csv")
     with open(bom_file, "w", encoding="UTF8") as f:
         f.write(
             "device_id,device_manufacturer,qty,project\n"
@@ -148,17 +130,17 @@ def _setup_bom_for_commit_test2(cli, inv_set):
             + "dev3,MAN_C,30,proj2\n"
         )
     args = cli.parse_args(
-        ["bom", "-d", inv_set.strpath, "-f", "bom_commit_test", "-F", "csv"]
+        ["bom", "-d", tmpdir.strpath, "-f", "bom_commit_test", "-F", "csv"]
     )
     bom_import(args)
 
 
-def test_commit_project_and_use_too_much(inv_set, cli, capsys):
+def test_commit_project_and_use_too_much(db_setup, cli, tmpdir, capsys):
     """
     try to use project when not enough stock
     """
-    _setup_bom_for_commit_test2(cli, inv_set)
-    _setup_stock_for_import(cli, inv_set)
+    _setup_bom_for_commit_test2(cli, tmpdir, db_setup)
+    _setup_stock_for_import(cli, tmpdir, db_setup)
 
     # 1. use more then have
     args = cli.parse_args(["stock", "--use_pro", "proj1"])
@@ -185,9 +167,9 @@ def test_commit_project_and_use_too_much(inv_set, cli, capsys):
     )
 
 
-def _setup_stock_for_import2(cli, inv_set):
+def _setup_stock_for_import2(cli, tmpdir, db_setup):
     """Helper to import a BOM with two projects for testing."""
-    stock_file = inv_set.join("stock_commit_test.csv")
+    stock_file = tmpdir.join("stock_commit_test.csv")
     with open(stock_file, "w", encoding="UTF8") as f:
         f.write(
             "device_id,device_manufacturer,stock_qty\n"
@@ -195,16 +177,17 @@ def _setup_stock_for_import2(cli, inv_set):
             + "dev2,MAN_B,40\n"
         )
     args = cli.parse_args(
-        ["stock", "-d", inv_set.strpath, "-f", "stock_commit_test", "-F", "csv"]
+        ["stock", "-d", tmpdir.strpath, "-f", "stock_commit_test", "-F", "csv"]
     )
     stock_import(args)
 
 
-def test_missing_project(inv_set, cli, capsys):
+def test_missing_project(db_setup, cli, tmpdir, capsys):
     """
     try use project not present in stock
+    testing also export
     """
-    _setup_bom_for_commit_test2(cli, inv_set)
+    _setup_bom_for_commit_test2(cli, tmpdir, db_setup)
     #     "device_id,device_manufacturer,qty,project\n"
     #     + "dev1,MAN_A,40,proj1\n"
     #     + "dev2,MAN_B,20,proj1\n"
@@ -215,9 +198,17 @@ def test_missing_project(inv_set, cli, capsys):
     stock_import(args)
     out, _ = capsys.readouterr()
     assert "no devices in stock. stock is empty." in out.lower()
+    args = cli.parse_args(["stock", "-e"])
+
+    # 15. empty stock table
+    args = cli.parse_args(["stock", "-e"])
+    with pytest.raises(SystemExit):
+        stock_import(args)
+    out, _ = capsys.readouterr()
+    assert "no data in table stock." in out.lower()
 
     # 2. use missing project
-    _setup_stock_for_import2(cli, inv_set)
+    _setup_stock_for_import2(cli, tmpdir, db_setup)
     # "device_id,device_manufacturer,stock_qty\n"
     # + "dev1,MAN_A,20\n"
     # + "dev2,MAN_B,40\n"
@@ -226,17 +217,26 @@ def test_missing_project(inv_set, cli, capsys):
     out, _ = capsys.readouterr()
     assert "not enough stock for project: ['proj2']" in out.lower()
 
+    # 3. export empty stock
+    args = cli.parse_args(["stock", "-e"])
+    stock_import(args)
+    out, _ = capsys.readouterr()
+    assert "20" in out.lower()
+    assert "40" in out.lower()
+    assert "man_a" in out.lower()
+    assert "dev2" in out.lower()
 
-def test_use_one_dev(inv_set, cli, capsys):
+
+def test_use_one_dev(db_setup, cli, tmpdir, capsys):
     """
     try use project not present in stock
     """
-    _setup_bom_for_commit_test2(cli, inv_set)
+    _setup_bom_for_commit_test2(cli, tmpdir, db_setup)
     #     "device_id,device_manufacturer,qty,project\n"
     #     + "dev1,MAN_A,40,proj1\n"
     #     + "dev2,MAN_B,20,proj1\n"
     #     + "dev3,MAN_C,30,proj2\n"
-    _setup_stock_for_import2(cli, inv_set)
+    _setup_stock_for_import2(cli, tmpdir, db_setup)
     # "device_id,device_manufacturer,stock_qty\n"
     # + "dev1,MAN_A,20\n"
     # + "dev2,MAN_B,40\n"

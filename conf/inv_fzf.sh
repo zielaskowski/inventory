@@ -134,6 +134,7 @@ DATA_FILE=$(inv stock --fzf)
 
 # If the data file is empty or doesn't exist, exit gracefully.
 if [ ! -s "$DATA_FILE" ]; then
+    echo "No data available."
     exit 0
 fi
 

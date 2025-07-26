@@ -10,13 +10,7 @@ from argparse import Namespace
 import pandas as pd
 from pandas.errors import EmptyDataError, ParserError
 
-import conf.config as conf
 from app import sql
-from app.common import (
-    IMPORT_FORMAT_SPECIAL_KEYS,
-    NO_EXPORT_COLS,
-    log_read,
-)
 from app.message import MessageHandler
 from app.tabs import (
     import_tab,
@@ -25,8 +19,7 @@ from app.tabs import (
     tab_info,
     tab_template,
 )
-from conf.config import COL_WIDTH, import_format
-from conf.sql_colnames import *  # pylint: disable=unused-wildcard-import,wildcard-import
+from conf.config import *  # pylint: disable=unused-wildcard-import,wildcard-import
 
 msg = MessageHandler()
 
@@ -49,7 +42,7 @@ def stock_import(args: Namespace) -> None:
         export(args, "STOCK")
         return
     if args.history:
-        print(log_read(tab="STOCK"))
+        msg.msg("--history option not implements")
         return
     files = scan_files(args)
     for file in files:
@@ -181,44 +174,49 @@ def import_file(args: Namespace, file: str) -> pd.DataFrame:
     sys.exit(1)
 
 
-def export(args: Namespace, tab: str) -> None:
+def export(args: Namespace, tab: str) -> None:  # pylint: disable=too-many-branches
     """print or export data in BOM table"""
     if tab == "BOM":
         if (projects := prepare_project(args.export)) == []:
             return
         df = sql.getDF(tab=tab, search=projects, where=[BOM_PROJECT], follow=True)
-        cols = conf.BOM_EXPORT_COL
+        cols = BOM_EXPORT_COL
     elif tab == "STOCK":
         df = sql.getDF(tab=tab, follow=True)
+        if df.empty:
+            msg.msg(f"No data in table {tab}.")
+            sys.exit(0)
         # add shop id and projects
         df_shop = sql.getDF(tab="SHOP")
         df_bom = sql.getDF(tab="BOM")
-        df = pd.merge(
-            left=df,
-            right=df_shop,
-            left_on=DEV_HASH,
-            right_on=SHOP_HASH,
-            suffixes=("", "_drop"),
-            how="left",
-        )
-        df = pd.merge(
-            left=df,
-            right=df_bom,
-            left_on=DEV_HASH,
-            right_on=BOM_HASH,
-            suffixes=("", "_drop"),
-            how="left",
-        )
+        if not df_shop.empty:
+            df = pd.merge(
+                left=df,
+                right=df_shop,
+                left_on=DEV_HASH,
+                right_on=SHOP_HASH,
+                suffixes=("", "_drop"),
+                how="left",
+            )
+        if not df_bom.empty:
+            df = pd.merge(
+                left=df,
+                right=df_bom,
+                left_on=DEV_HASH,
+                right_on=BOM_HASH,
+                suffixes=("", "_drop"),
+                how="left",
+            )
         df.drop(
             columns=[col for col in df.columns if col.endswith("_drop")], inplace=True
         )
-        cols = conf.STOCK_EXPORT_COL + [SHOP_ID, BOM_PROJECT]
+        cols = [c for c in STOCK_EXPORT_COL + [SHOP_ID, BOM_PROJECT] if c in df.columns]
     else:
         df = sql.getDF(tab=tab, follow=True)
         cols = df.columns
     if df.empty:
         msg.msg(f"No data in table {tab}.")
-        sys.exit(1)
+        sys.exit(0)
     df.drop(columns=NO_EXPORT_COLS, inplace=True, errors="ignore")
     if args.export_columns:
         try:
@@ -231,7 +229,7 @@ def export(args: Namespace, tab: str) -> None:
     else:
         df = df[cols]
     if getattr(args, "fzf", False):
-        file = conf.TEMP_DIR + "stock_export.csv"
+        file = TEMP_DIR + "stock_export.csv"
         df.to_csv(
             file,
             columns=[c for c in cols if c != DEV_DESC] + [DEV_DESC],

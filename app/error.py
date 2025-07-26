@@ -4,7 +4,7 @@ from typing import KeysView
 
 import pandas as pd
 
-from conf.config import SQL_SCHEME
+from conf import config as conf
 
 
 class SqlGetError(Exception):
@@ -172,7 +172,7 @@ class SqlSchemeError(Exception):
         super().__init__(*args)
 
     def __str__(self) -> str:
-        return f"SQL scheme format error: {self.message}. Check {SQL_SCHEME} file."
+        return f"SQL scheme format error: {self.message}. Check {conf.SQL_SCHEME} file."
 
 
 class SqlExecuteError(Exception):

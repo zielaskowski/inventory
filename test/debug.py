@@ -5,7 +5,7 @@ import os
 from app.admin import align
 from app.bom import bom_import
 from app.sql import sql_check
-from conf import config as conf
+from app.common import conf
 from inv import cli_parser
 
 #####DEBUG

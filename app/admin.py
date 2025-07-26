@@ -2,6 +2,7 @@
 Administrative functions: removal, edit
 """
 
+import os
 import sys
 from argparse import Namespace
 
@@ -9,15 +10,13 @@ import pandas as pd
 
 from app import sql
 from app.common import (
-    BOM_PROJECT,
-    DEV_HASH,
-    DEV_ID,
-    SHOP_ID,
-    print_file,
+    create_loc_config,
+    display_conf,
     tab_cols,
 )
 from app.message import MessageHandler
 from app.tabs import NA_rows, align_data, prepare_project, tabs_in_data
+from conf.config import *  # pylint: disable=unused-wildcard-import,wildcard-import
 
 msg = MessageHandler()
 
@@ -27,10 +26,14 @@ def admin(args: Namespace) -> None:
     ids = []
     if args.align_manufacturers:
         align()
-        sys.exit(0)
-    if args.config:
-        print_file("./conf/config.py")
-
+        return
+    if args.display_config:
+        print("config from: " + os.path.join(CONFIG_PATH, "config.py"))
+        display_conf()
+        return
+    if args.set_local_config:
+        create_loc_config()
+        return
     if args.csv:
         try:
             df = pd.read_csv(args.csv)
@@ -58,7 +61,6 @@ def admin(args: Namespace) -> None:
         sys.exit(1)
     if args.remove_project:
         remove_project(args)
-        return
 
 
 def remove_project(args: Namespace) -> None:

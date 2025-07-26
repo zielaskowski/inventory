@@ -1,30 +1,15 @@
+"""transaction functions"""
+
 import os
 import sys
 from argparse import Namespace
 
 import pandas as pd
 
-from app.common import (
-    BOM_HASH,
-    BOM_PROJECT,
-    BOM_QTY,
-    DEV_DESC,
-    DEV_HASH,
-    DEV_ID,
-    DEV_MAN,
-    SHOP_DATE,
-    SHOP_HASH,
-    SHOP_ID,
-    SHOP_PRICE,
-    SHOP_QTY,
-    SHOP_SHOP,
-    STOCK_HASH,
-    STOCK_QTY,
-)
 from app.message import MessageHandler
 from app.sql import getDF
 from app.tabs import prepare_project
-from conf.config import DISP_CURR
+from conf.config import *  # pylint: disable=unused-wildcard-import,wildcard-import
 
 msg = MessageHandler()
 

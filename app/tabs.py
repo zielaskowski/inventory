@@ -37,8 +37,7 @@ from app.error import (
     VimdiffSelError,
 )
 from app.message import MessageHandler
-from conf import config as conf
-from conf.sql_colnames import *  # pylint: disable=unused-wildcard-import,wildcard-import
+from conf.config import *  # pylint: disable=unused-wildcard-import,wildcard-import
 
 msg = MessageHandler()
 
@@ -63,7 +62,7 @@ def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:
             dat=dat.copy(),
             tab=tab,
             file=file,
-            row_shift=conf.import_format[args.format]["header"],
+            row_shift=import_format[args.format]["header"],
         )
     except PrepareTabError as e:
         msg.msg(str(e))
@@ -132,7 +131,7 @@ def tabs_in_data(dat: pd.DataFrame) -> list[str]:
     """
     return all tbles which mandatary cols are present in dat
     """
-    sql_scheme = read_json_dict(conf.SQL_SCHEME)
+    sql_scheme = read_json_dict(SQL_SCHEME)
     # need to start from DEVICE because other tables refer to it
     tabs = sorted(list(sql_scheme.keys()), key=lambda x: (x != "DEVICE", x))
     for t in tabs[:]:
@@ -193,7 +192,7 @@ def hash_tab(dat: pd.DataFrame) -> pd.DataFrame:
     hash columns as per foreign key in SQLscheme
     also unpack foreign key to make sure all columns present
     """
-    sql_scheme = read_json_dict(conf.SQL_SCHEME)
+    sql_scheme = read_json_dict(SQL_SCHEME)
 
     def apply_hash(row: pd.Series, cols: list[str]) -> str:
         combined = "".join(str(row[c]) for c in cols)
@@ -256,7 +255,7 @@ def columns_align(n_stock: pd.DataFrame, file: str, args: Namespace) -> pd.DataF
         inplace=True,
     )
     # drop columns if any col in values so to avoid duplication
-    if cols := conf.import_format[args.format].get("cols"):
+    if cols := import_format[args.format].get("cols"):
         n_stock.drop(
             [v for _, v in cols.items() if v in n_stock.columns],
             axis="columns",
@@ -269,13 +268,13 @@ def columns_align(n_stock: pd.DataFrame, file: str, args: Namespace) -> pd.DataF
         )
 
     # apply formatter functions
-    if f := conf.import_format[args.format].get("func"):
+    if f := import_format[args.format].get("func"):
         n_stock = n_stock.apply(f, axis=1, result_type="broadcast")  # type: ignore
 
     # change columns type
     # only for existing cols
     n_stock = n_stock.astype(object)
-    if dtype := conf.import_format[args.format].get("dtype"):
+    if dtype := import_format[args.format].get("dtype"):
         exist_col_dtypes = {k: v for k, v in dtype.items() if k in n_stock.columns}
         n_stock = n_stock.astype(exist_col_dtypes)
 
@@ -288,7 +287,7 @@ def columns_align(n_stock: pd.DataFrame, file: str, args: Namespace) -> pd.DataF
     n_stock[BOM_FORMAT] = args.format
     n_stock[SHOP_DATE] = date.today().strftime("%Y-%m-%d")
     if SHOP_SHOP not in n_stock.columns:
-        n_stock[SHOP_SHOP] = conf.import_format[args.format].get("shop", args.format)
+        n_stock[SHOP_SHOP] = import_format[args.format].get("shop", args.format)
 
     return n_stock
 
@@ -622,7 +621,7 @@ def vimdiff_selection(  # pylint: disable=too-many-positional-arguments,too-many
         cols[key] = re.sub(r'[\/\\:\*\?"<>\|\r\n\t]', "_", cols[key])
         with open(
             # in case manufacturers are the same, need to add suffix to file name
-            conf.TEMP_DIR + cols[key] + "_" + str(key) + ".txt",
+            TEMP_DIR + cols[key] + "_" + str(key) + ".txt",
             mode="w",
             encoding="UTF8",
         ) as f:
@@ -640,21 +639,21 @@ def vimdiff_selection(  # pylint: disable=too-many-positional-arguments,too-many
         start_line=start_line,
     )
 
-    vim_cmd = "vim -u " + conf.TEMP_DIR + ".vimrc"
-    if conf.DEBUG == "none":
+    vim_cmd = "vim -u " + TEMP_DIR + ".vimrc"
+    if DEBUG == "none":
         subprocess.run(vim_cmd, shell=True, check=False)
-    elif conf.DEBUG == "debugpy":
+    elif DEBUG == "debugpy":
         with subprocess.Popen("konsole -e " + vim_cmd, shell=True) as p:
             p.wait()
 
     with open(
-        conf.TEMP_DIR + cols[change_k] + "_2.txt", mode="r", encoding="UTF8"
+        TEMP_DIR + cols[change_k] + "_2.txt", mode="r", encoding="UTF8"
     ) as f:
         chosen = f.read().splitlines()
 
     # clean up files
     for key in [ref_k, change_k, opt_k]:
-        os.remove(conf.TEMP_DIR + cols[key] + "_" + str(key) + ".txt")
+        os.remove(TEMP_DIR + cols[key] + "_" + str(key) + ".txt")
 
     if chosen == []:  # user interrupt
         raise KeyboardInterrupt("Interupted by user. Changes discarded.")
@@ -837,7 +836,7 @@ def tab_template(tab: str, args: Namespace) -> None:
 
 def col_description() -> dict:
     """extract columns descriptions from sql_scheme"""
-    sql_scheme = read_json_dict(conf.SQL_SCHEME)
+    sql_scheme = read_json_dict(SQL_SCHEME)
     col_desc = {}
     for _, cont in sql_scheme.items():
         if "COL_DESCRIPTION" in cont:

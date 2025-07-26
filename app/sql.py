@@ -1,3 +1,5 @@
+"""sql managing functions"""
+
 import os
 import re
 import sqlite3
@@ -6,9 +8,7 @@ from typing import Any, Dict, List, Sequence, Set
 import pandas as pd
 from audite import track_changes
 
-import conf.config as conf
 from app.common import (
-    SQL_KEYWORDS,
     log_create,
     read_json_dict,
     tab_exists,
@@ -25,7 +25,7 @@ from app.error import (
     SqlTabError,
 )
 from app.message import MessageHandler
-from conf.sql_colnames import *
+from conf.config import *  # pylint: disable=unused-wildcard-import,wildcard-import
 
 msg = MessageHandler()
 
@@ -42,7 +42,7 @@ def put(dat: pd.DataFrame, tab: str, on_conflict: dict | None = None) -> Dict:
     put() may raise sql_executeError and sql_tabError
     """
     tab_exists(tab)
-    sql_scheme = read_json_dict(conf.SQL_SCHEME)
+    sql_scheme = read_json_dict(SQL_SCHEME)
 
     if dat.empty:
         return {}
@@ -58,7 +58,7 @@ def put(dat: pd.DataFrame, tab: str, on_conflict: dict | None = None) -> Dict:
     sql_columns = tab_columns(tab)
     # take only columns applicable to table
     d = dat.loc[:, [c in sql_columns for c in dat.columns]]
-    return __write_table__(dat=d, tab=tab, on_conflict=on_conflict)
+    return __write_table__(dat=d, tab=tab, on_conflict=on_conflict)  # pyright: ignore
 
 
 def __write_table__(
@@ -98,7 +98,7 @@ def __write_table__(
     return __sql_execute__([cmd], records)
 
 
-def getDF_other_tabs(
+def getDF_other_tabs(  # pylint: disable=invalid-name
     dat: pd.DataFrame, hash_list: list[str], merge_on: str
 ) -> pd.DataFrame:
     """
@@ -152,7 +152,7 @@ def getDF_other_tabs(
 
 def rm_all_tabs(hash_list: list[str]) -> None:
     """remove from all tabs per hash list"""
-    sql_schem = read_json_dict(conf.SQL_SCHEME)
+    sql_schem = read_json_dict(SQL_SCHEME)
     tabs = list(sql_schem.keys())
     tab_hash = []
     for t in tabs:
@@ -167,7 +167,7 @@ def rm_all_tabs(hash_list: list[str]) -> None:
         rm(tab=table, value=hash_list, column=[hash_col])
 
 
-def getDF(
+def getDF(  # pylint: disable=invalid-name
     tab: str,
     get_col: List[str] | Set[str] | pd.Series | None = None,
     search: List[str] | List[int] | List[bool] | pd.Series | None = None,
@@ -188,7 +188,7 @@ def getDF(
     return list(resp.values())[0] if resp else pd.DataFrame()
 
 
-def getL(
+def getL(  # pylint: disable=invalid-name
     tab: str,
     get_col: List[str] | Set[str] | pd.Series | None = None,
     search: List[str] | List[int] | List[bool] | pd.Series | None = None,
@@ -229,7 +229,7 @@ def norm_to_list_str(
     return [str(s) for s in out]
 
 
-def get(
+def get(  # pylint: disable=too-many-branches
     tab: str,
     get_col: List[str] | Set[str] | pd.Series | None = None,
     search: List[str] | List[int] | List[bool] | pd.Series | None = None,
@@ -266,7 +266,7 @@ def get(
         search = norm_to_list_str(search)
         search = __escape_quote__(search)
 
-    sql_scheme = read_json_dict(conf.SQL_SCHEME)
+    sql_scheme = read_json_dict(SQL_SCHEME)
 
     if "FOREIGN" not in sql_scheme[tab].keys():
         follow = False
@@ -400,8 +400,8 @@ def sql_check() -> None:
     DB location and name taken from ./conf/configuration/py
     """
     # make sure if exists
-    if not os.path.isfile(conf.DB_FILE):
-        msg.sql_file_miss(conf.DB_FILE)
+    if not os.path.isfile(DB_FILE):
+        msg.sql_file_miss(DB_FILE)
         sql_create()
         # check if path exists, if not create
         try:
@@ -410,18 +410,18 @@ def sql_check() -> None:
             msg.log_path_error(str(e))
             return
 
-    sql_scheme = read_json_dict(conf.SQL_SCHEME)
+    sql_scheme = read_json_dict(SQL_SCHEME)
     for i in range(len(sql_scheme)):
         tab = list(sql_scheme.keys())[i]
         scheme_cols = [k for k in sql_scheme[tab].keys() if k not in SQL_KEYWORDS]
         # check if correct tables in sql
         if not any(c in tab_columns(tab) for c in scheme_cols):
-            raise SqlCheckError(conf.DB_FILE, tab)
+            raise SqlCheckError(DB_FILE, tab)
         # check if correct foreign keys
         from_sql_scheme = [str(c) for c in tab_foreign(tab)]
         from_json_scheme = [str(c) for c in sql_scheme[tab].get("FOREIGN", [])]
         if sorted(from_sql_scheme) != sorted(from_json_scheme):
-            raise SqlCheckError(conf.DB_FILE, tab)
+            raise SqlCheckError(DB_FILE, tab)
 
 
 def __sql_execute__(
@@ -457,7 +457,7 @@ def __sql_execute__(
 
     try:
         con = sqlite3.connect(
-            conf.DB_FILE,
+            DB_FILE,
             detect_types=sqlite3.PARSE_COLNAMES | sqlite3.PARSE_DECLTYPES,
         )
         cur = con.cursor()
@@ -467,8 +467,8 @@ def __sql_execute__(
             else:
                 cur.execute(cmd, params)
             if a := cur.fetchall():
-                colnames = pd.Series([c[0] for c in cur.description])
-                ans[cmd] = pd.DataFrame(a, columns=colnames)
+                col_names = pd.Series([c[0] for c in cur.description])
+                ans[cmd] = pd.DataFrame(a, columns=col_names)
             else:
                 ans[cmd] = pd.DataFrame()
         con.commit()
@@ -482,23 +482,23 @@ def __sql_execute__(
         con.close()  # type: ignore
 
 
-def sql_create() -> None:
+def sql_create() -> None:  # pylint: disable=too-many-branches
     """Creates sql query based on sql_scheme.json and send to db.
     Perform check if created DB is aligned with scheme from sql.json file.
     """
-    if os.path.isfile(conf.DB_FILE):
+    if os.path.isfile(DB_FILE):
         # just in case the file exists
-        os.remove(conf.DB_FILE)
+        os.remove(DB_FILE)
 
-    path = os.path.dirname(conf.DB_FILE)
+    path = os.path.dirname(DB_FILE)
     if not os.path.isdir(path):
         raise CheckDirError(directory=path)
 
     try:
-        sql_scheme = read_json_dict(conf.SQL_SCHEME)
+        sql_scheme = read_json_dict(SQL_SCHEME)
     except ReadJsonError as err:
         print(err)
-        raise SqlCreateError(conf.SQL_SCHEME) from err
+        raise SqlCreateError(SQL_SCHEME) from err
 
     # create tables query for db
     sql_cmd = []
@@ -524,7 +524,7 @@ def sql_create() -> None:
                         tab_exists(f_table)
                     except SqlTabError as err:
                         msg.msg(str(err))
-                        raise SqlCreateError(conf.SQL_SCHEME) from err
+                        raise SqlCreateError(SQL_SCHEME) from err
 
                     tab_cmd += f"FOREIGN KEY({k}) REFERENCES {v}, "
         tab_cmd = re.sub(",[^,]*$", "", tab_cmd)  # remove last comma
@@ -551,16 +551,16 @@ def sql_create() -> None:
     try:
         status = __sql_execute__(sql_cmd)
     except SqlExecuteError as err:
-        os.remove(conf.DB_FILE)
+        os.remove(DB_FILE)
         msg.msg(str(err))
-        raise SqlCreateError(conf.SQL_SCHEME) from err
+        raise SqlCreateError(SQL_SCHEME) from err
 
     if sorted(status[sql_cmd[-1][0:100]]["tbl_name"].to_list()) != sorted(
         list(sql_scheme.keys())
     ):
-        if os.path.isfile(conf.DB_FILE):
-            os.remove(conf.DB_FILE)
-        raise SqlCreateError(conf.SQL_SCHEME)
+        if os.path.isfile(DB_FILE):
+            os.remove(DB_FILE)
+        raise SqlCreateError(SQL_SCHEME)
     if "STOCK" in sql_scheme.keys():
         sql_audit(tab="STOCK")
 
@@ -568,7 +568,7 @@ def sql_create() -> None:
 def sql_audit(tab: str) -> None:
     """add loging tables to sql"""
     db = sqlite3.connect(
-        conf.DB_FILE,
+        DB_FILE,
         detect_types=sqlite3.PARSE_COLNAMES | sqlite3.PARSE_DECLTYPES,
     )
     track_changes(db, tables=[tab])

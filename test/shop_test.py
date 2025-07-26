@@ -18,20 +18,9 @@ def cli_fixture():
     return cli_parser()
 
 
-@pytest.fixture(name="inv_set")
-def inv_set_fixture(monkeypatch, tmpdir):
-    """Initializes a temporary database for testing."""
-    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("conf.config.SCAN_DIR", "")
-    monkeypatch.setattr("conf.config.DEBUG", "pytest")
-    monkeypatch.setattr("conf.config.LOG_FILE", "")
-    sql_check()
-    return tmpdir
-
-
-def test_shop_import_csv1(inv_set, cli):
+def test_shop_import_csv1(db_setup, tmpdir, cli):
     """1. import from csv"""
-    test = inv_set.join("test.csv")
+    test = tmpdir.join("test.csv")
     with open(test, "w", encoding="UTF8") as f:
         f.write(
             "device_id,device_manufacturer,order_qty,price\n"
@@ -39,7 +28,7 @@ def test_shop_import_csv1(inv_set, cli):
             ) # fmt:skip
 
     inp = pd.read_csv(test)
-    args = cli.parse_args(["shop", "-d", inv_set.strpath, "-F", "csv"])
+    args = cli.parse_args(["shop", "-d", tmpdir.strpath, "-F", "csv"])
     shop_import(args)
     exp = getDF(tab="SHOP")
     common_cols = exp.columns.intersection(inp.columns)
@@ -50,16 +39,16 @@ def test_shop_import_csv1(inv_set, cli):
     )
 
 
-def test_shop_import_csv2(inv_set, cli):
+def test_shop_import_csv2(db_setup, tmpdir, cli):
     """2. import again with new date (add)"""
-    test = inv_set.join("test.csv")
+    test = tmpdir.join("test.csv")
     with open(test, "w", encoding="UTF8") as f:
         f.write(
             "device_id,device_manufacturer,order_qty,price\n"
             + "aa,bb,1,10"
         ) # fmt: skip
     inp = pd.read_csv(test)
-    args = cli.parse_args(["shop", "-d", inv_set.strpath, "-F", "csv"])
+    args = cli.parse_args(["shop", "-d", tmpdir.strpath, "-F", "csv"])
     dat = columns_align(
         inp.copy(),
         file=test.strpath,
@@ -87,9 +76,9 @@ def test_shop_import_csv2(inv_set, cli):
     )
 
 
-def test_shop_import_csv3(inv_set, cli):
+def test_shop_import_csv3(db_setup, tmpdir, cli):
     """3. import again with the same date"""
-    test = inv_set.join("test.csv")
+    test = tmpdir.join("test.csv")
     with open(test, "w", encoding="UTF8") as f:
         f.write(
             "device_id,device_manufacturer,order_qty,price\n"
@@ -97,7 +86,7 @@ def test_shop_import_csv3(inv_set, cli):
             ) # fmt: skip
 
     inp = pd.read_csv(test)
-    args = cli.parse_args(["shop", "-d", inv_set.strpath, "-F", "csv"])
+    args = cli.parse_args(["shop", "-d", tmpdir.strpath, "-F", "csv"])
     shop_import(args)
     shop_import(args)
     exp = getDF(tab="SHOP")
@@ -109,7 +98,7 @@ def test_shop_import_csv3(inv_set, cli):
     )
 
 
-def test_shop_import_csv4(inv_set, cli, capsys):
+def test_shop_import_csv4(db_setup, cli, capsys):
     """4. info about columns"""
     args = cli.parse_args(["shop", "--info"])
     shop_import(args)
@@ -125,10 +114,10 @@ def test_shop_import_csv4(inv_set, cli, capsys):
         assert t in out.lower()
 
 
-def test_shop_import_csv6(inv_set, cli):
+def test_shop_import_csv6(db_setup, tmpdir, cli):
     """6. the same device_id but different manufacturer"""
 
-    test1 = inv_set.join("test1.csv")
+    test1 = tmpdir.join("test1.csv")
     with open(test1, "w", encoding="UTF8") as f:
         f.write(
             "device_id,device_manufacturer,order_qty,price\n"
@@ -136,10 +125,10 @@ def test_shop_import_csv6(inv_set, cli):
             + "aa,ab,1,10"
         )
 
-    args = cli.parse_args(["shop", "-d", inv_set.strpath, "-F", "csv"])
+    args = cli.parse_args(["shop", "-d", tmpdir.strpath, "-F", "csv"])
     shop_import(args)
 
-    test2 = inv_set.join("test2.csv")
+    test2 = tmpdir.join("test2.csv")
     with open(test2, "w", encoding="UTF8") as f:
         f.write(
             "device_id,device_manufacturer,order_qty,price\n"
@@ -168,30 +157,30 @@ def test_shop_import_csv6(inv_set, cli):
         )
 
 
-def test_shop_import_csv7(inv_set, cli):
+def test_shop_import_csv7(db_setup, tmpdir, cli):
     """6. the same device_id but different description"""
 
-    test1 = inv_set.join("test1.csv")
+    test1 = tmpdir.join("test1.csv")
     with open(test1, "w", encoding="UTF8") as f:
         f.write(
             "device_id,device_manufacturer,device_description,order_qty,price\n"
             + "aa,aa,desc1,1,10\n"
             + "aa,ab,desc2,1,10"
         )
-    args = cli.parse_args(["bom", "-d", inv_set.strpath, "-F", "csv"])
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
     shop_import(args)
 
-    test2 = inv_set.join("test2.csv")
+    test2 = tmpdir.join("test2.csv")
     with open(test2, "w", encoding="UTF8") as f:
         f.write(
                 "device_id,device_manufacturer,device_description,order_qty,price\n"
                 +"aa,aa,desc3,1,10"
         )# fmt: skip
 
-    args = cli.parse_args(["shop", "-d", inv_set.strpath, "-F", "csv", "-f", "test2"])
+    args = cli.parse_args(["shop", "-d", tmpdir.strpath, "-F", "csv", "-f", "test2"])
     shop_import(args)
 
-    test3 = inv_set.join("test3.csv")
+    test3 = tmpdir.join("test3.csv")
     with open(test3, "w", encoding="UTF8") as f:
         f.write(
                 "device_id,device_manufacturer,device_description,order_qty,price\n"

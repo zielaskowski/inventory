@@ -14,20 +14,9 @@ def cli_fixture():
     return cli_parser()
 
 
-@pytest.fixture(name="inv_set")
-def inv_set_fixture(monkeypatch, tmpdir):
-    """Initializes a temporary database for testing."""
-    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("conf.config.SCAN_DIR", "")
-    monkeypatch.setattr("conf.config.DEBUG", "pytest")
-    monkeypatch.setattr("conf.config.LOG_FILE", "")
-    sql_check()
-    return tmpdir
-
-
-def test_bom_import_easyEDA1(cli, inv_set):  # pylint: disable=invalid-name
+def test_bom_import_easyEDA1(cli, db_setup, tmpdir):  # pylint: disable=invalid-name
     """import and export without errors"""
-    test = inv_set.join("test.csv")
+    test = tmpdir.join("test.csv")
     with open(test, mode="w", encoding="UTF8") as f:
         f.write(
             "Quantity,Value,Manufacturer Part,Manufacturer,Name,Primary Category,"
@@ -37,17 +26,17 @@ def test_bom_import_easyEDA1(cli, inv_set):  # pylint: disable=invalid-name
             + "Tolerance:±10% Voltage Rated: Temperature Coefficient:,0603"
         )
     raw = pd.read_csv(test)
-    raw.to_excel(inv_set.join("text.xls"), engine="openpyxl")
+    raw.to_excel(tmpdir.join("text.xls"), engine="openpyxl")
 
-    args = cli.parse_args(["bom", "-d", inv_set.strpath])
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath])
     bom_import(args)
 
-    exp = inv_set.join("exp.csv")
+    exp = tmpdir.join("exp.csv")
     exp.write("")
     args = cli.parse_args(["bom", "-d", exp.dirname, "-f", exp.basename, "-e", "%"])
     bom_import(args)
 
-    inp = inv_set.join("input.csv")
+    inp = tmpdir.join("input.csv")
     with open(inp, mode="w", encoding="UTF8") as f:
         f.write(
             "qty,device_id,device_manufacturer,dev_category1,dev_category2,"

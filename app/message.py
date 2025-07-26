@@ -4,12 +4,10 @@ import os
 
 import pandas as pd
 
-from conf import config
-from conf.config import DISP_CURR, config_file
-from conf.sql_colnames import *
+from conf.config import *  # pylint: disable=unused-wildcard-import,wildcard-import
 
 
-class MessageHandler:
+class MessageHandler:  # pylint: disable=too-many-public-methods
     """class methods for simplyfy messagning"""
 
     def __init__(self) -> None:
@@ -63,7 +61,7 @@ class MessageHandler:
 
     def project_already_imported(self, project: str) -> bool:
         """message method"""
-        if config.DEBUG in ["pytest", "debugpy"]:
+        if DEBUG in ["pytest", "debugpy"]:
             return True
         self.message.append(f"Project '{project}' was already imported.")
         self.message.append("Consider using option --overwrite.")
@@ -77,7 +75,7 @@ class MessageHandler:
 
     def data_already_imported(self, dat: pd.DataFrame) -> bool:
         """message method"""
-        if config.DEBUG in ["pytest", "debugpy"]:
+        if DEBUG in ["pytest", "debugpy"]:
             return True
         self.message.append("These devices were already imported:")
         self.message.append(dat.loc[:, [DEV_ID, DEV_MAN]].to_string())
@@ -92,12 +90,10 @@ class MessageHandler:
 
     def inform_alternatives(self, alternatives: pd.DataFrame) -> bool:
         """found manufacturer alternatives. Do you accept?"""
-        if config.DEBUG in ["pytest", "debugpy"]:
+        if DEBUG in ["pytest", "debugpy"]:
             return True
         self.message.append("Found manufacturer alternative names for incoming data")
-        self.message.append(
-            f"Manufacturer alternatives are defined in '{config.MAN_ALT}'"
-        )
+        self.message.append(f"Manufacturer alternatives are defined in '{MAN_ALT}'")
         self.message.append(alternatives.drop_duplicates().to_string())
         self.message.append("Do you accept? (y/n)")
         self.__exec__()
@@ -128,7 +124,7 @@ class MessageHandler:
         )
         self.__exec__()
 
-    def stock_use(
+    def stock_use(  # pylint: disable=too-many-positional-arguments,too-many-arguments
         self,
         project: list[str] | None = None,
         dev_id: str = "",
@@ -265,7 +261,7 @@ class MessageHandler:
     def log_path_error(self, err: str) -> None:
         """message method"""
         self.message.append(err)
-        self.message.append(f"Provide correct path in '{config_file()}' file.")
+        self.message.append(f"Provide correct path in '{CONFIG_PATH}' file.")
         self.__exec__(warning=True)
 
     def unknown_project(self, project: str, projects: list[str]) -> None:

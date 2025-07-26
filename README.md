@@ -55,6 +55,15 @@ bindkey '^s' fuzzy_search_inventory
 For full functionality (clipboard copying and notifcations), the script
 require WAYLAND and KDE (very platform dependent).
 
+## CONFIGURATION
+
+Application is loging all commands and output into log file.
+Global configuration is in `./conf/` directory. You can also have a local config
+by putting `.conf/inventory.toml` file in curent folder (or subfolder). You 
+can use admin --make_curent_conf option to do so. Local config will use local 
+sql db, log file and alternative_manufacturers. Of course you can adjust local 
+configuration manually also.
+
 ## NOT IMPLEMENTED / WISH LIST
 
 1. when file not present in search, very misleading info about missing folder

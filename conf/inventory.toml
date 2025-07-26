@@ -1,0 +1,47 @@
+# database file location and name
+DB_FILE = "/home/mi/docs/prog/python/inventory/conf/inventory.sqlite"
+
+# log file location and name
+# set LOG_FILE = '' to turn off
+LOG_FILE = "/home/mi/docs/prog/python/inventory/conf/log.txt"
+
+# file with manufacturer alternative names
+MAN_ALT = "/home/mi/docs/prog/python/inventory/conf/manufacturer_alternatives.jsonc"
+
+# directory to scan when searching for files
+# leave empty if you want to scan anything
+# not case sensitive
+SCAN_DIR = "BOM"
+# scan_dir = ""
+# to include subdirectories in SCAN_DIR?
+INCLUDE_SUB_DIR = true
+
+# display currency
+# only for display, no any conversion is made
+DISP_CURR = "$"
+
+# directory for temporary files
+TEMP_DIR = "/tmp/"
+
+# column names are defined in conf/sql_colnames.py file
+# columns to export
+BOM_EXPORT_COL = [
+  'BOM_PROJECT',
+  'BOM_QTY',
+  'DEV_ID',
+  'DEV_MAN',
+  'DEV_PACK',
+  'DEV_DESC',
+  'DEV_CAT1',
+  'DEV_CAT2',
+]
+STOCK_EXPORT_COL = [
+  'STOCK_QTY',
+  'DEV_ID',
+  'DEV_MAN',
+  'DEV_PACK',
+  'DEV_DESC',
+  'DEV_CAT1',
+  'DEV_CAT2',
+]
+COL_WIDTH = { 'STOCK_QTY' = 4, 'DEV_ID' = 17, 'DEV_MAN' = 15, 'DEV_PACK' = 8, 'DEV_DESC' = 30, 'DEV_CAT1' = 25, 'DEV_CAT2' = 25, 'BOM_PROJECT' = 12, 'BOM_QTY' = 3, 'SHOP_ID' = 17 }

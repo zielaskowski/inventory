@@ -90,7 +90,7 @@ def _add_bom_import_parser(command_parser):
         "--dont_align_columns",
         action="store_true",
         default=False,
-        help="""During import, by default user will be asked if different 
+        help="""During import, by default user will be asked if different
                 values are imported for other columns (description, category,
                 package, etc.) on existing devices. If this option given,
                 existing values will be kept (importing data will not change existing devices).""",
@@ -166,7 +166,7 @@ def _add_shop_cart_import_parser(command_parser):
         "--dont_align_columns",
         action="store_true",
         default=False,
-        help="""During import, by default user will be asked if different 
+        help="""During import, by default user will be asked if different
                 values are imported for other columns (description, category,
                 package, etc.) on existing devices. If this option given,
                 existing values will be kept (importing data will not change existing devices).""",
@@ -279,7 +279,7 @@ def _add_stock_parser(command_parser):
     cli_stock.add_argument(
         "--dont_align_columns",
         action="store_true",
-        help="""During import, by default user will be asked if different 
+        help="""During import, by default user will be asked if different
                 values are imported for other columns (description, category,
                 package, etc.) on existing devices. If this option given,
                 existing values will be kept (importing data will not change existing devices).""",
@@ -355,7 +355,7 @@ def _add_stock_parser(command_parser):
     cli_stock.add_argument(
         "--fzf",
         help=f"""
-        Used by script as input for fuzzy finder. Rather use script itself: {conf.module_path()}/conf/inv_fzf.sh then this option.
+        Used by script as input for fuzzy finder. Rather use script itself: {conf.MODULE_PATH}/conf/inv_fzf.sh then this option.
         """,
         action="store_true",
     )
@@ -381,9 +381,14 @@ def _add_admin_parser(command_parser):
     admin_group = cli_admin.add_mutually_exclusive_group(required=True)
     admin_group.add_argument(
         "-c",
-        "--config",
+        "--display_config",
         action="store_true",
         help="Show current config",
+    )
+    admin_group.add_argument(
+        "--set_local_config",
+        action="store_true",
+        help="Set config in local directory. You can then adjust manualy.",
     )
     admin_group.add_argument(
         "-a",
@@ -471,7 +476,7 @@ def cli_parser() -> AbbreviationParser:
         Application can import exccel files in different formats (from different)
         shops. Format description is in config file. Should be easy to extend.
         Each execution of app is writing used arguments into log file. You cen setup 
-        in {conf.config_file()} file.""",
+        in {conf.CONFIG_PATH}.config.py file.""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     command_parser = cli.add_subparsers(title="commands", dest="command")
@@ -490,7 +495,7 @@ if __name__ == "__main__":
     # of one of the stack frame
     try:
         if "debugpy" in inspect.stack()[1].filename:
-            conf.DEBUG = "debugpy"
+            conf.DEBUG = "debugpy"  # pyright: ignore
     except IndexError:
         # normall call (no debug)
         pass

@@ -18,18 +18,7 @@ def cli_fixture():
     return cli_parser()
 
 
-@pytest.fixture(name="inv_set")
-def inv_set_fixture(monkeypatch, tmpdir):
-    """Initializes a temporary database for testing."""
-    monkeypatch.setattr("conf.config.DB_FILE", tmpdir.strpath + "db.sql")
-    monkeypatch.setattr("conf.config.SCAN_DIR", "")
-    monkeypatch.setattr("conf.config.DEBUG", "pytest")
-    monkeypatch.setattr("conf.config.LOG_FILE", "")
-    sql_check()
-    return tmpdir
-
-
-def test_align_man1(cli, inv_set):
+def test_align_man1(cli, db_setup, tmpdir):
     """
     basic test
     change device manufacturer to other (already existed)
@@ -37,7 +26,7 @@ def test_align_man1(cli, inv_set):
     change description to existing one
     """
     # base data
-    bom1 = inv_set.join("bom1.csv")
+    bom1 = tmpdir.join("bom1.csv")
     with open(bom1, "w", encoding="UTF8") as f:
         f.write(
         "device_id,device_manufacturer,qty,device_description\n"
@@ -48,7 +37,7 @@ def test_align_man1(cli, inv_set):
         + "db,mcc,1,desc33\n"
         + "dc,mcc,1,desc34\n"
         )# fmt: skip
-    args = cli.parse_args(["bom", "-d", inv_set.strpath, "-f", "bom1", "-F", "csv"])
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "bom1", "-F", "csv"])
     bom_import(args)
 
     with patch(
@@ -64,7 +53,7 @@ def test_align_man1(cli, inv_set):
     dev = getDF(tab="BOM", follow=True)
 
     # expected data
-    expect_dat = inv_set.join("expect_dat.csv")
+    expect_dat = tmpdir.join("expect_dat.csv")
     with open(expect_dat, "w", encoding="UTF8") as f:
         f.write(
         "device_id,device_manufacturer,qty,device_description\n"
@@ -84,14 +73,14 @@ def test_align_man1(cli, inv_set):
     pd.testing.assert_frame_equal(dev, exp_dat, check_dtype=False)
 
 
-def test_align_man2(cli, inv_set):
+def test_align_man2(cli, db_setup, tmpdir):
     """
     multiple projects in BOM
     and then add existing device in SHOP
     importing device and manufacturer already present but changing manuf to other
     """
     # base data
-    bom1 = inv_set.join("bom1.csv")
+    bom1 = tmpdir.join("bom1.csv")
     with open(bom1, "w", encoding="UTF8") as f:
         f.write(
         "device_id,device_manufacturer,qty,device_description,project\n"
@@ -102,7 +91,7 @@ def test_align_man2(cli, inv_set):
         + "db,mcc,1,desc33,proj2\n"
         + "dc,mcc,1,desc34,proj2\n"
         )# fmt: skip
-    args = cli.parse_args(["bom", "-d", inv_set.strpath, "-f", "bom1", "-F", "csv"])
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "bom1", "-F", "csv"])
     bom_import(args)
 
     with patch(
@@ -119,7 +108,7 @@ def test_align_man2(cli, inv_set):
     dev = getDF(tab="BOM", follow=True)
 
     # expected data
-    expect_dat = inv_set.join("expect_dat.csv")
+    expect_dat = tmpdir.join("expect_dat.csv")
     with open(expect_dat, "w", encoding="UTF8") as f:
         f.write(
         "device_id,device_manufacturer,qty,device_description,project\n"
@@ -139,14 +128,14 @@ def test_align_man2(cli, inv_set):
     pd.testing.assert_frame_equal(dev, exp_dat, check_dtype=False)
 
 
-def test_align_man4(cli, inv_set):
+def test_align_man4(cli, db_setup, tmpdir):
     """
     test ffill: multiple projects in BOM
     and then add existing device in SHOP
     importing device and manufacturer already present but changing manuf to other
     """
     # base data
-    bom1 = inv_set.join("bom1.csv")
+    bom1 = tmpdir.join("bom1.csv")
     with open(bom1, "w", encoding="UTF8") as f:
         f.write(
         "device_id,device_manufacturer,qty,device_description,project\n"
@@ -157,7 +146,7 @@ def test_align_man4(cli, inv_set):
         + "db,mcc,1,desc33,proj2\n"
         + "dc,mcc,1,desc34,proj2\n"
         )# fmt: skip
-    args = cli.parse_args(["bom", "-d", inv_set.strpath, "-f", "bom1", "-F", "csv"])
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "bom1", "-F", "csv"])
     bom_import(args)
 
     with patch(
@@ -173,7 +162,7 @@ def test_align_man4(cli, inv_set):
     dev = getDF(tab="BOM", follow=True)
 
     # expected data
-    expect_dat = inv_set.join("expect_dat.csv")
+    expect_dat = tmpdir.join("expect_dat.csv")
     with open(expect_dat, "w", encoding="UTF8") as f:
         f.write(
         "device_id,device_manufacturer,qty,device_description,project\n"
@@ -193,12 +182,12 @@ def test_align_man4(cli, inv_set):
     pd.testing.assert_frame_equal(dev, exp_dat, check_dtype=False)
 
 
-def test_align_man5(cli, inv_set):
+def test_align_man5(cli, db_setup, tmpdir):
     """
     multiple projects in BOM, some attributes for devices
     """
     # base data
-    bom1 = inv_set.join("bom1.csv")
+    bom1 = tmpdir.join("bom1.csv")
     with open(bom1, "w", encoding="UTF8") as f:
         f.write(
         "device_id,device_manufacturer,qty,device_description,project,dev_category1,dev_category2,package\n"
@@ -209,7 +198,7 @@ def test_align_man5(cli, inv_set):
         + "db,mcc,1,desc33,proj2,cat3,cat4,pack5\n"
         + "dc,mcc,1,desc34,proj2,cat1,cat2,pack1\n"
         )# fmt: skip
-    args = cli.parse_args(["bom", "-d", inv_set.strpath, "-f", "bom1", "-F", "csv"])
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "bom1", "-F", "csv"])
     bom_import(args)
 
     with patch(
@@ -225,7 +214,7 @@ def test_align_man5(cli, inv_set):
     dev = getDF(tab="BOM", follow=True)
 
     # expected data
-    expect_dat = inv_set.join("expect_dat.csv")
+    expect_dat = tmpdir.join("expect_dat.csv")
     with open(expect_dat, "w", encoding="UTF8") as f:
         f.write(
         "device_id,device_manufacturer,qty,device_description,project,dev_category1,dev_category2,package\n"
@@ -251,9 +240,9 @@ def test_align_man5(cli, inv_set):
 # align: all, one from bom or one from shop
 
 
-def _setup_bom_data_for_align(cli, inv_set):
+def _setup_bom_data_for_align(cli, tmpdir):
     """Helper to import BOM data with conflicting manufacturers."""
-    bom_file = inv_set.join("bom_align_test.csv")
+    bom_file = tmpdir.join("bom_align_test.csv")
     with open(bom_file, "w", encoding="UTF8") as f:
         f.write(
             "device_id,device_manufacturer,qty,project,device_description\n"
@@ -261,14 +250,14 @@ def _setup_bom_data_for_align(cli, inv_set):
             + "device1,MAN_B,20,proj2,desc2\n"
         )
     args = cli.parse_args(
-        ["bom", "-d", inv_set.strpath, "-f", "bom_align_test", "-F", "csv"]
+        ["bom", "-d", tmpdir.strpath, "-f", "bom_align_test", "-F", "csv"]
     )
     bom_import(args)
 
 
-def _setup_shop_data_for_align(cli, inv_set):
+def _setup_shop_data_for_align(cli, tmpdir):
     """Helper to import shop data with conflicting manufacturers."""
-    shop_file = inv_set.join("shop_align_test.csv")
+    shop_file = tmpdir.join("shop_align_test.csv")
     with open(shop_file, "w", encoding="UTF8") as f:
         f.write(
             "device_id,device_manufacturer,price,order_qty,shop,device_description\n"
@@ -277,14 +266,14 @@ def _setup_shop_data_for_align(cli, inv_set):
             + "device1,MAN_E,1.3,8,shop3,desc6\n"
         )
     args = cli.parse_args(
-        ["shop", "-d", inv_set.strpath, "-f", "shop_align_test", "-F", "csv"]
+        ["shop", "-d", tmpdir.strpath, "-f", "shop_align_test", "-F", "csv"]
     )
     shop_import(args)
 
 
-def _setup_data_for_remove_test(cli, inv_set):
+def _setup_data_for_remove_test(cli, tmpdir):
     """Sets up BOM and DEVICE tables for remove_dev tests."""
-    bom_file = inv_set.join("bom_remove_test.csv")
+    bom_file = tmpdir.join("bom_remove_test.csv")
     with open(bom_file, "w", encoding="UTF8") as f:
         f.write(
             "device_id,device_manufacturer,qty,project,device_description\n"
@@ -293,7 +282,7 @@ def _setup_data_for_remove_test(cli, inv_set):
             + "dev_unused,MAN_C,100,dummy_project,desc_unused\n"  # This project will be removed
         )
     args = cli.parse_args(
-        ["bom", "-d", inv_set.strpath, "-f", "bom_remove_test", "-F", "csv"]
+        ["bom", "-d", tmpdir.strpath, "-f", "bom_remove_test", "-F", "csv"]
     )
     bom_import(args)
     # Remove the dummy project to leave dev_unused orphaned in the DEVICE table
@@ -301,12 +290,12 @@ def _setup_data_for_remove_test(cli, inv_set):
     rm(tab="BOM", value=["dummy_project"], column=["project"])
 
 
-def test_remove_dev_skip_project_devices(cli, inv_set):
+def test_remove_dev_skip_project_devices(cli, db_setup, tmpdir):
     """
     Tests that remove_dev (with force=False) removes unused devices but
     skips devices that are part of a project in the BOM table.
     """
-    _setup_data_for_remove_test(cli, inv_set)
+    _setup_data_for_remove_test(cli, tmpdir)
 
     # Attempt to remove an unused device and a device used in a project
     remove_dev(dev=["dev_unused", "dev_to_remove"], force=False)
@@ -326,12 +315,12 @@ def test_remove_dev_skip_project_devices(cli, inv_set):
     assert "dev_in_safe_proj" in devices_after["device_id"].to_list()
 
 
-def test_remove_dev_force(cli, inv_set):
+def test_remove_dev_force(cli, db_setup, tmpdir):
     """
     Tests that remove_dev (with force=True) removes devices everywhere,
     including the projects they are part of in the BOM table.
     """
-    _setup_data_for_remove_test(cli, inv_set)
+    _setup_data_for_remove_test(cli, tmpdir)
 
     # Force remove an unused device and a device used in a project
     remove_dev(dev=["dev_unused", "dev_to_remove"], force=True)
@@ -350,13 +339,13 @@ def test_remove_dev_force(cli, inv_set):
     assert "dev_in_safe_proj" in devices_after["device_id"].to_list()
 
 
-def test_align_manufacturers_complex(cli, inv_set):
+def test_align_manufacturers_complex(cli, db_setup, tmpdir):
     """
     Tests aligning a device with multiple manufacturers from both BOM and SHOP imports.
     """
     # 1. Setup initial data with conflicts
-    _setup_bom_data_for_align(cli, inv_set)
-    _setup_shop_data_for_align(cli, inv_set)
+    _setup_bom_data_for_align(cli, tmpdir)
+    _setup_shop_data_for_align(cli, tmpdir)
 
     # Verify initial state: 5 different manufacturers for 'device1'
     initial_devs = getDF(
@@ -408,14 +397,14 @@ def test_align_manufacturers_complex(cli, inv_set):
     assert set(shop_df["shop"]) == {"shop1", "shop2", "shop3"}
 
 
-def test_align_manufacturers_complex1(cli, inv_set):
+def test_align_manufacturers_complex1(cli, db_setup, tmpdir):
     """
     Tests aligning a device with multiple manufacturers from both BOM and SHOP imports.
     new manufacturer name
     """
     # 1. Setup initial data with conflicts
-    _setup_bom_data_for_align(cli, inv_set)
-    _setup_shop_data_for_align(cli, inv_set)
+    _setup_bom_data_for_align(cli, tmpdir)
+    _setup_shop_data_for_align(cli, tmpdir)
 
     # Verify initial state: 5 different manufacturers for 'device1'
     initial_devs = getDF(
@@ -464,12 +453,12 @@ def test_align_manufacturers_complex1(cli, inv_set):
     assert set(shop_df["shop"]) == {"shop1", "shop2", "shop3"}
 
 
-def _setup_bom_data_for_align1(cli, inv_set):
+def _setup_bom_data_for_align1(cli, tmpdir):
     """
     Helper to import BOM data with conflicting manufacturers.
     When chosen device has null in display_cols
     """
-    bom_file = inv_set.join("bom_align_test.csv")
+    bom_file = tmpdir.join("bom_align_test.csv")
     with open(bom_file, "w", encoding="UTF8") as f:
         f.write(
             "device_id,device_manufacturer,qty,project,device_description\n"
@@ -477,19 +466,19 @@ def _setup_bom_data_for_align1(cli, inv_set):
             + "device1,MAN_B,20,proj2,desc2\n"
         )
     args = cli.parse_args(
-        ["bom", "-d", inv_set.strpath, "-f", "bom_align_test", "-F", "csv"]
+        ["bom", "-d", tmpdir.strpath, "-f", "bom_align_test", "-F", "csv"]
     )
     bom_import(args)
 
 
-def test_align_manufacturers_complex2(cli, inv_set):
+def test_align_manufacturers_complex2(cli, db_setup, tmpdir):
     """
     Tests aligning a device with multiple manufacturers from both BOM and SHOP imports.
     make sure to ask also when None in new dev
     """
     # 1. Setup initial data with conflicts
-    _setup_bom_data_for_align1(cli, inv_set)
-    _setup_shop_data_for_align(cli, inv_set)
+    _setup_bom_data_for_align1(cli, tmpdir)
+    _setup_shop_data_for_align(cli, tmpdir)
 
     # Verify initial state: 5 different manufacturers for 'device1'
     initial_devs = getDF(
@@ -541,53 +530,53 @@ def test_align_manufacturers_complex2(cli, inv_set):
     assert set(shop_df["shop"]) == {"shop1", "shop2", "shop3"}
 
 
-def test_admin_project_remove1(cli, inv_set, capsys):
+def test_admin_project_remove1(cli, db_setup, tmpdir, capsys):
     """remove from BOM all"""
-    csv1 = inv_set.join("test1.csv")
+    csv1 = tmpdir.join("test1.csv")
     with open(csv1, "w", encoding="UTF8") as f:
         f.write(
-            "device_id,device_manufacturer,qty\n" 
+            "device_id,device_manufacturer,qty\n"
             +"aa,bb,1"
             ) # fmt: skip
-    csv2 = inv_set.join("test2.csv")
+    csv2 = tmpdir.join("test2.csv")
     with open(csv2, "w", encoding="UTF8") as f:
         f.write(
-            "device_id,device_manufacturer,qty\n" 
+            "device_id,device_manufacturer,qty\n"
             +"aa,bb,1"
         ) # fmt: skip
-    args = cli.parse_args(["bom", "-d", inv_set.strpath, "-F", "csv"])
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
     bom_import(args)
     args = cli.parse_args(["admin", "--remove_project", "%"])
     admin(args)
-    exp = inv_set.join("exp.csv")
+    exp = tmpdir.join("exp.csv")
     exp.write("")
-    args = cli.parse_args(["bom", "-d", inv_set.strpath, "-f", "exp.csv", "-e", "%"])
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
     bom_import(args)
     out, _ = capsys.readouterr()
     assert "no projects in bom table" in out.lower()
 
 
-def test_admin_project_remove2(cli, inv_set):
+def test_admin_project_remove2(cli, db_setup, tmpdir):
     """remove from BOM one project"""
-    csv1 = inv_set.join("test1.csv")
+    csv1 = tmpdir.join("test1.csv")
     with open(csv1, "w", encoding="UTF8") as f:
         f.write(
-            "device_id,device_manufacturer,qty\n" 
+            "device_id,device_manufacturer,qty\n"
             +"aa,bb,1"
             ) # fmt: skip
-    csv2 = inv_set.join("test2.csv")
+    csv2 = tmpdir.join("test2.csv")
     with open(csv2, "w", encoding="UTF8") as f:
         f.write(
-            "device_id,device_manufacturer,qty\n" 
+            "device_id,device_manufacturer,qty\n"
             +"aa,bb,1"
         ) # fmt: skip
-    args = cli.parse_args(["bom", "-d", inv_set.strpath, "-F", "csv"])
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
     bom_import(args)
     args = cli.parse_args(["admin", "--remove_project", "test1"])
     admin(args)
-    exp = inv_set.join("exp.csv")
+    exp = tmpdir.join("exp.csv")
     exp.write("")
-    args = cli.parse_args(["bom", "-d", inv_set.strpath, "-f", "exp.csv", "-e", "%"])
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
     bom_import(args)
     inp = pd.read_csv(csv2)
     exp = pd.read_csv(exp)
@@ -596,31 +585,31 @@ def test_admin_project_remove2(cli, inv_set):
     assert exp.equals(inp[common_cols])
 
 
-def test_admin_project_remove3(cli, inv_set, capsys):
+def test_admin_project_remove3(cli, db_setup, tmpdir, capsys):
     """remove from BOM project that do not exists"""
-    csv1 = inv_set.join("test1.csv")
+    csv1 = tmpdir.join("test1.csv")
     with open(csv1, "w", encoding="UTF8") as f:
         f.write(
-            "device_id,device_manufacturer,qty\n" 
+            "device_id,device_manufacturer,qty\n"
             +"aa,bb,1"
             ) # fmt: skip
-    csv2 = inv_set.join("test2.csv")
+    csv2 = tmpdir.join("test2.csv")
     with open(csv2, "w", encoding="UTF8") as f:
         f.write(
-            "device_id,device_manufacturer,qty\n" 
+            "device_id,device_manufacturer,qty\n"
             +"aa,bb,1"
         ) # fmt: skip
-    args = cli.parse_args(["bom", "-d", inv_set.strpath, "-F", "csv"])
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
     bom_import(args)
     args = cli.parse_args(["admin", "--remove_project", "test"])
     admin(args)
-    exp = inv_set.join("exp.csv")
-    args = cli.parse_args(["bom", "-d", inv_set.strpath, "-f", "exp.csv", "-e", "%"])
+    exp = tmpdir.join("exp.csv")
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
     bom_import(args)
-    csv = inv_set.join("csv.csv")
+    csv = tmpdir.join("csv.csv")
     with open(csv, "w", encoding="UTF8") as f:
         f.write(
-            "device_id,device_manufacturer,qty\n" 
+            "device_id,device_manufacturer,qty\n"
             +"aa,bb,1\n"
             +"aa,bb,1"
         ) # fmt: skip
@@ -633,21 +622,21 @@ def test_admin_project_remove3(cli, inv_set, capsys):
     assert "ambiguous abbreviation 'test'" in out.lower()
 
 
-def test_remove_show_all_projects(cli, inv_set, capsys):
+def test_remove_show_all_projects(cli, db_setup, tmpdir, capsys):
     """show all projects possible to export"""
-    csv1 = inv_set.join("test1.csv")
+    csv1 = tmpdir.join("test1.csv")
     with open(csv1, "w", encoding="UTF8") as f:
         f.write(
-            "device_id,device_manufacturer,qty\n" 
+            "device_id,device_manufacturer,qty\n"
             +"aa,bb,1"
             ) # fmt: skip
-    csv2 = inv_set.join("test2.csv")
+    csv2 = tmpdir.join("test2.csv")
     with open(csv2, "w", encoding="UTF8") as f:
         f.write(
-            "device_id,device_manufacturer,qty\n" 
+            "device_id,device_manufacturer,qty\n"
             +"aa,bb,1"
         ) # fmt: skip
-    args = cli.parse_args(["bom", "-d", inv_set.strpath, "-F", "csv"])
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
     bom_import(args)
     args = cli.parse_args(["admin", "--remove_project", "?"])
     admin(args)

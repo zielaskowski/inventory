@@ -3,22 +3,17 @@ py test
 testing functions from app/tabs.py
 """
 
+import importlib
 from unittest.mock import mock_open, patch
 
 import pandas as pd
 import pytest
 
+from app import common
 from app.common import tab_cols
 from app.error import SqlTabError, VimdiffSelError
 from app.tabs import ASCII_txt, NA_rows, align_other_cols, vimdiff_selection
-from conf.sql_colnames import *  # pylint: disable=unused-wildcard-import,wildcard-import
-from inv import cli_parser
-
-
-@pytest.fixture(name="cli")
-def cli_fixture():
-    """command line parser"""
-    return cli_parser()
+from conf import config as conf
 
 
 def test_NA_rows(capsys):  # pylint: disable=invalid-name
@@ -68,7 +63,8 @@ def test_tab_cols1(monkeypatch, tmpdir):
     scheme = '{"tab1": {"col1": "TEXT"}}'
     f = tmpdir.join("shceme.json")
     f.write(scheme)
-    monkeypatch.setattr("conf.config.SQL_SCHEME", f)
+    monkeypatch.setattr(conf, "SQL_SCHEME", f)
+    importlib.reload(common)
     with pytest.raises(SqlTabError) as err_info:
         tab_cols("test")
     assert err_info.match("test")
@@ -79,7 +75,8 @@ def test_tab_cols2(monkeypatch, tmpdir):
     scheme = '{"tab1": {"col1": "TEXT"}, "tab2": {"col2": "TEXT"}}'
     f = tmpdir.join("shceme.json")
     f.write(scheme)
-    monkeypatch.setattr("conf.config.SQL_SCHEME", f)
+    monkeypatch.setattr(conf, "SQL_SCHEME", f)
+    importlib.reload(common)
     with pytest.raises(SqlTabError) as err_info:
         tab_cols("test")
     assert err_info.match("test")
@@ -126,7 +123,7 @@ def test_vimdiff_selection_handles_none_input():
             ref_col=ref_col,
             change_col=change_col,
             opt_col=opt_col,
-            what_differ=DEV_MAN,
+            what_differ=conf.DEV_MAN,
             dev_id="",
             exit_on_change=True,
         )
@@ -174,7 +171,7 @@ def test_vimdiff_selection_raises_on_length_mismatch():
                 ref_col=ref_col,
                 change_col=change_col,
                 opt_col=opt_col,
-                what_differ=DEV_MAN,
+                what_differ=conf.DEV_MAN,
                 dev_id="",
                 exit_on_change=True,
             )
@@ -196,8 +193,8 @@ def test_align_other_cols_user_selects_rm_dat(mock_tab_cols, mock_vimdiff):
     # 1. Setup mocks
     # Mock tab_cols to control the columns being processed
     mock_tab_cols.return_value = (
-        [DEV_ID, DEV_MAN],  # must_cols
-        [DEV_DESC, DEV_PACK],  # nice_cols
+        [conf.DEV_ID, conf.DEV_MAN],  # must_cols
+        [conf.DEV_DESC, conf.DEV_PACK],  # nice_cols
     )
 
     # Mock vimdiff_selection to simulate user choosing the 'rm_dat' (optional) value
@@ -223,21 +220,21 @@ def test_align_other_cols_user_selects_rm_dat(mock_tab_cols, mock_vimdiff):
         {
             "dev_rm": ["device_A"],
             "man_rm": ["manuf_Y"],
-            DEV_HASH: ["hash123"],
-            DEV_ID: ["device_A"],
-            DEV_MAN: ["manuf_Y"],
-            DEV_DESC: ["Description from RM"],
-            DEV_PACK: ["pckg1"],
+            conf.DEV_HASH: ["hash123"],
+            conf.DEV_ID: ["device_A"],
+            conf.DEV_MAN: ["manuf_Y"],
+            conf.DEV_DESC: ["Description from RM"],
+            conf.DEV_PACK: ["pckg1"],
         }
     )
 
     keep_dat = pd.DataFrame(
         {
-            DEV_HASH: ["hash123"],
-            DEV_ID: ["device_A"],
-            DEV_MAN: ["manuf_Y"],
-            DEV_DESC: ["Description from KEEP"],
-            DEV_PACK: ["pckg1"],
+            conf.DEV_HASH: ["hash123"],
+            conf.DEV_ID: ["device_A"],
+            conf.DEV_MAN: ["manuf_Y"],
+            conf.DEV_DESC: ["Description from KEEP"],
+            conf.DEV_PACK: ["pckg1"],
         }
     )
 
@@ -247,11 +244,11 @@ def test_align_other_cols_user_selects_rm_dat(mock_tab_cols, mock_vimdiff):
     # 4. Assert the outcome
     assert not result_df.empty
     # Check that the description from rm_dat was chosen
-    assert result_df.loc[0, DEV_DESC] == "Description from RM"
+    assert result_df.loc[0, conf.DEV_DESC] == "Description from RM"
     # Check that other columns are untouched
-    assert result_df.loc[0, DEV_PACK] == "pckg1"
-    assert result_df.loc[0, DEV_HASH] == "hash123"
-    assert result_df.loc[0, DEV_MAN] == "manuf_Y"
+    assert result_df.loc[0, conf.DEV_PACK] == "pckg1"
+    assert result_df.loc[0, conf.DEV_HASH] == "hash123"
+    assert result_df.loc[0, conf.DEV_MAN] == "manuf_Y"
 
     # 5. Verify mock was called correctly
     mock_vimdiff.assert_called_once()
@@ -274,8 +271,8 @@ def test_align_other_cols_replace_none1(mock_tab_cols):
     # 1. Setup mocks
     # Mock tab_cols to control the columns being processed
     mock_tab_cols.return_value = (
-        [DEV_ID, DEV_MAN],  # must_cols
-        [DEV_DESC, DEV_PACK],  # nice_cols
+        [conf.DEV_ID, conf.DEV_MAN],  # must_cols
+        [conf.DEV_DESC, conf.DEV_PACK],  # nice_cols
     )
 
     # 2. Setup test data
@@ -283,21 +280,21 @@ def test_align_other_cols_replace_none1(mock_tab_cols):
         {
             "dev_rm": ["device_A"],
             "man_rm": ["manuf_Y"],
-            DEV_HASH: ["hash123"],
-            DEV_ID: ["device_A"],
-            DEV_MAN: ["manuf_Y"],
-            DEV_DESC: ["Description from RM"],
-            DEV_PACK: ["pckg1"],
+            conf.DEV_HASH: ["hash123"],
+            conf.DEV_ID: ["device_A"],
+            conf.DEV_MAN: ["manuf_Y"],
+            conf.DEV_DESC: ["Description from RM"],
+            conf.DEV_PACK: ["pckg1"],
         }
     )
 
     keep_dat = pd.DataFrame(
         {
-            DEV_HASH: ["hash123"],
-            DEV_ID: ["device_A"],
-            DEV_MAN: ["manuf_Y"],
-            DEV_DESC: [None],
-            DEV_PACK: ["pckg1"],
+            conf.DEV_HASH: ["hash123"],
+            conf.DEV_ID: ["device_A"],
+            conf.DEV_MAN: ["manuf_Y"],
+            conf.DEV_DESC: [None],
+            conf.DEV_PACK: ["pckg1"],
         }
     )
 
@@ -307,8 +304,8 @@ def test_align_other_cols_replace_none1(mock_tab_cols):
     # 4. Assert the outcome
     assert not result_df.empty
     # Check that the description from rm_dat was chosen
-    assert result_df.loc[0, DEV_DESC] == "Description from RM"
+    assert result_df.loc[0, conf.DEV_DESC] == "Description from RM"
     # Check that other columns are untouched
-    assert result_df.loc[0, DEV_PACK] == "pckg1"
-    assert result_df.loc[0, DEV_HASH] == "hash123"
-    assert result_df.loc[0, DEV_MAN] == "manuf_Y"
+    assert result_df.loc[0, conf.DEV_PACK] == "pckg1"
+    assert result_df.loc[0, conf.DEV_HASH] == "hash123"
+    assert result_df.loc[0, conf.DEV_MAN] == "manuf_Y"

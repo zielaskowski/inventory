@@ -712,6 +712,10 @@ def check_existing_data(dat: pd.DataFrame, args: Namespace) -> bool:
     """
     old_data = sql.getL(tab="STOCK", get_col=[STOCK_HASH])
     overlap_data = dat.loc[dat[STOCK_HASH].isin(old_data), :]
+    if overlap_data.empty:
+        # no existing data so -overwrite dosent make sense
+        args.overwrite = False
+        return True
     if args.overwrite:
         # remove all old data
         sql.rm(

@@ -66,6 +66,8 @@ configuration manually also.
 
 ## NOT IMPLEMENTED / WISH LIST
 
+0. when import stock, --overwrite option fail when used for importing new data (not existing)
+
 1. when file not present in search, very misleading info about missing folder
 
 2. add summary:

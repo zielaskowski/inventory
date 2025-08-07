@@ -365,3 +365,71 @@ def test_add_device_id_and_manufacturer(db_setup, cli, tmpdir):
         == 2
     )
 
+
+def test_stock_import_overwrite(db_setup, cli, tmpdir):
+    """
+    Tests the --overwrite functionality of stock_import.
+    """
+    # 1. Setup initial stock file
+    stock_file_1 = tmpdir.join("stock1.csv")
+    with open(stock_file_1, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,stock_qty\n"
+            + "dev1,MAN_A,10\n"
+            + "dev2,MAN_B,20\n"
+        )
+    args = cli.parse_args(["stock", "-d", tmpdir.strpath, "-f", "stock1", "-F", "csv"])
+    stock_import(args)
+
+    # 2. Verify initial import
+    stock1 = getDF(tab="STOCK", follow=True)
+    assert stock1.loc[stock1[DEV_ID] == "dev1", STOCK_QTY].iloc[0] == 10
+    assert stock1.loc[stock1[DEV_ID] == "dev2", STOCK_QTY].iloc[0] == 20
+
+    # 3. Setup second stock file with different quantities
+    stock_file_2 = tmpdir.join("stock2.csv")
+    with open(stock_file_2, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,stock_qty\n"
+            + "dev1,MAN_A,5\n"
+            + "dev2,MAN_B,5\n"
+        )
+
+    # 4. Import without --overwrite (should add quantities)
+    args = cli.parse_args(["stock", "-d", tmpdir.strpath, "-f", "stock2", "-F", "csv"])
+    stock_import(args)
+    stock2 = getDF(tab="STOCK", follow=True)
+    assert stock2.loc[stock2[DEV_ID] == "dev1", STOCK_QTY].iloc[0] == 15
+    assert stock2.loc[stock2[DEV_ID] == "dev2", STOCK_QTY].iloc[0] == 25
+
+    # 5. Import with --overwrite (should overwrite quantities)
+    args = cli.parse_args(
+        ["stock", "-d", tmpdir.strpath, "-f", "stock2", "-F", "csv", "--overwrite"]
+    )
+    stock_import(args)
+    stock3 = getDF(tab="STOCK", follow=True)
+    assert stock3.loc[stock3[DEV_ID] == "dev1", STOCK_QTY].iloc[0] == 5
+    assert stock3.loc[stock3[DEV_ID] == "dev2", STOCK_QTY].iloc[0] == 5
+
+
+def test_stock_import_overwrite_no_existing_data(db_setup, cli, tmpdir):
+    """
+    Tests the --overwrite functionality when no stock.
+    """
+    # 1. Setup initial stock file
+    stock_file_1 = tmpdir.join("stock1.csv")
+    with open(stock_file_1, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,stock_qty\n"
+            + "dev1,MAN_A,10\n"
+            + "dev2,MAN_B,20\n"
+        )
+    args = cli.parse_args(
+        ["stock", "-d", tmpdir.strpath, "-f", "stock1", "-F", "csv", "--overwrite"]
+    )
+    stock_import(args)
+
+    # 2. Verify initial import
+    stock1 = getDF(tab="STOCK", follow=True)
+    assert stock1.loc[stock1[DEV_ID] == "dev1", STOCK_QTY].iloc[0] == 10
+    assert stock1.loc[stock1[DEV_ID] == "dev2", STOCK_QTY].iloc[0] == 20

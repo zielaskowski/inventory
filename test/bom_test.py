@@ -4,7 +4,8 @@ import pandas as pd
 import pytest
 
 from app.import_dat import bom_import, scan_files
-from app.sql import sql_check
+from app.sql import getDF, sql_check
+from conf.config import BOM_QTY, DEV_ID, DEV_MAN
 from inv import cli_parser
 
 
@@ -292,11 +293,17 @@ def test_scan_files3(cli, db_setup, tmpdir, capsys):
 def test_scan_files4(cli, db_setup, tmpdir):
     """no files"""
     csv1 = tmpdir.join("test1.csv")
-    csv1.write("device_id,device_manufacturer,qty\n")
-    csv1.write("aa,bb,1", mode="a")
+    with open(csv1, "w", encoding="UTF8") as f:
+        f.write(
+                "device_id,device_manufacturer,qty\n"
+                + "aa,bb,1"
+        )  # fmt: skip
     csv2 = tmpdir.join("test2.csv")
-    csv2.write("device_id,device_manufacturer,qty\n")
-    csv2.write("aa,bb,1", mode="a")
+    with open(csv2, "w", encoding="UTF8") as f:
+        f.write(
+                "device_id,device_manufacturer,qty\n"
+                + "aa,bb,1"
+        )  # fmt: skip
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
     bom_import(args)
     csv1.remove()
@@ -309,11 +316,17 @@ def test_scan_files4(cli, db_setup, tmpdir):
 def test_export_show_all_projects(cli, db_setup, tmpdir, capsys):
     """show all projects possible to export"""
     csv1 = tmpdir.join("test1.csv")
-    csv1.write("device_id,device_manufacturer,qty\n")
-    csv1.write("aa,bb,1", mode="a")
+    with open(csv1, "w", encoding="UTF8") as f:
+        f.write(
+                "device_id,device_manufacturer,qty\n"
+                + "aa,bb,1"
+        )  # fmt: skip
     csv2 = tmpdir.join("test2.csv")
-    csv2.write("device_id,device_manufacturer,qty\n")
-    csv2.write("aa,bb,1", mode="a")
+    with open(csv2, "w", encoding="UTF8") as f:
+        f.write(
+                "device_id,device_manufacturer,qty\n"
+                + "aa,bb,1"
+        )  # fmt: skip
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
     bom_import(args)
     args = cli.parse_args(["bom", "--export", "?"])
@@ -321,3 +334,72 @@ def test_export_show_all_projects(cli, db_setup, tmpdir, capsys):
     out, _ = capsys.readouterr()
     assert "test1" in out.lower()
     assert "test2" in out.lower()
+
+
+def test_bom_import_overwrite(db_setup, cli, tmpdir):
+    """
+    Tests the --overwrite functionality of bom_import.
+    """
+    # 1. Setup initial stock file
+    stock_file_1 = tmpdir.join("stock1.csv")
+    with open(stock_file_1, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,qty\n"
+            + "dev1,MAN_A,10\n"
+            + "dev2,MAN_B,20\n"
+        )
+    args = cli.parse_args(["stock", "-d", tmpdir.strpath, "-f", "stock1", "-F", "csv"])
+    bom_import(args)
+
+    # 2. Verify initial import
+    stock1 = getDF(tab="BOM", follow=True)
+    assert stock1.loc[stock1[DEV_ID] == "dev1", BOM_QTY].iloc[0] == 10
+    assert stock1.loc[stock1[DEV_ID] == "dev2", BOM_QTY].iloc[0] == 20
+
+    # 3. Setup second stock file with different quantities
+    stock_file_1 = tmpdir.join("stock1.csv")
+    with open(stock_file_1, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,qty\n"
+            + "dev1,MAN_A,5\n"
+            + "dev2,MAN_B,5\n"
+            ) # fmt: skip
+
+    # 4. Import without --overwrite (should add quantities)
+    args = cli.parse_args(["stock", "-d", tmpdir.strpath, "-f", "stock1", "-F", "csv"])
+    bom_import(args)
+    stock2 = getDF(tab="BOM", follow=True)
+    assert stock2.loc[stock2[DEV_ID] == "dev1", BOM_QTY].iloc[0] == 15
+    assert stock2.loc[stock2[DEV_ID] == "dev2", BOM_QTY].iloc[0] == 25
+
+    # 5. Import with --overwrite (should overwrite quantities)
+    args = cli.parse_args(
+        ["stock", "-d", tmpdir.strpath, "-f", "stock1", "-F", "csv", "--overwrite"]
+    )
+    bom_import(args)
+    stock3 = getDF(tab="BOM", follow=True)
+    assert stock3.loc[stock3[DEV_ID] == "dev1", BOM_QTY].iloc[0] == 5
+    assert stock3.loc[stock3[DEV_ID] == "dev2", BOM_QTY].iloc[0] == 5
+
+
+def test_stock_import_overwrite_no_existing_data(db_setup, cli, tmpdir):
+    """
+    Tests the --overwrite functionality when no stock.
+    """
+    # 1. Setup initial stock file
+    stock_file_1 = tmpdir.join("stock1.csv")
+    with open(stock_file_1, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,qty\n"
+            + "dev1,MAN_A,10\n"
+            + "dev2,MAN_B,20\n"
+        )
+    args = cli.parse_args(
+        ["stock", "-d", tmpdir.strpath, "-f", "stock1", "-F", "csv", "--overwrite"]
+    )
+    bom_import(args)
+
+    # 2. Verify initial import
+    stock1 = getDF(tab="BOM", follow=True)
+    assert stock1.loc[stock1[DEV_ID] == "dev1", BOM_QTY].iloc[0] == 10
+    assert stock1.loc[stock1[DEV_ID] == "dev2", BOM_QTY].iloc[0] == 20

@@ -169,7 +169,7 @@ format_data_for_fzf | fzf --ansi \
 	--preview-window=top:30%:wrap \
 	--preview='bash -c "generate_preview \"{}\""' \
 	--border='horizontal' \
-	--border-label='ctrl-c to copy ID | ctrl-d to delete | ctrl-a to add' \
+	--border-label='ctrl-c to copy ID | ctrl-d to use | ctrl-a to add' \
 	--border-label-pos=-1:bottom \
 	--bind='ctrl-c:execute-silent(bash -c "device_copy \"{}\"")' \
 	--bind='ctrl-d:execute-silent(bash -c "device_remove \"{}\"")+reload-sync(bash -c "format_data_for_fzf")' \

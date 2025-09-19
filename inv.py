@@ -27,6 +27,7 @@ def _add_bom_import_parser(command_parser):
     cli_import_bom.add_argument(
         "-d",
         "--dir",
+        default=".",
         help="""Directory to start scaning for files to be imported.
                 Scan only in 'BOM' folder (can be change in config.py)""",
         required=False,
@@ -124,6 +125,7 @@ def _add_shop_cart_import_parser(command_parser):
     cli_import_cart.add_argument(
         "-d",
         "--dir",
+        default=".",
         help="""Directory to start scan with.
                 If omitted, current directory is used.
                 Scan only in 'BOM' folder (can be change in config.py)""",
@@ -207,6 +209,7 @@ def _add_transact_parser(command_parser):
     cli_transact.add_argument(
         "-d",
         "--dir",
+        default=".",
         help="Directory to save shoping list. If omitted, current directory is used",
         required=False,
     )
@@ -216,7 +219,7 @@ def _add_transact_parser(command_parser):
         nargs="+",
         default=["%"],
         help="""Export data from selected PROJECTS, you can use abbreviations.
-                Use '%%' if you want to export all not commited projects. 
+                Use '%%' if you want to export all projects.
                 Use '?' to list available projects. Default is '%%' """,
     )
     cli_transact.add_argument(
@@ -248,6 +251,7 @@ def _add_stock_parser(command_parser):
     cli_stock.add_argument(
         "-d",
         "--dir",
+        default=".",
         help="""Directory to start scaning for files to be imported.
                 Scan only in 'BOM' folder (can be change in config.py)""",
         required=False,
@@ -413,7 +417,7 @@ def _add_admin_parser(command_parser):
         metavar="PROJECT",
         nargs="+",
         help="""Remove from BOM table all items from PROJECTs.
-                Use '%%' if you want to remove all not commited projects.
+                Use '%%' if you want to remove all projects.
                 Use '?' (including single quote!) to list available projects.
                 Do not touch any other table in DB.""",
     )

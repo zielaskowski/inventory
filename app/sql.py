@@ -561,8 +561,8 @@ def sql_create() -> None:  # pylint: disable=too-many-branches
         if os.path.isfile(DB_FILE):
             os.remove(DB_FILE)
         raise SqlCreateError(SQL_SCHEME)
-    if "STOCK" in sql_scheme.keys():
-        sql_audit(tab="STOCK")
+    for tab in sql_scheme:
+        sql_audit(tab=tab)
 
 
 def sql_audit(tab: str) -> None:

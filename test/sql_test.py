@@ -92,7 +92,7 @@ def test_sql_check1(monkeypatch, tmpdir):
             "device_hash": "TEXT PRIMARY KEY",
             "device_id": "TEXT NOT NULL",
         },
-        "PROJECT": {"project": "TEXT", "project_name": "TEXT"},
+        "PROJECT": {"project": "TEXT PRIMARY KEY", "project_name": "TEXT"},
         "BOM": {
             "id": "INTEGER PRIMARY KEY",
             "device_hash": "TEXT NOT NULL",

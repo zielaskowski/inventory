@@ -57,7 +57,8 @@ device_copy(){
 	dev_id=$(echo "$original_line" | \
 		awk -F'|' -v dev_id_col="$DEV_ID" '{print $dev_id_col}' | \
 		tr -d '\n')
-	echo -n "$dev_id" | wl-copy 			# copy to clipboard, wayland only
+#	echo -n "$dev_id" | wl-copy 			# copy to clipboard, wayland only
+	echo -n "$dev_id" | xclip -n -selection clipboard # copy to clipboard, xorg version (xsel seems not working for some reason)
 	notify-send "Copied to clipboard:" "$dev_id"	# notify what copied KDE only
 }
 export -f device_copy

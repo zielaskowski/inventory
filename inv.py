@@ -492,7 +492,13 @@ def cli_parser() -> AbbreviationParser:
         Application can import exccel files in different formats (from different)
         shops. Format description is in config file. Should be easy to extend.
         Each execution of app is writing used arguments into log file. You cen setup 
-        in {conf.CONFIG_PATH}.config.py file.""",
+        in {conf.CONFIG_PATH}/config.py file.
+
+        Configuration of app is searched in '.config' folder starting from current
+        folder and its sub folders. If '.config' is not found will use default
+        settings from location where app is installed. SQL database file is inside .config
+        folder, so the same aplies.
+        """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     command_parser = cli.add_subparsers(title="commands", dest="command")

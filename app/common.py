@@ -339,6 +339,9 @@ def check_dir_file(args: argparse.Namespace) -> list[str]:
     and check if file exists
     return found files
     """
+    # expanding the path will mke search include the current path
+    # find_files (in particular os.walk()) ignores '.' and '..'
+    args.dir = os.path.abspath(args.dir)
     if not os.path.exists(args.dir):
         raise CheckDirError(directory=args.dir, scan_dir=SCAN_DIR)
     files = find_files(args.dir, args.format)

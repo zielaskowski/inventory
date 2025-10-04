@@ -4,7 +4,6 @@ import pandas as pd
 import pytest
 
 from app.import_dat import bom_import
-from app.sql import sql_check
 from inv import cli_parser
 
 

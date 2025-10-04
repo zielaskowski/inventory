@@ -47,15 +47,23 @@ def find_toml() -> str:
     """
     Search for a local 'inventory.toml'. Falls back to the
     default config TOML if no local one is found.
+    Search along the path from current location (including) all the way to root
     """
-    start_dir = os.getcwd()
+    current_dir = os.getcwd()
     # default configuration
     conf_path = os.path.join(MODULE_PATH, "conf")
     # search local configuration
-    for folder, _, files in os.walk(start_dir):
-        if TOML_FILE in files:
-            conf_path = folder
+    while True:
+        conf_loc_path = os.path.join(current_dir, ".config")
+        if os.path.exists(conf_loc_path):
+            conf_loc_files = os.listdir(conf_loc_path)
+            if TOML_FILE in conf_loc_files:
+                conf_path = conf_loc_path
+                break
+        parent = os.path.dirname(current_dir)
+        if parent == current_dir:  # reached top
             break
+        current_dir = parent
     return conf_path
 
 

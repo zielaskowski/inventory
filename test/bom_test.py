@@ -5,7 +5,7 @@ import pytest
 
 from app.import_dat import bom_import, scan_files
 from app.sql import getDF, sql_check
-from conf.config import BOM_QTY, DEV_ID, DEV_MAN
+from conf.config import BOM_QTY, DEV_ID
 from inv import cli_parser
 
 

@@ -495,7 +495,7 @@ def cli_parser() -> AbbreviationParser:
         in {conf.CONFIG_PATH}/config.py file.
 
         Configuration of app is searched in '.config' folder starting from current
-        folder and its sub folders. If '.config' is not found will use default
+        folder and up to root. If '.config' is not found will use default
         settings from location where app is installed. SQL database file is inside .config
         folder, so the same aplies.
         """,

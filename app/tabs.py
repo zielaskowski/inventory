@@ -276,7 +276,11 @@ def columns_align(n_stock: pd.DataFrame, file: str, args: Namespace) -> pd.DataF
     n_stock = n_stock.astype(object)
     if dtype := import_format[args.format].get("dtype"):
         exist_col_dtypes = {k: v for k, v in dtype.items() if k in n_stock.columns}
-        n_stock = n_stock.astype(exist_col_dtypes)
+        try:
+            n_stock = n_stock.astype(exist_col_dtypes)
+        except ValueError as e:
+            msg.msg(e.__str__())
+            sys.exit(1)
 
     # Strip whitespace from all string elements in the DataFrame
     n_stock = n_stock.map(lambda x: x.strip() if isinstance(x, str) else x)
@@ -646,9 +650,7 @@ def vimdiff_selection(  # pylint: disable=too-many-positional-arguments,too-many
         with subprocess.Popen("konsole -e " + vim_cmd, shell=True) as p:
             p.wait()
 
-    with open(
-        TEMP_DIR + cols[change_k] + "_2.txt", mode="r", encoding="UTF8"
-    ) as f:
+    with open(TEMP_DIR + cols[change_k] + "_2.txt", mode="r", encoding="UTF8") as f:
         chosen = f.read().splitlines()
 
     # clean up files

@@ -129,7 +129,7 @@ def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:
 
 def tabs_in_data(dat: pd.DataFrame) -> list[str]:
     """
-    return all tbles which mandatary cols are present in dat
+    return all tables which mandatary cols are present in dat
     """
     sql_scheme = read_json_dict(SQL_SCHEME)
     # need to start from DEVICE because other tables refer to it

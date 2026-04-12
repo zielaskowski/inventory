@@ -403,14 +403,6 @@ def _add_admin_parser(command_parser):
             add alternative manufacturer table and auditing""",
     )
     admin_group.add_argument(
-        "--import_manufacturers",
-        action="store_true",
-        help="""
-            Import alternative manufacturers from json file.
-            Keep what already exists.
-            """,
-    )
-    admin_group.add_argument(
         "-c",
         "--display_config",
         action="store_true",
@@ -419,9 +411,8 @@ def _add_admin_parser(command_parser):
     admin_group.add_argument(
         "--backup_config",
         action="store_true",
-        help="""
-            Backup config dir. Will put config files into .config/backup_%Y-%b-%d-%h%M%s%f folder.
-            """,
+        help="""Backup config dir. Will put config files into
+        '.config/backup_%%Y-%%m-%%d-%%H%%M%%s%%f' folder.""",
     )
     admin_group.add_argument(
         "--restore_config",
@@ -436,6 +427,19 @@ def _add_admin_parser(command_parser):
         help="Set config in local directory. You can then adjust manualy.",
     )
     admin_group.add_argument(
+        "--import_manufacturers",
+        metavar="json_file",
+        help="""Import alternative manufacturers from json file.
+                File content shall be Dictionary wit List as values, like this: 
+                {manufacturer:[alternative_manufacturer1,alternative_manufacturer2]}
+                Keeps what already exists.""",
+    )
+    admin_group.add_argument(
+        "--export_manufacturers",
+        metavar="json_file",
+        help="Export existing alternative manufacturers to a JSON file.",
+    )
+    admin_group.add_argument(
         "-a",
         "--align_manufacturers",
         action="store_true",
@@ -448,7 +452,7 @@ def _add_admin_parser(command_parser):
         help="""Remove from BOM table all items from PROJECTs.
                 Use '%%' if you want to remove all projects.
                 Use '?' (including single quote!) to list available projects.
-                Do not touch any other table in DB.""",
+                Does not touch any other table in DB.""",
     )
     admin_group.add_argument(
         "--remove_dev_id",
@@ -469,7 +473,7 @@ def _add_admin_parser(command_parser):
                 You can read part number from csv file, see --csv option.
                 Usefull when item not in shop stock any more""",
     )
-    admin_group.add_argument(
+    cli_admin.add_argument(
         "--force",
         action="store_true",
         help="Force device removal also when used in project",
@@ -557,14 +561,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # check if we have proper sql file
-    try:
-        sql_check()
-    except SqlCheckError as e:
-        msg.msg(str(e))
-        sys.exit(1)
-    except SqlCreateError as e:
-        msg.msg(str(e))
-        sys.exit(1)
+    # but skip to allow upgrading
+    if not args.sql_upgrade:
+        try:
+            sql_check()
+        except SqlCheckError as e:
+            msg.msg(str(e))
+            sys.exit(1)
+        except SqlCreateError as e:
+            msg.msg(str(e))
+            sys.exit(1)
 
     # TODO: backup config folder
 

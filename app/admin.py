@@ -5,6 +5,7 @@ Administrative functions: removal, edit
 import os
 import sys
 from argparse import Namespace
+from time import strftime
 
 import pandas as pd
 
@@ -17,7 +18,9 @@ from app.common import (
     log_create,
     read_json_list,
     restore_config,
+    str_to_date,
     tab_cols,
+    write_json,
 )
 from app.error import ReadJsonError, SqlCreateError
 from app.message import MessageHandler
@@ -70,7 +73,9 @@ def admin(args: Namespace) -> None:
     if args.sql_upgrade:
         sql_upgrade()
     if args.import_manufacturers:
-        import_manufacturers()
+        import_manufacturers(file=args.import_manufacturers)
+    if args.export_manufacturers:
+        export_manufacturers(args.export_manufacturers)
     if args.backup_config:
         backup_config()
     if args.restore_config:
@@ -83,16 +88,29 @@ def select_restore_backup():
     if lb == []:
         msg.msg("no backups. abort.")
         sys.exit(0)
-    idx = msg.select_backup(lb)
+    b_date = []
+    for b in lb:
+        b = os.path.basename(b)
+        b = b.replace("backup_", "")
+        b_dt = str_to_date(b)
+        b_date.append(b_dt.strftime("%Y-%m-%d %H:%M"))
+    idx = msg.select_backup(b_date)
     restore_config(idx)
 
 
-def import_manufacturers():
+def export_manufacturers(file: str) -> None:
+    """export manufacturers to a file"""
+    alt_man = sql.get_man_alternatives()
+    write_json(file=file, content=alt_man)
+    msg.msg(f"Exported data to {file}")
+
+
+def import_manufacturers(file: str):
     """import manufacturers from json to sql"""
     try:
-        alt_exist = read_json_list(MAN_ALT)
+        alt_exist = read_json_list(file)
         sql.store_man_alternatives(alt_exist)
-        msg.msg(f"imported manufacturer alternatives from '{MAN_ALT}'")
+        msg.msg(f"imported manufacturer alternatives from '{file}'")
     except (ReadJsonError, SqlCreateError) as e:
         msg.msg(str(e))
         msg.msg("skipping importing manufacturers")

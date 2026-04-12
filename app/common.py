@@ -67,21 +67,61 @@ def backup_config() -> None:
     msg.msg(f"created backup copy of config files in '{backup_path}'")
     msg.msg(f"copied following files: {[os.path.basename(f) for f in config_files]}")
 
-def list_backups()->list:
+
+def list_backups() -> list:
     """list backup sub-folders in config folder"""
     backup_dirs = [d.path for d in os.scandir(CONFIG_PATH) if d.is_dir()]
     backup_dirs = [d for d in backup_dirs if os.path.basename(d).startswith("backup")]
     backup_dirs.sort()
     return backup_dirs
 
+
 def restore_config(idx=-1) -> None:
     """
     restore backup sql DB
     """
-    config_files = [f for f in os.scandir(list_backups()[idx]) if f.is_file()]
+    config_files = [f.path for f in os.scandir(list_backups()[idx]) if f.is_file()]
     for f in config_files:
-        shutil.copy2(f.path, CONFIG_PATH)
+        shutil.copy2(f, CONFIG_PATH)
     msg.msg(f"Backup files restored: {config_files}")
+
+
+def str_to_date(date: str) -> datetime:
+    """convert string date to datetime object
+    date in formt path/.config/backup_%Y-%b-%d-%h%M%s%f"""
+    pattern = re.compile(
+        r"""
+                         ^
+                         (?P<year>\d{4})-
+                         (?P<month>\d{2})-
+                         (?P<day>\d{2})-
+                         (?P<hour>\d{2})
+                         (?P<minute>\d{2})
+                         (?P<sec>\d{2})
+                         (?P<microsec>\d+)
+                         $
+                         """,
+        re.VERBOSE,
+    )
+    date = os.path.basename(date)
+    date = date.replace("backup_", "")
+    match = pattern.match(date)
+    if not match:
+        return datetime.now()
+    date_yr = int(match["year"])
+    date_month = int(match["month"])
+    date_day = int(match["day"])
+    time_hrs = int(match["hour"])
+    time_min = int(match["minute"])
+    time_sec = int(match["sec"])
+    return datetime(
+        date_yr,
+        date_month,
+        date_day,
+        time_hrs,
+        time_min,
+        time_sec,
+    )
 
 
 def display_conf() -> None:

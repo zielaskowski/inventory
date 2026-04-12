@@ -36,8 +36,14 @@ DB structure is described in ./conf/sql_scheme.json
 
 def store_man_alternatives(man_alt: dict) -> None:
     """store manufacturers into tables"""
+    if [k for k in man_alt if k] == []:
+        # nothing to do
+        msg.msg("empty file")
+        raise ReadJsonError(MAN_ALT, type_val="List")
     man = pd.DataFrame(columns=[MAN_NAME, MAN_ALT_NAME])  # pyright: ignore
     for k, val in man_alt.items():
+        if not k:
+            continue
         for v in val:
             new_row = pd.DataFrame(
                 {MAN_NAME: k, MAN_ALT_NAME: v}, index=[0]  # pyright: ignore
@@ -45,24 +51,20 @@ def store_man_alternatives(man_alt: dict) -> None:
             man = pd.concat([man, new_row], ignore_index=True)
     put(dat=pd.DataFrame({MAN_NAME: man[MAN_NAME].unique()}), tab="MANUFACTURER")
     base_man = getDF(
-            tab="MANUFACTURER",
-            search=list(man_alt.keys()),
-            where=[MAN_NAME]
-            )  # fmt: on
+        tab="MANUFACTURER", search=list(man_alt.keys()), where=[MAN_NAME]
+    )  # fmt: on
     alt_man = pd.merge(left=man, right=base_man, how="left", on=MAN_NAME)
     put(dat=alt_man, tab="ALTERNATIVE_MANUFACTURER")
 
 
 def get_man_alternatives() -> dict:
     """get manufacturers from"""
-    alt_man={}
+    alt_man = {}
     alt_man_df = getDF("ALTERNATIVE_MANUFACTURER", follow=True)
     for m in alt_man_df[MAN_NAME].unique():
         mask = alt_man_df[MAN_NAME] == m
-        alt_man[m]=alt_man_df.loc[mask,MAN_ALT_NAME].to_list()
+        alt_man[m] = alt_man_df.loc[mask, MAN_ALT_NAME].to_list()
     return alt_man
-
-
 
 
 def put(dat: pd.DataFrame, tab: str, on_conflict: dict | None = None) -> Dict:

@@ -296,22 +296,28 @@ class MessageHandler:  # pylint: disable=too-many-public-methods
     def select_backup(self, backups: list) -> int:
         """ask user to select backup"""
         self.message.append("Select backup 'id' to restore:")
-        pattern = re.compile(r"""
-                             (?P<hour>\d{2}(?=\d+$))
-                             (?P<minutes>(?<\d{2})\d{2}(?=\d+$))
-                             (?P<sec>(?<\d{4})\d{2})(?=\d+$)
-                             """)
+        self.message.append("id    |   date")
+        i = len(backups)
         for b in backups:
+            b = os.path.basename(b)
             b = b.replace("backup_", "")
-            date = re.match(r".*(?=-\d+$)", b)
-            date = date[0]
-            time_b = pattern.search(b)
-            time_hrs = time_b.group("hours")
-            time_min = time_b.group("minutes")
-            time_sec = time_b.group("sec")
-            self.message.append(date + time_hrs + time_min + time_sec)
-
-        return -1
+            self.message.append(str(i) + "     |   " + b)
+            i -= 1
+        self.__exec__()
+        while True:
+            try:
+                idx = input("select backup id (ctr-C to cancel): ")
+                idi = int(idx)
+                if idi > len(backups) or idi < 1:
+                    raise ValueError
+                break
+            except ValueError:
+                print(f"Must be a number in range 1..{len(backups)}")
+                continue
+            except KeyboardInterrupt:
+                print("\nAborted...")
+                sys.exit(1)
+        return idi - 1
 
     def __exec__(self, warning: bool = False) -> None:
         """message method"""

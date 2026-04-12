@@ -4,13 +4,16 @@
     //**
     //** column names with lower case
     //** table names with upper case only
-    //** data ONLY upper case
-    //**
-    //** id columns are assumed to be INTEGER PRIMARY KEY and created automatically
+    //** col type ONLY upper case
+    //** 
+    //** SPECIAL KEYWORDS
     //** reference with FOREIGN key only to UNIQUE/PRIMARY columns
     //** tables with FOREIGN should follow tables they refer (order matter)
+    //** FOREIGN	[
+    //**	    	   {"col":"FOREIGN_TAB(foreign_col)"},
+    //**		   ......
+    //**		]
     //** UNIQUE      	 columns are indexed automatically
-    //** PRIMARY     	 columns are indexed automatically
     //** HASH_COLS   	 is not SQL! it's aditional info to allow hashing automation
     //** ON_CONFLICT 	 describes action to perform on conflict on table level 
     //**             	 (so can be only one). If missing REAPLCE is default
@@ -146,5 +149,28 @@
                     "stock_qty"
                 ]
             }
+    },
+    //** manufacturers table
+    "MANUFACTURER":{
+	    "man_id": "INTEGER PRIMARY KEY",
+	    "manufacturer_name": "TEXT NOT NULL",
+	    "COL_DESCRIPTION":{
+		"manufacturer_name":"primary manufacturer name"
+	    },
+	    "UNIQUE":["manufacturer_name"],
+	    "ON_CONFLICT":{"action":"REPLACE"}
+    },
+    //** alternative manufacturer table
+    "ALTERNATIVE_MANUFACTURER":{
+	    "id": "INTEGER PRIMARY KEY",
+	    "man_id": "INTEGER NOT NULL",
+	    "manufacturer_alt_name": "TEXT NOT NULL",
+	    "COL_DESCRIPTION":{
+		"man_id":"primary manufacturer reference",
+		"manufacturer_alt_name":"alternative manufacturer name"
+	    },
+	    "FOREIGN":[{"man_id": "MANUFACTURER(man_id)"}],
+	    "UNIQUE":["manufacturer_alt_name"],
+	    "ON_CONFLICT":{"action":"REPLACE"}
     }
 }

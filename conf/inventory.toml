@@ -6,6 +6,8 @@ DB_FILE = "/home/mi/docs/prog/python/inventory/conf/inventory.sqlite"
 LOG_FILE = "/home/mi/docs/prog/python/inventory/conf/log.txt"
 
 # file with manufacturer alternative names
+# DEPRECIATED. manufacturers are stored in sql DB.
+# Used only for importing
 MAN_ALT = "/home/mi/docs/prog/python/inventory/conf/manufacturer_alternatives.jsonc"
 
 # directory to scan when searching for files
@@ -22,6 +24,9 @@ DISP_CURR = "$"
 
 # directory for temporary files
 TEMP_DIR = "/tmp/"
+
+# backup frequency in days
+BACKUP_FREQ = 1
 
 # column names are defined in conf/sql_colnames.py file
 # columns to export

@@ -1,5 +1,6 @@
 #!/home/mi/docs/prog/python/inventory/.venv/bin/python
 """INVentory management system"""
+
 import argparse
 import inspect
 import os
@@ -396,10 +397,38 @@ def _add_admin_parser(command_parser):
     )
     admin_group = cli_admin.add_mutually_exclusive_group(required=True)
     admin_group.add_argument(
+        "--sql_upgrade",
+        action="store_true",
+        help="""Upgrade sql database to latest version:
+            add alternative manufacturer table and auditing""",
+    )
+    admin_group.add_argument(
+        "--import_manufacturers",
+        action="store_true",
+        help="""
+            Import alternative manufacturers from json file.
+            Keep what already exists.
+            """,
+    )
+    admin_group.add_argument(
         "-c",
         "--display_config",
         action="store_true",
         help="Show current config",
+    )
+    admin_group.add_argument(
+        "--backup_config",
+        action="store_true",
+        help="""
+            Backup config dir. Will put config files into .config/backup_%Y-%b-%d-%h%M%s%f folder.
+            """,
+    )
+    admin_group.add_argument(
+        "--restore_config",
+        action="store_true",
+        help="""
+            Restore config backup. Allow selection of the backup folder.
+            """,
     )
     admin_group.add_argument(
         "--set_local_config",
@@ -410,7 +439,7 @@ def _add_admin_parser(command_parser):
         "-a",
         "--align_manufacturers",
         action="store_true",
-        help="""align manufacturers for the same dvices. Will ask user for selection""",
+        help="""align manufacturers for the same devices. Will ask user for selection""",
     )
     admin_group.add_argument(
         "--remove_project",
@@ -536,6 +565,8 @@ if __name__ == "__main__":
     except SqlCreateError as e:
         msg.msg(str(e))
         sys.exit(1)
+
+    # TODO: backup config folder
 
     if "func" in args:
         args.func(args)

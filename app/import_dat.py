@@ -216,7 +216,7 @@ def export(args: Namespace, tab: str) -> None:  # pylint: disable=too-many-branc
         cols = df.columns
     if df.empty:
         msg.msg(f"No data in table {tab}.")
-        sys.exit(0)
+        sys.exit(1)
     df.drop(columns=NO_EXPORT_COLS, inplace=True, errors="ignore")
     if args.export_columns:
         try:
@@ -270,10 +270,10 @@ def add_stock(args: Namespace) -> None:
         )
         dat["use_qty"] = dat[BOM_QTY] * args.qty
         if dat.empty:
-            msg.msg('No devices in database')
+            msg.msg("No devices in database")
             sys.exit(1)
     else:
-        dat = sql.getDF("DEVICE",follow=True)
+        dat = sql.getDF("DEVICE", follow=True)
     if args.add_device_id:
         dat = dat.loc[dat[DEV_ID] == args.add_device_id, :]
         dat["use_qty"] = 1

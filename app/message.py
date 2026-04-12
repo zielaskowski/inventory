@@ -1,6 +1,7 @@
 """class handling messages"""
 
 import os
+import re
 
 import pandas as pd
 
@@ -239,6 +240,11 @@ class MessageHandler:  # pylint: disable=too-many-public-methods
         self.__print_col_description__(cols=nice_cols, col_desc=col_desc)
         self.__exec__()
 
+    def sql_upgrade(self) -> None:
+        """info when ugrading sql"""
+        self.message.append("Upgraded sql DB.")
+        self.__exec__()
+
     def msg(self, msg: str) -> None:
         """message method"""
         self.message.append(msg)
@@ -286,6 +292,26 @@ class MessageHandler:  # pylint: disable=too-many-public-methods
         self.message.append("Set project name as file name.")
         self.message.append("You can change later with admin commands.")
         self.__exec__()
+
+    def select_backup(self, backups: list) -> int:
+        """ask user to select backup"""
+        self.message.append("Select backup 'id' to restore:")
+        pattern = re.compile(r"""
+                             (?P<hour>\d{2}(?=\d+$))
+                             (?P<minutes>(?<\d{2})\d{2}(?=\d+$))
+                             (?P<sec>(?<\d{4})\d{2})(?=\d+$)
+                             """)
+        for b in backups:
+            b = b.replace("backup_", "")
+            date = re.match(r".*(?=-\d+$)", b)
+            date = date[0]
+            time_b = pattern.search(b)
+            time_hrs = time_b.group("hours")
+            time_min = time_b.group("minutes")
+            time_sec = time_b.group("sec")
+            self.message.append(date + time_hrs + time_min + time_sec)
+
+        return -1
 
     def __exec__(self, warning: bool = False) -> None:
         """message method"""

@@ -2,20 +2,25 @@
 
 import importlib
 import json
+import os
+import time
 from argparse import Namespace
 
 import pytest
 
 from app import common, message
 from app.common import (
+    backup_config,
     check_dir_file,
     find_files,
     first_diff_index,
     foreign_tabs,
     get_alternatives,
+    list_backups,
     log,
     read_json_dict,
     read_json_list,
+    restore_config,
     store_alternatives,
 )
 from app.error import CheckDirError, ReadJsonError, ScanDirPermissionError
@@ -349,3 +354,19 @@ def test_first_diff_index():
     assert first_diff_index(["a", "b", "cc", "d"], ["a", "b", "c", "d"]) == 3
     assert first_diff_index(["a", "b", "c", "d"], ["a", "b", "c", "d", "e"]) == 4
     assert first_diff_index(["a", "b", "c", "d"], ["a", "b", "c", "d"]) == 0
+
+
+def test_backup_config1(db_setup):
+    """test backuping and restoring"""
+    backup_config()
+    backup_config()
+    backup_config()
+    lb = list_backups()
+    assert len(lb) == 3
+    config_files = [f for f in os.scandir(conf.CONFIG_PATH) if f.is_file()]
+    for f in config_files:
+        os.remove(f)
+    restore_config()
+    config_files = [f.path for f in os.scandir(conf.CONFIG_PATH) if f.is_file()]
+    assert conf.LOG_FILE in config_files
+    assert conf.DB_FILE in config_files

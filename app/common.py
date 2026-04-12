@@ -5,7 +5,6 @@ as this will cause circular import
 """
 
 import argparse
-import importlib
 import json
 import os
 import re
@@ -47,6 +46,42 @@ def create_loc_config():
     shutil.copy2(glob_conf, dest_conf)
     msg.msg(f"created local config in '{dest_conf}'")
     write_TOML(conf_dir)
+
+
+def backup_config() -> None:
+    """
+    create backup copy of .config
+    """
+    backup_suffix = "backup_" + datetime.now().strftime("%Y-%m-%d-%H%M%S%f")
+    backup_path = os.path.join(CONFIG_PATH, backup_suffix)
+    config_files = [f.path for f in os.scandir(CONFIG_PATH) if f.is_file()]
+    config_files = [
+        f
+        for f in config_files
+        if f in [DB_FILE, os.path.join(CONFIG_PATH, TOML_FILE), LOG_FILE, MAN_ALT]
+    ]
+    os.mkdir(backup_path)
+    for f in config_files:
+        shutil.copy2(f, backup_path)
+
+    msg.msg(f"created backup copy of config files in '{backup_path}'")
+    msg.msg(f"copied following files: {[os.path.basename(f) for f in config_files]}")
+
+def list_backups()->list:
+    """list backup sub-folders in config folder"""
+    backup_dirs = [d.path for d in os.scandir(CONFIG_PATH) if d.is_dir()]
+    backup_dirs = [d for d in backup_dirs if os.path.basename(d).startswith("backup")]
+    backup_dirs.sort()
+    return backup_dirs
+
+def restore_config(idx=-1) -> None:
+    """
+    restore backup sql DB
+    """
+    config_files = [f for f in os.scandir(list_backups()[idx]) if f.is_file()]
+    for f in config_files:
+        shutil.copy2(f.path, CONFIG_PATH)
+    msg.msg(f"Backup files restored: {config_files}")
 
 
 def display_conf() -> None:
@@ -388,7 +423,7 @@ def unpack_foreign(foreign: dict[str, str] | None | list) -> tuple[str, str, str
     return col, f_tab, f_col
 
 
-def tab_exists(tab: str) -> None:
+def tab_exists_scheme(tab: str) -> None:
     """
     check if tab exists
     raises sql_tabError if not
@@ -408,7 +443,7 @@ def tab_cols(
     follow FOREIGN key constraints to other tab
     """
     sql_scheme = read_json_dict(SQL_SCHEME)
-    tab_exists(tab)  # will raise sql_tabError if not
+    tab_exists_scheme(tab)  # will raise sql_tabError if not
 
     cols = list(sql_scheme.get(tab, ""))
     must_cols = [
@@ -456,7 +491,7 @@ def tab_cols(
 
 def foreign_tabs(tab: str) -> list[str]:
     """return list of tables refrenced in FOREIGN key"""
-    tab_exists(tab)  # will raise sql_tabError if not
+    tab_exists_scheme(tab)  # will raise sql_tabError if not
     sql_scheme = read_json_dict(SQL_SCHEME)
     tabs = []
     for k in sql_scheme[tab].get("FOREIGN", []):

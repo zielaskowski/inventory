@@ -94,6 +94,10 @@ class SqlCheckError(Exception):
             + tab
             + "'."
         )
+        if tab in ["MANUFACTURER", "ALTERNATIVE_MANUFACTURER", "audite"]:
+            self.message += (
+                "\nConsider upgrading DB file with 'inv admin --sql_upgrade'"
+            )
         super().__init__(*args)
 
     def __str__(self) -> str:
@@ -167,8 +171,11 @@ class ReadJsonError(Exception):
 class SqlSchemeError(Exception):
     """SQL scheme wrong format in json file"""
 
-    def __init__(self, tab: str, *args: object) -> None:
+    def __init__(self, tab: str, key: str, expected: str, *args: object) -> None:
         self.message = f"wrong '{tab}' definition"
+        if key:
+            self.message += f", in keyword: '{key}'"
+        self.message += f", expected: '{expected}'"
         super().__init__(*args)
 
     def __str__(self) -> str:

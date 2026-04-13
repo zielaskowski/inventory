@@ -19,10 +19,8 @@ from app.common import (
     check_dir_file,
     first_diff_index,
     foreign_tabs,
-    get_alternatives,
     match_from_list,
     read_json_dict,
-    store_alternatives,
     tab_cols,
     unpack_foreign,
     vimdiff_config,
@@ -69,7 +67,7 @@ def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:
         return
 
     # if we have stored alternatives, use it
-    dat.loc[:, DEV_MAN], _ = get_alternatives(dat[DEV_MAN].to_list())
+    dat.loc[:, DEV_MAN], _ = sql.get_alternatives(dat[DEV_MAN].to_list())
 
     # hash columns - must be last so all columns aligned and present
     dat = hash_tab(dat=dat)
@@ -671,7 +669,7 @@ def vimdiff_selection(  # pylint: disable=too-many-positional-arguments,too-many
         raise VimdiffSelError(select=df, interact=DEV_MAN != cols[change_k])
     # write matches selected by user, so next time save some time
     if DEV_MAN == cols[change_k]:
-        store_alternatives(
+        sql.store_alternatives(
             alternatives={
                 cols[change_k]: cols[change_v],
                 cols[opt_k]: cols[opt_v],

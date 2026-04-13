@@ -129,7 +129,7 @@ def sql_upgrade() -> None:
         sql.sql_create("MANUFACTURER")
         sql.sql_create("ALTERNATIVE_MANUFACTURER")
         log_create()
-        import_manufacturers()
+        import_manufacturers(MAN_ALT)
     except SqlCreateError as err:
         restore_config()
         print(err)

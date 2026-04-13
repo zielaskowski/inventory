@@ -562,7 +562,7 @@ if __name__ == "__main__":
 
     # check if we have proper sql file
     # but skip to allow upgrading
-    if not args.sql_upgrade:
+    if not getattr(args, "sql_upgrade", False):
         try:
             sql_check()
         except SqlCheckError as e:

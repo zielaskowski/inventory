@@ -15,7 +15,6 @@ from datetime import datetime
 from json import JSONDecodeError
 from typing import Dict
 
-import pandas as pd
 from jinja2 import Template
 
 from app.error import (
@@ -131,71 +130,6 @@ def display_conf() -> None:
     conf = read_TOML(os.path.join(CONFIG_PATH, TOML_FILE))
     for var, val in conf.items():
         print(var + ": " + str(val))
-
-
-def store_alternatives(
-    alternatives: dict[str, list[str]],
-    selection: list[str],
-) -> None:
-    """
-    write selection made by user, so next time no need to choose
-    only for DEV_MAN column and only if selection was one-to-one
-    """
-    if alternatives == {}:
-        return
-    alt_keys = list(alternatives.keys())
-    alt_len = len(alternatives[alt_keys[0]])
-    alt_from = alternatives[alt_keys[0]]
-    try:
-        alt_exist = read_json_list(MAN_ALT)
-    except ReadJsonError as e:
-        msg.msg(str(e))
-        return
-
-    for i in range(alt_len):
-        # only one-to-one alternatives and changed
-        if alt_from[i] != selection[i]:
-            # remove alternative if already exists
-            for k in list(alt_exist.keys()):
-                if alt_from[i] in alt_exist[k]:
-                    alt_exist[k].remove(alt_from[i])
-                    if alt_exist[k] == []:
-                        alt_exist.pop(k)
-            if selection[i] in alt_exist.keys():
-                alt_exist[selection[i]].append(alt_from[i])
-                alt_exist[selection[i]] = list(set(alt_exist[selection[i]]))
-            else:
-                alt_exist[selection[i]] = [alt_from[i]]
-
-    write_json(MAN_ALT, alt_exist)
-
-
-def get_alternatives(manufacturers: list[str]) -> tuple[list[str], list[bool]]:
-    """
-    check if we have match from stored alternative
-    return list with replaced manufacturers
-    (complete list, including not replaced also)
-    and list of bools indicating where replaced
-    """
-    try:
-        alt_exist = read_json_list(MAN_ALT)
-    except ReadJsonError as e:
-        msg.msg(str(e))
-        return manufacturers, []
-    man_replaced = []
-    for man in manufacturers:
-        rep = [k for k, v in alt_exist.items() if man in v]
-        if rep != []:
-            man_replaced.append(rep[0])
-        else:
-            man_replaced.append(man)
-    # inform user about alternatives (be explicit!)
-    alt = pd.DataFrame({"was": manufacturers, "alternative": man_replaced})
-    differ_row = alt["was"] != alt["alternative"]
-    if not alt.loc[differ_row, :].empty:
-        if not msg.inform_alternatives(alternatives=alt.loc[differ_row, :]):
-            return manufacturers, []
-    return man_replaced, differ_row.to_list()
 
 
 def first_diff_index(list1: list[str], list2: list[str]) -> int:

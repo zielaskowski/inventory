@@ -3,7 +3,6 @@
 import importlib
 import json
 import os
-import time
 from argparse import Namespace
 
 import pytest
@@ -15,15 +14,19 @@ from app.common import (
     find_files,
     first_diff_index,
     foreign_tabs,
-    get_alternatives,
     list_backups,
     log,
     read_json_dict,
     read_json_list,
     restore_config,
-    store_alternatives,
 )
 from app.error import CheckDirError, ReadJsonError, ScanDirPermissionError
+from app.sql import (
+    get_alternatives,
+    get_man_alternatives,
+    store_alternatives,
+    store_man_alternatives,
+)
 from conf import config as conf
 
 
@@ -229,7 +232,7 @@ def test_foreign_tabs1(monkeypatch, tmpdir):
     assert tabs == ["tab2", "tab3"]
 
 
-def test_store_alternatives1(tmpdir, monkeypatch):
+def test_store_alternatives1(monkeypatch, db_setup):
     """default behaviour"""
     man_alts = {
         "aa": ["a1", "a2", "a3"],
@@ -241,16 +244,12 @@ def test_store_alternatives1(tmpdir, monkeypatch):
     }
     selection = ["aa", "cc", "d", "e"]
 
-    man_json = tmpdir.join("man_alt.json")
-    monkeypatch.setattr(conf, "MAN_ALT", man_json.strpath)
+    store_man_alternatives(man_alts)
     monkeypatch.setattr(conf, "DEBUG", "pytest")
     importlib.reload(common)
-    with open(man_json.strpath, "w", encoding="UTF8") as f:
-        json.dump(man_alts, f)
 
     store_alternatives(alternatives=alternatives, selection=selection)
-    with open(man_json, "r", encoding="UTF8") as f:
-        exp = json.load(f)
+    exp = get_man_alternatives()
     imp = {
         "aa": ["a1", "a2", "a3", "a4"],
         "bb": ["b1", "b2", "b3"],
@@ -262,7 +261,7 @@ def test_store_alternatives1(tmpdir, monkeypatch):
     assert exp == imp
 
 
-def test_store_alternatives2(tmpdir, monkeypatch):
+def test_store_alternatives2():
     """check one-to-one condition"""
     man_alts = {
         "aa": ["a1", "a2", "a3"],
@@ -274,15 +273,10 @@ def test_store_alternatives2(tmpdir, monkeypatch):
     }
     selection = ["aa", "cc", "d", "e"]
 
-    man_json = tmpdir.join("man_alt.json")
-    monkeypatch.setattr(conf, "MAN_ALT", man_json.strpath)
     importlib.reload(common)
-    with open(man_json.strpath, "w", encoding="UTF8") as f:
-        json.dump(man_alts, f)
-
+    store_man_alternatives(man_alts)
     store_alternatives(alternatives=alternatives, selection=selection)
-    with open(man_json, "r", encoding="UTF8") as f:
-        exp = json.load(f)
+    exp = get_man_alternatives()
     imp = {
         "aa": ["a1", "a2", "a3", "a4"],
         "bb": ["b1", "b2", "b3"],
@@ -294,7 +288,7 @@ def test_store_alternatives2(tmpdir, monkeypatch):
     assert exp == imp
 
 
-def test_store_alternatives3(tmpdir, monkeypatch):
+def test_store_alternatives3():
     """remove alternatives if exists (from all keys)"""
     man_alts = {
         "aa": ["a1", "a2", "a3"],
@@ -307,15 +301,10 @@ def test_store_alternatives3(tmpdir, monkeypatch):
     }
     selection = ["ff", "cc", "d", "e"]
 
-    man_json = tmpdir.join("man_alt.json")
-    monkeypatch.setattr(conf, "MAN_ALT", man_json.strpath)
     importlib.reload(common)
-    with open(man_json.strpath, "w", encoding="UTF8") as f:
-        json.dump(man_alts, f)
-
+    store_man_alternatives(man_alts)
     store_alternatives(alternatives=alternatives, selection=selection)
-    with open(man_json, "r", encoding="UTF8") as f:
-        exp = json.load(f)
+    exp = get_man_alternatives()
     imp = {
         "aa": ["a2", "a3"],
         "bb": ["b1", "b3"],

@@ -7,7 +7,7 @@ LOG_FILE = "/home/mi/docs/prog/python/inventory/conf/log.txt"
 
 # file with manufacturer alternative names
 # DEPRECIATED. manufacturers are stored in sql DB.
-# Used only for importing
+# Used only when upgrading sql
 MAN_ALT = "/home/mi/docs/prog/python/inventory/conf/manufacturer_alternatives.jsonc"
 
 # directory to scan when searching for files

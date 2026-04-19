@@ -6,12 +6,10 @@ from argparse import Namespace
 
 import pandas as pd
 
-from app.message import MessageHandler
+from app.message import msg
 from app.sql import getDF
 from app.tabs import prepare_project
 from conf.config import *  # pylint: disable=unused-wildcard-import,wildcard-import
-
-msg = MessageHandler()
 
 
 def trans(args: Namespace):

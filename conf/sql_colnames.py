@@ -29,3 +29,6 @@ STOCK_HASH = "device_hash"
 MAN_ID = "manufacturer_id"
 MAN_NAME = "manufacturer_name"
 MAN_ALT_NAME = "manufacturer_alt_name"
+# LOG table
+LOG_DATE = "date"
+LOG_ARGS = "args"

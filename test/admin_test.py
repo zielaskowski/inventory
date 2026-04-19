@@ -3,19 +3,11 @@
 from unittest.mock import patch
 
 import pandas as pd
-import pytest
 
 from app.admin import admin, align, remove_dev
 from app.common import DEV_DESC, DEV_MAN
 from app.import_dat import bom_import, shop_import
-from app.sql import getDF, rm, sql_check
-from inv import cli_parser
-
-
-@pytest.fixture(name="cli")
-def cli_fixture():
-    """command line parser"""
-    return cli_parser()
+from app.sql import getDF, rm
 
 
 def test_align_man1(cli, db_setup, tmpdir):

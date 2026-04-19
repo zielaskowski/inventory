@@ -191,7 +191,7 @@ INCLUDE_SUB_DIR = str(toml_loc.get("INCLUDE_SUB_DIR", toml_def["INCLUDE_SUB_DIR"
 DISP_CURR = str(toml_loc.get("DISP_CURR", toml_def["DISP_CURR"]))
 
 # backup frequency
-BACKUP_FREQ = str(toml_loc.get("BACKUP_FREQ", toml_def["BACKUP_FREQ"]))
+BACKUP_FREQ = int(toml_loc.get("BACKUP_FREQ", toml_def["BACKUP_FREQ"]))
 
 # directory for temporary files
 TEMP_DIR = str(toml_loc.get("TEMP_DIR", toml_def["TEMP_DIR"]))

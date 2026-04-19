@@ -3,11 +3,10 @@
 import importlib
 import json
 import os
-from argparse import Namespace
 
 import pytest
 
-from app import common, message
+from app import admin, common, message, sql
 from app.common import (
     backup_config,
     check_dir_file,
@@ -15,19 +14,14 @@ from app.common import (
     first_diff_index,
     foreign_tabs,
     list_backups,
-    log,
     read_json_dict,
     read_json_list,
     restore_config,
 )
 from app.error import CheckDirError, ReadJsonError, ScanDirPermissionError
-from app.sql import (
-    get_alternatives,
-    get_man_alternatives,
-    store_alternatives,
-    store_man_alternatives,
-)
+from app.import_dat import bom_import
 from conf import config as conf
+from conf.sql_colnames import LOG_ARGS
 
 
 def _sort_dict(dat: dict[str, list[str]]) -> dict[str, list[str]]:
@@ -106,36 +100,30 @@ def test_read_json6(tmpdir):
     assert err_info.match(f.strpath)
 
 
-def test_log1(monkeypatch, capsys):
-    """permission error"""
-    monkeypatch.setattr(conf, "LOG_FILE", "/home/nonexistinguser/log")
-    importlib.reload(common)
-    # importlib.reload(error)
-    args = Namespace(test=True, log=True)
-    log(args)
-    out, _ = capsys.readouterr()
-    assert "nonexistinguser" in out.lower()
+def test_log1(db_setup, cli, tmpdir):
+    """
+    1. no log for args not changing db
+    2. log write
+    3. assert l.og_args_once
+    4. log read
+    """
+    args = cli.parse_args(["admin", "-c"])
+    admin.admin(args)
+    assert sql.log.log_args_once is True
 
+    test = tmpdir.join("test.csv")
+    with open(test, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,qty,project\n"
+            + "aa,bb,1,test"
+        )# fmt: skip
 
-def test_log3(monkeypatch, tmpdir):
-    """loging normaly"""
-    f = tmpdir.join("log.txt")
-    monkeypatch.setattr(conf, "LOG_FILE", f)
-    importlib.reload(common)
-    args = Namespace(test=True, log=True)
-    log(args)
-    assert "--test" in f.read()
-    assert "--log" in f.read()
-
-
-def test_log4(monkeypatch, capsys):
-    """no file"""
-    monkeypatch.setattr(conf, "LOG_FILE", "./test/")
-    importlib.reload(common)
-    args = Namespace(test=True, log=True)
-    log(args)
-    out, _ = capsys.readouterr()
-    assert "missing filename" in out.lower()
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
+    sql.log.log(args)
+    bom_import(args)
+    assert sql.log.log_args_once is False
+    logs = sql.log.log_read(10)
+    assert "python -m inv bom_import --dir" in logs.loc[0, LOG_ARGS]
 
 
 def test_find_files1():
@@ -244,12 +232,12 @@ def test_store_alternatives1(monkeypatch, db_setup):
     }
     selection = ["aa", "cc", "d", "e"]
 
-    store_man_alternatives(man_alts)
+    sql.store_man_alternatives(man_alts)
     monkeypatch.setattr(conf, "DEBUG", "pytest")
     importlib.reload(common)
 
-    store_alternatives(alternatives=alternatives, selection=selection)
-    exp = get_man_alternatives()
+    sql.store_alternatives(alternatives=alternatives, selection=selection)
+    exp = sql.get_man_alternatives()
     imp = {
         "aa": ["a1", "a2", "a3", "a4"],
         "bb": ["b1", "b2", "b3"],
@@ -274,9 +262,9 @@ def test_store_alternatives2():
     selection = ["aa", "cc", "d", "e"]
 
     importlib.reload(common)
-    store_man_alternatives(man_alts)
-    store_alternatives(alternatives=alternatives, selection=selection)
-    exp = get_man_alternatives()
+    sql.store_man_alternatives(man_alts)
+    sql.store_alternatives(alternatives=alternatives, selection=selection)
+    exp = sql.get_man_alternatives()
     imp = {
         "aa": ["a1", "a2", "a3", "a4"],
         "bb": ["b1", "b2", "b3"],
@@ -302,9 +290,9 @@ def test_store_alternatives3():
     selection = ["ff", "cc", "d", "e"]
 
     importlib.reload(common)
-    store_man_alternatives(man_alts)
-    store_alternatives(alternatives=alternatives, selection=selection)
-    exp = get_man_alternatives()
+    sql.store_man_alternatives(man_alts)
+    sql.store_alternatives(alternatives=alternatives, selection=selection)
+    exp = sql.get_man_alternatives()
     imp = {
         "aa": ["a2", "a3"],
         "bb": ["b1", "b3"],
@@ -333,7 +321,7 @@ def test_get_alternatives1(tmpdir, monkeypatch):
     with open(man_json.strpath, "w", encoding="UTF8") as f:
         json.dump(man_alts, f)
 
-    man_alt, diff_rows = get_alternatives(man)
+    man_alt, diff_rows = sql.get_alternatives(man)
     assert man_alt == ["aa", "aa", "bb", "c"]
     assert diff_rows == [True, True, True, False]
 
@@ -357,5 +345,5 @@ def test_backup_config1(db_setup):
         os.remove(f)
     restore_config()
     config_files = [f.path for f in os.scandir(conf.CONFIG_PATH) if f.is_file()]
-    assert conf.LOG_FILE in config_files
-    assert conf.DB_FILE in config_files
+    assert any(conf.DB_FILE in f for f in config_files)
+    assert any(conf.TOML_FILE in f for f in config_files)

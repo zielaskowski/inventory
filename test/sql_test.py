@@ -6,7 +6,7 @@ import os
 
 import pytest
 
-from app import admin, common, sql
+from app import admin, common, sql, sql_core
 from app.error import (
     CheckDirError,
     SqlCheckError,
@@ -110,6 +110,7 @@ def test_sql_check1(monkeypatch, tmpdir):
     monkeypatch.setattr(conf, "SQL_SCHEME", jfile)
     monkeypatch.setattr(conf, "LOG_FILE", "")
     importlib.reload(sql)
+    importlib.reload(sql_core)
     importlib.reload(common)
     sql_create()
     json_txt["BOM"]["FOREIGN"].pop()
@@ -117,6 +118,7 @@ def test_sql_check1(monkeypatch, tmpdir):
     jfile2.write(json.dumps(json_txt))
     monkeypatch.setattr(conf, "SQL_SCHEME", jfile2)
     importlib.reload(sql)
+    importlib.reload(sql_core)
     importlib.reload(common)
     with pytest.raises(SqlCheckError) as err_info:
         sql_check()
@@ -155,7 +157,7 @@ def test_sql_check2(monkeypatch, tmpdir, capsys):
 
 
 def test_sql_check3(monkeypatch, tmpdir, capsys):
-    """sql scheme error: foraign value not list"""
+    """sql scheme error: foreign value not list"""
     json_txt = {
         "DEVICE": {
             "device_hash": "TEXT PRIMARY KEY",

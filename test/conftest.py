@@ -5,7 +5,7 @@ import os
 
 import pytest
 
-from app import admin, common, import_dat, message, sql, tabs, transaction
+from app import admin, common, import_dat, message, sql, sql_core, tabs, transaction
 from conf import config as conf
 from inv import cli_parser
 
@@ -42,6 +42,7 @@ def db_setup_fixture(tmpdir, monkeypatch, cli):
     monkeypatch.setattr(conf, "DEBUG", "pytest")
 
     importlib.reload(sql)
+    importlib.reload(sql_core)
     importlib.reload(admin)
     importlib.reload(import_dat)
     importlib.reload(common)

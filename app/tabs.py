@@ -34,10 +34,8 @@ from app.error import (
     SqlTabError,
     VimdiffSelError,
 )
-from app.message import MessageHandler
+from app.message import msg
 from conf.config import *  # pylint: disable=unused-wildcard-import,wildcard-import
-
-msg = MessageHandler()
 
 
 def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:

@@ -172,5 +172,16 @@
 	    "FOREIGN":[{"man_id": "MANUFACTURER(man_id)"}],
 	    "UNIQUE":["manufacturer_alt_name"],
 	    "ON_CONFLICT":{"action":"REPLACE"}
+    },
+    "LOG":{
+	    "id": "INTEGER PRIMARY KEY",
+	    "date":"INTEGER NOT NULL",
+	    "args":"TEXT NOT NULL",
+	    "UNIQUE":["date"],
+	    "COL_DESCRIPTION":{
+		    "date":"date of command",
+		    "args":"cammand with all arguments"
+	    },
+	    "ON_CONFLICT":{"action":"REPLACE"}
     }
 }

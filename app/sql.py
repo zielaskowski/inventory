@@ -1,12 +1,15 @@
-"""sql managing functions"""
+"""sql user managing functions
+manages SQL db.
+DB structure is described in ./conf/sql_scheme.json
+"""
 
 import os
 import re
-import sqlite3
-from typing import Any, Dict, List, Sequence, Set
+from argparse import Namespace
+from datetime import datetime
+from typing import Dict, List, Set
 
 import pandas as pd
-from audite import track_changes
 
 from app.common import (
     log_create,
@@ -24,14 +27,110 @@ from app.error import (
     SqlSchemeError,
     SqlTabError,
 )
-from app.message import MessageHandler
+from app.message import msg
+from app.sql_core import (
+    __check_scheme__,
+    __escape_quote__,
+    __get_tab__,
+    __sql_audit__,
+    __sql_execute__,
+    __tab_cmd__,
+    __write_table__,
+)
 from conf.config import *  # pylint: disable=unused-wildcard-import,wildcard-import
 
-msg = MessageHandler()
 
-"""manages SQL db.
-DB structure is described in ./conf/sql_scheme.json
-"""
+class Log:
+    """loging methods"""
+
+    def __init__(self) -> None:
+        # log only once, each logging by sql_execute will change to FALSE
+        self.log_args_once = True
+        self.cmd = []
+
+    def log(self, args: Namespace) -> None:
+        """
+        log command in ./conf/log.txt
+        """
+        if LOG_FILE == "":
+            return
+
+        self.cmd = ["python -m inv"]
+        for var, val in vars(args).items():
+            if callable(val):
+                continue
+            if val:
+                if var == "command":
+                    self.cmd += [val]
+                else:
+                    if isinstance(val, list):
+                        val = " ".join(f"'{v}'" for v in val)
+                    self.cmd += [
+                        "--"
+                        + var
+                        + " "
+                        + (str(val) if not isinstance(val, bool) else "")
+                    ]
+
+    def log_read(self, n: int) -> pd.DataFrame:
+        """
+        read form log
+        can rise IsDirectoryError and FileNotFoundError
+        split dates from commands and return as tuple
+        """
+        try:
+            logs = getDF(tab="LOG")
+        except (SqlGetError, SqlExecuteError) as e:
+            msg.msg(str(e))
+            sys.exit(1)
+        n = min(n,len(logs))
+        logs = logs.loc[len(logs) - n : len(logs), :]
+        logs.sort_values(by=LOG_DATE, inplace=True, ascending=False)
+        logs.reset_index(inplace=True)
+        logs.sort_values(by=LOG_DATE, inplace=True)
+        return logs
+
+    def log_write(self, force=False) -> None:
+        """
+        write to log only once (unless force==True)
+        can rise IsDirectoryError and FileNotFoundError
+        """
+        if not self.log_args_once and not force:
+            return
+        self.log_args_once = False
+        now = datetime.now()
+        now = now.strftime("%s")
+        try:
+            put(
+                tab="LOG",
+                dat=pd.DataFrame(
+                    {LOG_DATE: now, LOG_ARGS: " ".join(self.cmd)},
+                    index=[1],  # pyright: ignore
+                ),
+            )
+        except (SqlExecuteError, SqlTabError) as e:
+            msg.msg(str(e))
+            sys.exit(1)
+
+
+log = Log()
+
+
+def undo(from_date: datetime) -> None:
+    """undo all commands from date"""
+    logs = getDF(
+        tab="audite_changefeed",
+        search=[int(from_date.strftime("%s"))],
+        where=["time"],
+        oper=">=",
+    )
+    # TODO: remove undo logs
+    # TODO: list undo logs so user have chance to undo undo
+    for r in logs.itertuples():
+        if "new" in r.data.keys():
+            oper = r.data["new"]
+            rm(tab=r.source, value=oper.values(), column=oper.keys())
+    return
 
 
 def store_man_alternatives(man_alt: dict) -> None:
@@ -68,6 +167,7 @@ def get_man_alternatives() -> dict:
         alt_man[m] = alt_man_df.loc[mask, MAN_ALT_NAME].to_list()
     return alt_man
 
+
 def store_alternatives(
     alternatives: dict[str, list[str]],
     selection: list[str],
@@ -82,7 +182,7 @@ def store_alternatives(
     alt_len = len(alternatives[alt_keys[0]])
     alt_from = alternatives[alt_keys[0]]
     try:
-        alt_exist =get_man_alternatives()
+        alt_exist = get_man_alternatives()
     except ReadJsonError as e:
         msg.msg(str(e))
         return
@@ -111,7 +211,7 @@ def get_alternatives(manufacturers: list[str]) -> tuple[list[str], list[bool]]:
     (complete list, including not replaced also)
     and list of bools indicating where replaced
     """
-    alt_exist =get_man_alternatives()
+    alt_exist = get_man_alternatives()
     man_replaced = []
     for man in manufacturers:
         rep = [k for k, v in alt_exist.items() if man in v]
@@ -127,13 +227,15 @@ def get_alternatives(manufacturers: list[str]) -> tuple[list[str], list[bool]]:
             return manufacturers, []
     return man_replaced, differ_row.to_list()
 
+
 def put(dat: pd.DataFrame, tab: str, on_conflict: dict | None = None) -> Dict:
     """
     put DataFrame into sql at table=tab
     takes from DataFrame only columns present in sql table
     check if tab exists!
-    put() may raise sql_executeError and sql_tabError
+    put() may raise SqlExecuteError and SqlTabError
     """
+    log.log_write()
     tab_exists_scheme(tab)
     sql_scheme = read_json_dict(SQL_SCHEME)
 
@@ -156,48 +258,6 @@ def put(dat: pd.DataFrame, tab: str, on_conflict: dict | None = None) -> Dict:
     return __write_table__(dat=d, tab=tab, on_conflict=on_conflict)  # pyright: ignore
 
 
-def __write_table__(
-    dat: pd.DataFrame, tab: str, on_conflict: dict
-) -> Dict[str, pd.DataFrame]:
-    """writes DataFrame to SQL table 'tab'"""
-    # Create a copy to avoid modifying the original DataFrame
-    df_copy = dat.copy()
-
-    # Convert boolean columns to integers (0 for False, 1 for True)
-    for col in df_copy.select_dtypes(include=["bool"]).columns:
-        df_copy[col] = df_copy[col].astype(int)
-
-    # Replace pandas' NA/NaN with None for SQL compatibility
-    df_copy = df_copy.where(pd.notna(df_copy), None)
-
-    # Convert to list of tuples, which executemany handles correctly
-    records = list(df_copy.itertuples(index=False, name=None))
-
-    # single element tuple add coma which brake column names
-    col_names = f"{list(dat.columns)}"
-    col_names = col_names.replace("[", "(")
-    col_names = col_names.replace("]", ")")
-
-    action = on_conflict.get("action", "REPLACE")  # default is ON CONFLICT REPLACE
-    if action == "UPDATE SET":
-        unique_col = on_conflict["unique_col"]
-        update_cols = ",".join(
-            [f"{c} = {c} + EXCLUDED.{c}" for c in on_conflict["add_col"]]
-        )
-        cmd = f"""INSERT INTO {tab} {col_names}
-                  VALUES ({','.join(['?'] * len(dat.columns))})
-                  ON CONFLICT ({','.join(unique_col)})
-                  DO UPDATE SET {update_cols}
-               """
-    else:
-        action = "OR " + action
-        cmd = f"""INSERT {action} INTO {tab} {col_names}
-                  VALUES ({','.join(['?'] * len(dat.columns))})
-               """
-
-    return __sql_execute__([cmd], records)
-
-
 def getDF_other_tabs(  # pylint: disable=invalid-name
     dat: pd.DataFrame, hash_list: list[str], merge_on: str
 ) -> pd.DataFrame:
@@ -205,7 +265,7 @@ def getDF_other_tabs(  # pylint: disable=invalid-name
     get data from all tabs except DEVICE
     merge data on 'merge_on' column (col will be preserved)
     then drop table specific hash columns
-    ffill missing values (for multiple projects using the same dev)
+    fill missing values (for multiple projects using the same dev)
     return DataFrame
     """
     bom_tab = getDF(
@@ -252,6 +312,7 @@ def getDF_other_tabs(  # pylint: disable=invalid-name
 
 def rm_all_tabs(hash_list: list[str]) -> None:
     """remove from all tabs per hash list"""
+    log.log_write()
     sql_schem = read_json_dict(SQL_SCHEME)
     tabs = list(sql_schem.keys())
     tab_hash = []
@@ -273,9 +334,10 @@ def getDF(  # pylint: disable=invalid-name
     search: List[str] | List[int] | List[bool] | pd.Series | None = None,
     where: List[str] | Set[str] | pd.Series | None = None,
     follow: bool = False,
+    oper="IN",
 ) -> pd.DataFrame:
     """wraper around get() when:
-    - search is on one col only
+    - search is on one col
     returns dataframe, in contrast to Dict[col:pd.DataFrame]
     Args:
         tab: table to search
@@ -283,8 +345,14 @@ def getDF(  # pylint: disable=invalid-name
         search: what to get (default '%' for everything)
         where: columns used for searching (default '%' for everything)
         follow: if True, search in all FOREIGN subtables
+    Raises:
+        SqlExecuteError
+        SqlGetError
+        SqlGetOperationError
     """
-    resp = get(tab=tab, get_col=get_col, search=search, where=where, follow=follow)
+    resp = get(
+        tab=tab, get_col=get_col, search=search, where=where, follow=follow, oper=oper
+    )
     return list(resp.values())[0] if resp else pd.DataFrame()
 
 
@@ -294,6 +362,7 @@ def getL(  # pylint: disable=invalid-name
     search: List[str] | List[int] | List[bool] | pd.Series | None = None,
     where: List[str] | Set[str] | pd.Series | None = None,
     follow: bool = False,
+    oper="IN",
 ) -> List:
     """wraper around get() when:
     - search in on one col only
@@ -305,8 +374,14 @@ def getL(  # pylint: disable=invalid-name
         search: what to get (default '%' for everything)
         where: columns used for searching (default '%' for everything)
         follow: if True, search in all FOREIGN subtables
+    Raises:
+        SqlExecuteError
+        SqlGetError
+        SqlGetOperationError
     """
-    resp = get(tab=tab, get_col=get_col, search=search, where=where, follow=follow)
+    resp = get(
+        tab=tab, get_col=get_col, search=search, where=where, follow=follow, oper=oper
+    )
     df = list(resp.values())[0]
     return [] if df.empty else list(df.to_dict(orient="list").values())[0]
 
@@ -335,6 +410,7 @@ def get(  # pylint: disable=too-many-branches
     search: List[str] | List[int] | List[bool] | pd.Series | None = None,
     where: List[str] | Set[str] | pd.Series | None = None,
     follow: bool = False,
+    oper="IN",
 ) -> Dict[str, pd.DataFrame]:
     """get info from table
     return as Dict:
@@ -348,6 +424,10 @@ def get(  # pylint: disable=too-many-branches
         search: what to get (default None for everything)
         where: columns used for searching (default None for everything)
         follow: if True, search in all FOREIGN subtables
+    Raises:
+        SqlExecuteError
+        SqlGetError
+        SqlGetOperationError
     """
     # check if tab exists!
     tab_exists_scheme(tab)
@@ -396,39 +476,10 @@ def get(  # pylint: disable=too-many-branches
     else:
         if any(g not in all_cols for g in get_col):
             raise SqlGetError(get_col, all_cols)
-        resp = __get_tab__(tab=tab, get_col=get_col, search=search, where=where)
+        resp = __get_tab__(
+            tab=tab, get_col=get_col, search=search, where=where, oper=oper
+        )
 
-    return resp
-
-
-def __get_tab__(
-    tab: str,
-    get_col: set[str],
-    search: list[str] | None,
-    where: set[str],
-) -> Dict[str, pd.DataFrame]:
-    """get info from table
-    return as Dict:
-    - each key for column searched,
-    - value as DataFrame with columns selected by get
-    return only unique values
-
-    Args:
-        tab: table to search
-        get_col: column name to extract
-        search: what to get, get all if None
-        where: columns used for searching
-    """
-    resp = {}
-    for c in where:
-        if not search:
-            cmd = f"SELECT {','.join(get_col)} FROM {tab}"
-        else:
-            # Create a placeholder string for the IN clause
-            placeholders = ",".join("?" * len(search))
-            cmd = f"SELECT {','.join(get_col)} FROM {tab} WHERE {c} IN ({placeholders})"
-        if resp_col := __sql_execute__([cmd], search):
-            resp[c] = resp_col[cmd].drop_duplicates()
     return resp
 
 
@@ -441,6 +492,7 @@ def rm(
     Remove all instances of value from column in tab.
     if value or column is missing, default is all
     """
+    log.log_write()
     if column is None or value is None:
         cmd = f"DELETE FROM {tab}"
         __sql_execute__([cmd])
@@ -462,6 +514,7 @@ def edit(
     where: str,
 ) -> None:
     """Update table in db"""
+    log.log_write()
     if len(new_val) != len(search):
         return
     cmd = []
@@ -503,12 +556,6 @@ def sql_check() -> None:
     if not os.path.isfile(DB_FILE):
         msg.sql_file_miss(DB_FILE)
         sql_create()
-        # check if path exists, if not create
-        try:
-            log_create()
-        except PermissionError as e:
-            msg.log_path_error(str(e))
-            return
 
     sql_scheme = read_json_dict(SQL_SCHEME)
     for i in range(len(sql_scheme)):
@@ -527,120 +574,10 @@ def sql_check() -> None:
         raise SqlCheckError(DB_FILE, "audite")
 
 
-def __sql_execute__(
-    script: list,
-    params: Sequence[str | tuple[Any, ...] | list[str]] | None = None,
-) -> Dict[str, pd.DataFrame]:
-    """Execute provided SQL commands.
-    If db returns anything write as dict {command: respose as pd.DataFrame}
-    will generate error only
-
-    Args:
-        script (list): list of sql commands to execute
-        params : if None or list(str) will be used in sql.execute to replace '?'
-                if list[list[str]] will use executemany
-
-    Returns:
-        Dict: dict of response from sql
-            {command: response in form of pd.DataFrame (may be empty)}
-    """
-
-    ans = {}
-    cmd = ""
-
-    executemany = False
-    if params is None:
-        params = []
-    elif not isinstance(params[0], str):
-        executemany = True
-
-    if not executemany:
-        if len(params) > 900:
-            raise SqlExecuteError("Too many parameters: ", str(len(params)))
-
-    try:
-        con = sqlite3.connect(
-            DB_FILE,
-            detect_types=sqlite3.PARSE_COLNAMES | sqlite3.PARSE_DECLTYPES,
-        )
-        cur = con.cursor()
-        for cmd in script:
-            if executemany:
-                cur.executemany(cmd, params)
-            else:
-                cur.execute(cmd, params)
-            if a := cur.fetchall():
-                col_names = pd.Series([c[0] for c in cur.description])
-                ans[cmd] = pd.DataFrame(a, columns=col_names)
-            else:
-                ans[cmd] = pd.DataFrame()
-        con.commit()
-        return ans
-    except sqlite3.IntegrityError as err:
-        raise SqlExecuteError(err, cmd) from err
-    except sqlite3.Error as err:
-        raise SqlExecuteError(err, cmd) from err
-    finally:
-        cur.close()  # type: ignore
-        con.close()  # type: ignore
-
-
-def __tab_cmd__(tab: str, col_def: Dict) -> str:
-    """
-    craft sql command to create table
-    """
-    tab_cmd = f"CREATE TABLE {tab} ("
-    for col in col_def:  # fmt: off
-        if col not in SQL_KEYWORDS:  # fmt: on
-            tab_cmd += f"{col} {col_def[col]}, "
-        elif col == "FOREIGN":  # FOREIGN
-            for foreign in col_def[col]:
-                k, v = list(foreign.items())[0]
-                # sqlite do not complain on missing foreign table
-                # during creation
-                try:
-                    _, f_table, _ = unpack_foreign(foreign)
-                    tab_exists_scheme(f_table)
-                except SqlTabError as err:
-                    msg.msg(str(err))
-                    raise SqlCreateError(SQL_SCHEME) from err
-
-                tab_cmd += f"FOREIGN KEY({k}) REFERENCES {v}, "
-    tab_cmd = re.sub(",[^,]*$", "", tab_cmd)  # remove last comma
-    tab_cmd += ") "
-    return tab_cmd
-
-
-def __check_scheme__(tab: str, col_def: Dict) -> None:
-    """
-    check correctness of sql scheme json file
-    """
-    # read_json already checks if each table is a dict
-    for col in col_def:
-        if col not in SQL_KEYWORDS:  # fmt: on
-            if not isinstance(col_def[col], str):
-                raise SqlSchemeError(tab=tab, key=col, expected="String")
-        elif col == "FOREIGN":  # FOREIGN
-            if not isinstance(col_def[col], List):
-                raise SqlSchemeError(tab=tab, key=col, expected="List")
-            for foreign in col_def[col]:
-                if not isinstance(foreign, dict):
-                    raise SqlSchemeError(tab=tab, key=col, expected="List of Dict")
-        elif col in ["UNIQUE", "HASH_COLS"]:
-            if not isinstance(col_def[col], List):
-                raise SqlSchemeError(tab=tab, key=col, expected="List")
-        elif col == "ON_CONFLICT":
-            if not isinstance(col_def[col], Dict):
-                raise SqlSchemeError(tab=tab, key=col, expected="Dict")
-        elif col == "COL_DESCRIPTION":
-            if not isinstance(col_def[col], Dict):
-                raise SqlSchemeError(tab=tab, key=col, expected="Dict")
-
-
 def sql_create(one_tab="") -> None:  # pylint: disable=too-many-branches
     """Creates sql query based on sql_scheme.json and send to db.
     Perform check if created DB is aligned with scheme from sql.json file.
-    if one_tab!="" create only one tab
+    if one_tab!="" create only one tab. Raise SQL create error if tab exists
     """
     if os.path.isfile(DB_FILE) and not one_tab:
         # just in case the file exists
@@ -701,7 +638,7 @@ def sql_create(one_tab="") -> None:  # pylint: disable=too-many-branches
         raise SqlCreateError(SQL_SCHEME)
     # add auditing all changes on all tables
     for tab in sql_scheme:
-        sql_audit(tab=tab)
+        __sql_audit__(tab=tab)
 
 
 def sql_tables() -> List:
@@ -715,19 +652,3 @@ def sql_tables() -> List:
     except SqlExecuteError as err:
         msg.msg(str(err))
         return []
-
-
-def sql_audit(tab: str) -> None:
-    """add loging tables to sql"""
-    db = sqlite3.connect(
-        DB_FILE,
-        detect_types=sqlite3.PARSE_COLNAMES | sqlite3.PARSE_DECLTYPES,
-    )
-    track_changes(db, tables=[tab])
-
-
-def __escape_quote__(txt: list[str]) -> list[str]:
-    """
-    escape quotes in a list of strings
-    """
-    return [re.sub(r"'", r"''", str(txt)) for txt in txt if txt is not None]

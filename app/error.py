@@ -94,7 +94,7 @@ class SqlCheckError(Exception):
             + tab
             + "'."
         )
-        if tab in ["MANUFACTURER", "ALTERNATIVE_MANUFACTURER", "audite"]:
+        if tab in ["MANUFACTURER", "ALTERNATIVE_MANUFACTURER", "audite", "LOG"]:
             self.message += (
                 "\nConsider upgrading DB file with 'inv admin --sql_upgrade'"
             )
@@ -193,6 +193,17 @@ class SqlExecuteError(Exception):
 
     def __str__(self) -> str:
         return f"SQL execution error: {self.message}"
+
+
+class SqlGetOperationError(Exception):
+    """exception class"""
+
+    def __init__(self, col: str, oper: str, *args: object) -> None:
+        self.message = f"Not valid operation: '{oper}' for column '{col}'"
+        super().__init__(*args)
+
+    def __str__(self) -> str:
+        return f"SQL GetOperation error: {self.message}"
 
 
 class AmbigousMatchError(Exception):

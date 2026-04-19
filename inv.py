@@ -2,20 +2,24 @@
 """INVentory management system"""
 
 import argparse
+import datetime
 import inspect
-import os
 import sys
+from datetime import datetime
 
 from app.admin import admin
-from app.common import AbbreviationParser, log, write_json
+from app.common import (
+    AbbreviationParser,
+    backup_config,
+    list_backups,
+    str_to_date_backup,
+)
 from app.error import SqlCheckError, SqlCreateError
 from app.import_dat import bom_import, shop_import, stock_import
-from app.message import MessageHandler
-from app.sql import sql_check
+from app.message import msg
+from app.sql import log, sql_check
 from app.transaction import trans
 from conf import config as conf
-
-msg = MessageHandler()
 
 
 def _add_bom_import_parser(command_parser):
@@ -372,20 +376,9 @@ def _add_stock_parser(command_parser):
     cli_stock.add_argument(
         "--fzf",
         help=f"""
-        Used by script as input for fuzzy finder. Rather use script itself: {conf.MODULE_PATH}/conf/inv_fzf.sh then this option.
+        Used by script as input for fuzzy finder. Rather use script itself: {conf.MODULE_PATH}/conf/inv_fzf.sh than this option.
         """,
         action="store_true",
-    )
-    cli_stock.add_argument(
-        "--history",
-        help="""Display history about operations on stock table. Can be used to undo.""",
-        action="store_true",
-    )
-    cli_stock.add_argument(
-        "--undo",
-        help="""History id to be undone (see --history). Can be single line id
-                or range in format 5..15. When digit missing range from begining
-                or end (begining is on left side): ..5 or 15..""",
     )
     cli_stock.set_defaults(func=stock_import)
 
@@ -396,6 +389,15 @@ def _add_admin_parser(command_parser):
         "admin", help="Admin functions. Be responsible."
     )
     admin_group = cli_admin.add_mutually_exclusive_group(required=True)
+    admin_group.add_argument(
+        "--undo",
+        type=int,
+        const=9,
+        nargs="?",
+        metavar="n",
+        help="""Undo last commands. Will ask for selection how far into hostory undo (default=9). You can provide
+        how many last commands to present for selection""",
+    )
     admin_group.add_argument(
         "--sql_upgrade",
         action="store_true",
@@ -515,7 +517,16 @@ def cli_parser() -> AbbreviationParser:
         inside 'bom|BOM' folder. Can be changed in config.py. Each imported file 
         will be treated as project. You can combine multiple project and export to
         file suitable for importing into shop cart. There is also a function to 
-        import Shoping cart with prices. If you import shop cart from many shops,
+        import cart
+        import If
+        import import
+        import many
+        import prices.
+        import shop
+        import Shoping
+        import shops
+        import with
+        import you
         BOM can export separate file for each shop considering best cost combination.
         Finaly, you can commit the selected projects, which will store the
         devices in the STOCK table.
@@ -554,9 +565,6 @@ if __name__ == "__main__":
     except IndexError:
         # normall call (no debug)
         pass
-    # check if file with manufacturer alternatives exists
-    if not os.path.exists(conf.MAN_ALT):
-        write_json(conf.MAN_ALT, {"": [""]})
     parser = cli_parser()
     args = parser.parse_args()
 
@@ -571,11 +579,15 @@ if __name__ == "__main__":
         except SqlCreateError as e:
             msg.msg(str(e))
             sys.exit(1)
-
-    # TODO: backup config folder
+    if conf.DEBUG != "pytest":
+        # backup config folder,every BACKUP_FREQ days
+        last_backup = str_to_date_backup(list_backups()[-1])
+        diff = datetime.now() - last_backup
+        if diff.days > conf.BACKUP_FREQ:
+            backup_config()
 
     if "func" in args:
+        log.log(args)
         args.func(args)
-        log(args)
     else:
         parser.print_help()

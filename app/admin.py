@@ -5,7 +5,6 @@ Administrative functions: removal, edit
 import os
 import sys
 from argparse import Namespace
-from time import strftime
 
 import pandas as pd
 
@@ -15,19 +14,17 @@ from app.common import (
     create_loc_config,
     display_conf,
     list_backups,
-    log_create,
     read_json_list,
     restore_config,
-    str_to_date,
+    str_to_date_backup,
+    str_to_date_log,
     tab_cols,
     write_json,
 )
 from app.error import ReadJsonError, SqlCreateError
-from app.message import MessageHandler
+from app.message import msg
 from app.tabs import NA_rows, align_data, prepare_project, tabs_in_data
 from conf.config import *  # pylint: disable=unused-wildcard-import,wildcard-import
-
-msg = MessageHandler()
 
 
 def admin(args: Namespace) -> None:
@@ -80,6 +77,18 @@ def admin(args: Namespace) -> None:
         backup_config()
     if args.restore_config:
         select_restore_backup()
+    if args.undo:
+        select_log_undo(args.undo)
+
+
+def select_log_undo(n: int):
+    """undo commands
+    from log selected to last one
+    """
+    logs = sql.log.log_read(n)
+    log_no = msg.select_log(logs)
+    undo_date = str_to_date_log(logs.loc[log_no, LOG_DATE])
+    sql.undo(undo_date)
 
 
 def select_restore_backup():
@@ -90,9 +99,7 @@ def select_restore_backup():
         sys.exit(0)
     b_date = []
     for b in lb:
-        b = os.path.basename(b)
-        b = b.replace("backup_", "")
-        b_dt = str_to_date(b)
+        b_dt = str_to_date_backup(b)
         b_date.append(b_dt.strftime("%Y-%m-%d %H:%M"))
     idx = msg.select_backup(b_date)
     restore_config(idx)
@@ -121,15 +128,25 @@ def sql_upgrade() -> None:
     add sql auditing
     add manufacters table and try to import from manufacturer_alternatives.json
     """
-    backup_config()
-    if "MANUFACTURER" in sql.sql_tables():
+    missing_tabs = [
+        t
+        for t in [
+            "MANUFACTURER",
+            "ALTERNATIVE_MANUFACTURER",
+            "LOG",
+            "audite_changefeed",
+        ]
+        if t not in sql.sql_tables()
+    ]
+    if missing_tabs == []:
         msg.msg("sql DB already in latest version")
         sys.exit(1)
+    backup_config()
     try:
-        sql.sql_create("MANUFACTURER")
-        sql.sql_create("ALTERNATIVE_MANUFACTURER")
-        log_create()
-        import_manufacturers(MAN_ALT)
+        for t in missing_tabs:
+            sql.sql_create(t)
+        if "MANUFACTURER" in missing_tabs:
+            import_manufacturers(MAN_ALT)
     except SqlCreateError as err:
         restore_config()
         print(err)

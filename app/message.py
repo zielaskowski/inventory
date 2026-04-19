@@ -2,6 +2,7 @@
 
 import os
 import re
+from typing import List
 
 import pandas as pd
 
@@ -299,8 +300,6 @@ class MessageHandler:  # pylint: disable=too-many-public-methods
         self.message.append("id    |   date")
         i = len(backups)
         for b in backups:
-            b = os.path.basename(b)
-            b = b.replace("backup_", "")
             self.message.append(str(i) + "     |   " + b)
             i -= 1
         self.__exec__()
@@ -317,7 +316,28 @@ class MessageHandler:  # pylint: disable=too-many-public-methods
             except KeyboardInterrupt:
                 print("\nAborted...")
                 sys.exit(1)
-        return idi - 1
+        return len(backups) - idi
+
+    def select_log(self, logs: pd.DataFrame) -> int:
+        """ask user to select logs to undo"""
+        self.message.append("Will undo from selection to last command")
+        self.message.append("Select command to start undo from:")
+        self.message.append(logs)
+        self.__exec__()
+        while True:
+            try:
+                idx = input("select log id (ctr-C to cancel): ")
+                idi = int(idx)
+                if idi > len(logs) or idi < 1:
+                    raise ValueError
+                break
+            except ValueError:
+                print(f"Must be a number in range 1..{len(logs)}")
+                continue
+            except KeyboardInterrupt:
+                print("\nAborted...")
+                sys.exit(1)
+        return idi
 
     def __exec__(self, warning: bool = False) -> None:
         """message method"""
@@ -333,3 +353,6 @@ class MessageHandler:  # pylint: disable=too-many-public-methods
         for msg in self.message:
             print(msg)
         self.message = []
+
+
+msg = MessageHandler()

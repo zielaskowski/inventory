@@ -11,7 +11,7 @@ import pandas as pd
 from pandas.errors import EmptyDataError, ParserError
 
 from app import sql
-from app.message import MessageHandler
+from app.message import msg
 from app.tabs import (
     import_tab,
     prepare_project,
@@ -20,8 +20,6 @@ from app.tabs import (
     tab_template,
 )
 from conf.config import *  # pylint: disable=unused-wildcard-import,wildcard-import
-
-msg = MessageHandler()
 
 
 def stock_import(args: Namespace) -> None:
@@ -40,9 +38,6 @@ def stock_import(args: Namespace) -> None:
         return
     if args.export or args.fzf:
         export(args, "STOCK")
-        return
-    if args.history:
-        msg.msg("--history option not implements")
         return
     files = scan_files(args)
     for file in files:

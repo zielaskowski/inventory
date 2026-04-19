@@ -10,10 +10,9 @@ import os
 import re
 import shutil
 import sys
-from argparse import Namespace
 from datetime import datetime
 from json import JSONDecodeError
-from typing import Dict
+from typing import Dict, List
 
 from jinja2 import Template
 
@@ -85,7 +84,43 @@ def restore_config(idx=-1) -> None:
     msg.msg(f"Backup files restored: {config_files}")
 
 
-def str_to_date(date: str) -> datetime:
+def str_to_date_log(logi: str) -> datetime:
+    """convert log date to string
+    date in format %Y-%b-%d %h:%M:%s
+    """
+    pattern = re.compile(
+        r"""
+                         ^
+                         (?P<year>\d{4})-
+                         (?P<month>\d{2})-
+                         (?P<day>\d{2})\s
+                         (?P<hour>\d{2}):
+                         (?P<minute>\d{2}):
+                         (?P<sec>\d{2})
+                         $
+                         """,
+        re.VERBOSE,
+    )
+    match = pattern.match(logi)
+    if not match:
+        return datetime.now()
+    date_yr = int(match["year"])
+    date_month = int(match["month"])
+    date_day = int(match["day"])
+    time_hrs = int(match["hour"])
+    time_min = int(match["minute"])
+    time_sec = int(match["sec"])
+    return datetime(
+        date_yr,
+        date_month,
+        date_day,
+        time_hrs,
+        time_min,
+        time_sec,
+    )
+
+
+def str_to_date_backup(date: str) -> datetime:
     """convert string date to datetime object
     date in formt path/.config/backup_%Y-%b-%d-%h%M%s%f"""
     pattern = re.compile(
@@ -209,48 +244,6 @@ def log_create() -> None:
         os.remove(LOG_FILE)
     with open(LOG_FILE, "w", encoding="UTF8") as f:
         f.close()
-
-
-def log(args: Namespace) -> None:
-    """
-    log command in ./conf/log.txt
-    """
-    if LOG_FILE == "":
-        return
-
-    cmd = ["python -m inv"]
-    for var, val in vars(args).items():
-        if callable(val):
-            continue
-        if val:
-            if var == "command":
-                cmd += [val]
-            else:
-                if isinstance(val, list):
-                    val = " ".join(f"'{v}'" for v in val)
-                cmd += [
-                    "--" + var + " " + (str(val) if not isinstance(val, bool) else "")
-                ]
-
-    now = datetime.now()
-    cmd = [now.strftime("%Y-%m-%d %H:%M:%S")] + cmd
-    log_write(cmd)
-
-
-def log_write(txt: list[str]) -> None:
-    """
-    write to log
-    can rise IsDirectoryError and FileNotFoundError
-    """
-    try:
-        with open(LOG_FILE, "a", encoding="UTF8") as f:
-            f.write(f"{' '.join(txt)}\n")
-    except IsADirectoryError as e:
-        msg.log_path_error(str(e) + ". Missing filename.")
-        return
-    except FileNotFoundError as e:
-        msg.log_path_error(str(e))
-        return
 
 
 def write_json(file: str, content: dict[str, dict] | dict[str, list[str]]) -> None:

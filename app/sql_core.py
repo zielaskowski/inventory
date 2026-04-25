@@ -257,6 +257,7 @@ def __cmd_execute__(
         )
         cur = con.cursor()
         cur.execute("PRAGMA foreign_keys = ON")
+        cur.execute("PRAGMA recursive_triggers = OFF")
         for cmd in script:
             if executemany:
                 cur.executemany(cmd, params)

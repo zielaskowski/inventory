@@ -20,7 +20,7 @@ from app.common import (
     tab_cols,
     write_json,
 )
-from app.error import ReadJsonError, SqlCreateError
+from app.error import ReadJsonError, SqlCreateError, SqlExecuteError
 from app.message import msg
 from app.tabs import NA_rows, align_data, prepare_project, tabs_in_data
 from conf.config import *  # pylint: disable=unused-wildcard-import,wildcard-import
@@ -69,7 +69,10 @@ def admin(args: Namespace) -> None:
     if args.sql_upgrade:
         upgrade()
     if args.import_manufacturers:
-        import_manufacturers(file=args.import_manufacturers)
+        import_manufacturers(
+            file=args.import_manufacturers,
+            force=args.force,
+        )
     if args.export_manufacturers:
         export_manufacturers(args.export_manufacturers)
     if args.backup_config:
@@ -128,13 +131,16 @@ def export_manufacturers(file: str) -> None:
     msg.msg(f"Exported data to {file}")
 
 
-def import_manufacturers(file: str):
+def import_manufacturers(file: str, force=False):
     """import manufacturers from json to sql"""
     try:
         alt_exist = read_json_list(file)
+        if force:
+            sql.rm("ALTERNATIVE_MANUFACTURER")
+            sql.rm("MANUFACTURER")
         sql.write_man_alternatives(alt_exist)
         msg.msg(f"imported manufacturer alternatives from '{file}'")
-    except (ReadJsonError, SqlCreateError) as e:
+    except (ReadJsonError, SqlCreateError, SqlExecuteError) as e:
         msg.msg(str(e))
         msg.msg("skipping importing manufacturers")
 

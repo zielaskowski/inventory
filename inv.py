@@ -435,7 +435,7 @@ def _add_admin_parser(command_parser):
         help="""Import alternative manufacturers from json file.
                 File content shall be Dictionary with List as values, like this: 
                 {manufacturer:[alternative_manufacturer1,alternative_manufacturer2]}
-                Keeps what already exists.""",
+                Keeps what already exists. Use --force to replace.""",
     )
     admin_group.add_argument(
         "--export_manufacturers",

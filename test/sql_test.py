@@ -12,14 +12,14 @@ from app.error import (
     SqlCheckError,
     SqlCreateError,
 )
-from app.sql import sql_check, sql_create
+from app.sql import check, create
 from conf import config as conf
 
 
 def test_sql_create1(db_setup):
     """should be fine"""
-    sql_create()
-    sql_check()
+    create()
+    check()
 
 
 def test_sql_create2(monkeypatch):
@@ -29,7 +29,7 @@ def test_sql_create2(monkeypatch):
     monkeypatch.setattr(conf, "LOG_FILE", "")
     importlib.reload(sql)
     with pytest.raises(CheckDirError) as err_info:
-        sql_create()
+        create()
     assert err_info.match(".test")
 
 
@@ -42,7 +42,7 @@ def test_sql_create3(monkeypatch):
     monkeypatch.setattr(conf, "LOG_FILE", "")
     importlib.reload(sql)
     with pytest.raises(SqlCreateError) as err_info:
-        sql_create()
+        create()
     assert err_info.match(sql_json)
 
 
@@ -62,7 +62,7 @@ def test_sql_create4(monkeypatch, tmpdir):
     monkeypatch.setattr(conf, "LOG_FILE", "")
     importlib.reload(sql)
     with pytest.raises(SqlCreateError) as err_info:
-        sql_create()
+        create()
     assert err_info.match(jfile.strpath)
 
 
@@ -82,7 +82,7 @@ def test_sql_create5(monkeypatch, tmpdir):
     monkeypatch.setattr(conf, "LOG_FILE", "")
     importlib.reload(sql)
     with pytest.raises(SqlCreateError) as err_info:
-        sql_create()
+        create()
     assert err_info.match(jfile.basename)
 
 
@@ -112,7 +112,7 @@ def test_sql_check1(monkeypatch, tmpdir):
     importlib.reload(sql)
     importlib.reload(sql_core)
     importlib.reload(common)
-    sql_create()
+    create()
     json_txt["BOM"]["FOREIGN"].pop()
     jfile2 = tmpdir.join("json2.txt")
     jfile2.write(json.dumps(json_txt))
@@ -121,7 +121,7 @@ def test_sql_check1(monkeypatch, tmpdir):
     importlib.reload(sql_core)
     importlib.reload(common)
     with pytest.raises(SqlCheckError) as err_info:
-        sql_check()
+        check()
     assert err_info.match("db.sql")
 
 
@@ -151,7 +151,7 @@ def test_sql_check2(monkeypatch, tmpdir, capsys):
     importlib.reload(sql)
     importlib.reload(common)
     with pytest.raises(SqlCreateError):
-        sql_check()
+        check()
     out, _ = capsys.readouterr()
     assert "expected: 'String'" in out
 
@@ -179,7 +179,7 @@ def test_sql_check3(monkeypatch, tmpdir, capsys):
     importlib.reload(sql)
     importlib.reload(common)
     with pytest.raises(SqlCreateError):
-        sql_check()
+        check()
     out, _ = capsys.readouterr()
     assert "expected: 'List'" in out
 
@@ -210,7 +210,7 @@ def test_sql_check4(monkeypatch, tmpdir, capsys):
     importlib.reload(sql)
     importlib.reload(common)
     with pytest.raises(SqlCreateError):
-        sql_check()
+        check()
     out, _ = capsys.readouterr()
     assert "expected: 'List of Dict'" in out
 
@@ -242,7 +242,7 @@ def test_sql_check5(monkeypatch, tmpdir, capsys):
     importlib.reload(sql)
     importlib.reload(common)
     with pytest.raises(SqlCreateError):
-        sql_check()
+        check()
     out, _ = capsys.readouterr()
     assert "expected: 'List'" in out
 
@@ -250,7 +250,8 @@ def test_sql_check5(monkeypatch, tmpdir, capsys):
 def test_sql_upgrade(db_setup, cli, tmpdir, monkeypatch):
     """upgrading db as expected"""
     os.remove(conf.DB_FILE)
-    sql_create(one_tab="DEVICE")
+    create(one_tab="DEVICE")
+    create(one_tab="STOCK")
     man_alts = {
         "aa": ["a1", "a2", "a3"],
         "bb": ["b1", "b2", "b3"],
@@ -264,9 +265,13 @@ def test_sql_upgrade(db_setup, cli, tmpdir, monkeypatch):
     args = cli.parse_args(["admin", "--sql_upgrade"])
     admin.admin(args)
     # check if tables exist
-    assert "DEVICE" in sql.sql_tables()
-    assert "MANUFACTURER" in sql.sql_tables()
-    assert "ALTERNATIVE_MANUFACTURER" in sql.sql_tables()
+    assert "DEVICE" in sql_core.__list_tables__()
+    assert "STOCK" in sql_core.__list_tables__()
+    assert sql_core.__sqlite_master__(name="uniqueRow_STOCK")
+    assert "DEFERRABLE" in sql_core.__sqlite_master__("STOCK")
+    assert "LOG" in sql_core.__list_tables__()
+    assert "MANUFACTURER" in sql_core.__list_tables__()
+    assert "ALTERNATIVE_MANUFACTURER" in sql_core.__list_tables__()
     # check if imported manufacturers
     alt_man = sql.get_man_alternatives()
     assert alt_man == man_alts
@@ -274,15 +279,15 @@ def test_sql_upgrade(db_setup, cli, tmpdir, monkeypatch):
 
 def test_sql_no_audite(db_setup):
     """missing audite table"""
-    sql.__sql_execute__(["DROP TABLE 'audite_changefeed'"])
+    sql_core.__cmd_execute__(["DROP TABLE 'audite_changefeed'"])
     with pytest.raises(SqlCheckError) as err_info:
-        sql.sql_check()
+        sql.check()
     assert err_info.match("Consider upgrading DB file")
 
 
 def test_sql_no_manufacturer(db_setup):
     """missing manufacturer table"""
-    sql.__sql_execute__(["DROP TABLE 'MANUFACTURER'"])
+    sql_core.__cmd_execute__(["DROP TABLE 'MANUFACTURER'"])
     with pytest.raises(SqlCheckError) as err_info:
-        sql.sql_check()
+        sql.check()
     assert err_info.match("Consider upgrading DB file")

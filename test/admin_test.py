@@ -1,13 +1,61 @@
 """pytest units"""
 
+import time
 from unittest.mock import patch
 
 import pandas as pd
 
-from app.admin import admin, align, remove_dev
+from app import sql
+from app.admin import admin, align, remove_dev, select_log_undo
 from app.common import DEV_DESC, DEV_MAN
 from app.import_dat import bom_import, shop_import
-from app.sql import getDF, rm
+from conf.sql_colnames import BOM_QTY, DEV_ID
+
+
+def test_undo_device1(db_setup, tmpdir, cli):
+    """
+    read new devices twice, then undo twice
+    """
+    bom_file = tmpdir.join("bom1.csv")
+    with open(bom_file, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,qty,project,device_description\n"
+            + "device1,MAN_A,10,proj1,desc1\n"
+            + "device2,MAN_B,20,proj2,desc2\n"
+        )
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "bom1", "-F", "csv"])
+    sql.log.log(args)
+    bom_import(args)
+
+    bom_file = tmpdir.join("bom2.csv")
+    with open(bom_file, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,qty,project,device_description\n"
+            + "device2,MAN_B,10,proj1,desc1\n"
+            + "device4,MAN_B,20,proj2,desc2\n"
+        )
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "bom2", "-F", "csv"])
+    time.sleep(2)
+    sql.log.log_on = True
+    sql.log.log(args)
+    bom_import(args)
+    with patch("app.admin.msg.select_log", return_value=1):
+        select_log_undo(10)
+
+    logs = sql.getDF(tab="LOG")
+    devices = sql.getDF(tab="DEVICE")
+    bom = sql.getDF(
+            tab="BOM",
+            get_col=[BOM_QTY],
+            search=["device2"],
+            where=[DEV_ID],
+            follow=True,
+            )
+    assert len(logs) == 1
+    assert "bom1" in logs.loc[0, "args"]
+    assert "bom2" not in logs.loc[0, "args"]
+    assert "device2" in devices[DEV_ID].to_list()
+    assert bom.iloc[0, 0] == 20
 
 
 def test_align_man1(cli, db_setup, tmpdir):
@@ -42,7 +90,7 @@ def test_align_man1(cli, db_setup, tmpdir):
     ):
         align()
 
-    dev = getDF(tab="BOM", follow=True)
+    dev = sql.getDF(tab="BOM", follow=True)
 
     # expected data
     expect_dat = tmpdir.join("expect_dat.csv")
@@ -97,7 +145,7 @@ def test_align_man2(cli, db_setup, tmpdir):
     ):
         align()
 
-    dev = getDF(tab="BOM", follow=True)
+    dev = sql.getDF(tab="BOM", follow=True)
 
     # expected data
     expect_dat = tmpdir.join("expect_dat.csv")
@@ -151,7 +199,7 @@ def test_align_man4(cli, db_setup, tmpdir):
     ):
         align()
 
-    dev = getDF(tab="BOM", follow=True)
+    dev = sql.getDF(tab="BOM", follow=True)
 
     # expected data
     expect_dat = tmpdir.join("expect_dat.csv")
@@ -203,7 +251,7 @@ def test_align_man5(cli, db_setup, tmpdir):
     ):
         align()
 
-    dev = getDF(tab="BOM", follow=True)
+    dev = sql.getDF(tab="BOM", follow=True)
 
     # expected data
     expect_dat = tmpdir.join("expect_dat.csv")
@@ -279,7 +327,7 @@ def _setup_data_for_remove_test(cli, tmpdir):
     bom_import(args)
     # Remove the dummy project to leave dev_unused orphaned in the DEVICE table
 
-    rm(tab="BOM", value=["dummy_project"], column=["project"])
+    sql.rm(tab="BOM", value=["dummy_project"], column=["project"])
 
 
 def test_remove_dev_skip_project_devices(cli, db_setup, tmpdir):
@@ -293,8 +341,8 @@ def test_remove_dev_skip_project_devices(cli, db_setup, tmpdir):
     remove_dev(dev=["dev_unused", "dev_to_remove"], force=False)
 
     # Assertions
-    devices_after = getDF(tab="DEVICE")
-    bom_after = getDF(tab="BOM")
+    devices_after = sql.getDF(tab="DEVICE")
+    bom_after = sql.getDF(tab="BOM")
 
     # dev_unused should be gone
     assert "dev_unused" not in devices_after["device_id"].to_list()
@@ -318,8 +366,8 @@ def test_remove_dev_force(cli, db_setup, tmpdir):
     remove_dev(dev=["dev_unused", "dev_to_remove"], force=True)
 
     # Assertions
-    devices_after = getDF(tab="DEVICE")
-    bom_after = getDF(tab="BOM")
+    devices_after = sql.getDF(tab="DEVICE")
+    bom_after = sql.getDF(tab="BOM")
 
     # Both dev_unused and dev_to_remove should be gone
     assert "dev_unused" not in devices_after["device_id"].to_list()
@@ -340,7 +388,7 @@ def test_align_manufacturers_complex(cli, db_setup, tmpdir):
     _setup_shop_data_for_align(cli, tmpdir)
 
     # Verify initial state: 5 different manufacturers for 'device1'
-    initial_devs = getDF(
+    initial_devs = sql.getDF(
         tab="DEVICE", search=["device1"], where=["device_id"], follow=True
     )
     assert len(initial_devs) == 5
@@ -363,7 +411,7 @@ def test_align_manufacturers_complex(cli, db_setup, tmpdir):
         align()
 
     # 3. Verify the final state
-    final_devs = getDF(
+    final_devs = sql.getDF(
         tab="DEVICE", search=["device1"], where=["device_id"], follow=True
     )
 
@@ -379,12 +427,12 @@ def test_align_manufacturers_complex(cli, db_setup, tmpdir):
     assert final_desc == "desc"
 
     # Check that the BOM quantities have been correctly aggregated under the new unified device
-    bom_df = getDF(tab="BOM", follow=True)
+    bom_df = sql.getDF(tab="BOM", follow=True)
     assert bom_df.loc[bom_df["project"] == "proj1", "qty"].iloc[0] == 10
     assert bom_df.loc[bom_df["project"] == "proj2", "qty"].iloc[0] == 20
 
     # Check that shop data is preserved
-    shop_df = getDF(tab="SHOP", follow=True)
+    shop_df = sql.getDF(tab="SHOP", follow=True)
     assert len(shop_df) == 3
     assert set(shop_df["shop"]) == {"shop1", "shop2", "shop3"}
 
@@ -399,7 +447,7 @@ def test_align_manufacturers_complex1(cli, db_setup, tmpdir):
     _setup_shop_data_for_align(cli, tmpdir)
 
     # Verify initial state: 5 different manufacturers for 'device1'
-    initial_devs = getDF(
+    initial_devs = sql.getDF(
         tab="DEVICE", search=["device1"], where=["device_id"], follow=True
     )
     assert len(initial_devs) == 5
@@ -423,7 +471,7 @@ def test_align_manufacturers_complex1(cli, db_setup, tmpdir):
         align()
 
     # 3. Verify the final state
-    final_devs = getDF(
+    final_devs = sql.getDF(
         tab="DEVICE", search=["device1"], where=["device_id"], follow=True
     )
 
@@ -435,12 +483,12 @@ def test_align_manufacturers_complex1(cli, db_setup, tmpdir):
     assert final_man == "MAN"
 
     # Check that the BOM quantities have been correctly aggregated under the new unified device
-    bom_df = getDF(tab="BOM", follow=True)
+    bom_df = sql.getDF(tab="BOM", follow=True)
     assert bom_df.loc[bom_df["project"] == "proj1", "qty"].iloc[0] == 10
     assert bom_df.loc[bom_df["project"] == "proj2", "qty"].iloc[0] == 20
 
     # Check that shop data is preserved
-    shop_df = getDF(tab="SHOP", follow=True)
+    shop_df = sql.getDF(tab="SHOP", follow=True)
     assert len(shop_df) == 3
     assert set(shop_df["shop"]) == {"shop1", "shop2", "shop3"}
 
@@ -473,7 +521,7 @@ def test_align_manufacturers_complex2(cli, db_setup, tmpdir):
     _setup_shop_data_for_align(cli, tmpdir)
 
     # Verify initial state: 5 different manufacturers for 'device1'
-    initial_devs = getDF(
+    initial_devs = sql.getDF(
         tab="DEVICE", search=["device1"], where=["device_id"], follow=True
     )
     assert len(initial_devs) == 5
@@ -496,7 +544,7 @@ def test_align_manufacturers_complex2(cli, db_setup, tmpdir):
         align()
 
     # 3. Verify the final state
-    final_devs = getDF(
+    final_devs = sql.getDF(
         tab="DEVICE", search=["device1"], where=["device_id"], follow=True
     )
 
@@ -512,12 +560,12 @@ def test_align_manufacturers_complex2(cli, db_setup, tmpdir):
     assert final_desc == "desc"
 
     # Check that the BOM quantities have been correctly aggregated under the new unified device
-    bom_df = getDF(tab="BOM", follow=True)
+    bom_df = sql.getDF(tab="BOM", follow=True)
     assert bom_df.loc[bom_df["project"] == "proj1", "qty"].iloc[0] == 10
     assert bom_df.loc[bom_df["project"] == "proj2", "qty"].iloc[0] == 20
 
     # Check that shop data is preserved
-    shop_df = getDF(tab="SHOP", follow=True)
+    shop_df = sql.getDF(tab="SHOP", follow=True)
     assert len(shop_df) == 3
     assert set(shop_df["shop"]) == {"shop1", "shop2", "shop3"}
 

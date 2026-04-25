@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from app.import_dat import bom_import, scan_files
-from app.sql import getDF, sql_check
+from app.sql import check, getDF
 from conf.config import BOM_QTY, DEV_ID
 from inv import cli_parser
 
@@ -148,7 +148,7 @@ def test_bom_import_csv2(cli, db_setup, tmpdir, capsys):
 
 def test_bom_import_csv3(cli, db_setup, tmpdir, capsys):
     """NAs in mandatory rows"""
-    sql_check()
+    check()
     csv = tmpdir.join("test.csv")
     with open(csv, "w", encoding="UTF8") as f:
         f.write(

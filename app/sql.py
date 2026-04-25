@@ -3,16 +3,19 @@ manages SQL db.
 DB structure is described in ./conf/sql_scheme.json
 """
 
+import json
 import os
 import re
 from argparse import Namespace
 from datetime import datetime
+from enum import unique
 from typing import Dict, List, Set
 
 import pandas as pd
 
+from app import sql_core as sql
 from app.common import (
-    log_create,
+    int_to_date_log,
     read_json_dict,
     tab_exists_scheme,
     unpack_foreign,
@@ -28,15 +31,6 @@ from app.error import (
     SqlTabError,
 )
 from app.message import msg
-from app.sql_core import (
-    __check_scheme__,
-    __escape_quote__,
-    __get_tab__,
-    __sql_audit__,
-    __sql_execute__,
-    __tab_cmd__,
-    __write_table__,
-)
 from conf.config import *  # pylint: disable=unused-wildcard-import,wildcard-import
 
 
@@ -45,7 +39,8 @@ class Log:
 
     def __init__(self) -> None:
         # log only once, each logging by sql_execute will change to FALSE
-        self.log_args_once = True
+        # one command usualy trigger mutliple sql operation
+        self.log_on = True
         self.cmd = []
 
     def log(self, args: Namespace) -> None:
@@ -80,14 +75,20 @@ class Log:
         """
         try:
             logs = getDF(tab="LOG")
+            if logs.empty:
+                return logs
         except (SqlGetError, SqlExecuteError) as e:
             msg.msg(str(e))
             sys.exit(1)
-        n = min(n,len(logs))
+        n = min(n, len(logs))
         logs = logs.loc[len(logs) - n : len(logs), :]
+        # reverse index so easier to select
         logs.sort_values(by=LOG_DATE, inplace=True, ascending=False)
-        logs.reset_index(inplace=True)
+        logs.reset_index(inplace=True, drop=True)
         logs.sort_values(by=LOG_DATE, inplace=True)
+        logs.reset_index(inplace=True)
+        logs["id"] = logs["index"].apply(lambda x: x + 1)
+        logs["date_fmt"] = logs["date"].apply(int_to_date_log)
         return logs
 
     def log_write(self, force=False) -> None:
@@ -95,9 +96,9 @@ class Log:
         write to log only once (unless force==True)
         can rise IsDirectoryError and FileNotFoundError
         """
-        if not self.log_args_once and not force:
+        if not self.log_on and not force:
             return
-        self.log_args_once = False
+        self.log_on = False
         now = datetime.now()
         now = now.strftime("%s")
         try:
@@ -116,24 +117,119 @@ class Log:
 log = Log()
 
 
-def undo(from_date: datetime) -> None:
+def sql_upgrade() -> None:
+    """
+    add sql auditing
+    add manufacters table and try to import from manufacturer_alternatives.json
+    add LOG table
+    add UNIQE key to STOCK table
+    """
+    sql_scheme = read_json_dict(SQL_SCHEME)
+    missing_tabs = [
+        t
+        for t in [
+            "MANUFACTURER",
+            "ALTERNATIVE_MANUFACTURER",
+            "LOG",
+        ]
+        if t not in sql.__list_tables__()
+    ]
+    # upadate also if audit is missing
+    audit_tab = [t for t in ["audite_changefeed"] if t not in sql.__list_tables__()]
+    defer_tabs = []
+    for t in sql.__list_tables__():
+        tab_sql = sql.__sqlite_master__(t)
+        if "FOREIGN" in tab_sql and "DEFERRABLE" not in tab_sql:
+            defer_tabs.append(t)
+
+    # old definition of STOCK table was missing UNIQE key
+    if not sql.__sqlite_master__(name="uniqueRow_STOCK"):
+        defer_tabs.append("STOCK")
+
+    if not missing_tabs and not defer_tabs and not audit_tab:
+        msg.msg("sql DB already in latest version")
+        sys.exit(1)
+
+    for t in defer_tabs:
+        sql.__defer_foreign__(tab=t)
+        # after commit sql will remove redundant UNIQE keys
+        # and defer_foreign delete old and create new tab
+        sql.__add_unique__(tab=t)
+    for t in missing_tabs:
+        create(t)
+
+    # copying tables (inside defer_tables())is not preserving triggers
+    # anyway better to rebuild all
+    for t in [
+        t
+        for t in sql_scheme.keys()
+        if t not in SQL_KEYWORDS and t in sql.__list_tables__()
+    ]:
+        sql.__audit__(t)
+
+    msg.sql_upgrade()
+
+
+def undo(from_date: int) -> None:
     """undo all commands from date"""
     logs = getDF(
         tab="audite_changefeed",
-        search=[int(from_date.strftime("%s"))],
+        search=[from_date],
         where=["time"],
         oper=">=",
     )
-    # TODO: remove undo logs
+    # undo starting from last command
+    logs.sort_index(ascending=False, inplace=True)
+    # do not log now
+    log_on = log.log_on
+    log.log_on = False
     # TODO: list undo logs so user have chance to undo undo
     for r in logs.itertuples():
-        if "new" in r.data.keys():
-            oper = r.data["new"]
-            rm(tab=r.source, value=oper.values(), column=oper.keys())
+        args = json.loads(r.data)  # type: ignore
+        if "created" in r.type:  # type: ignore
+            args = args["new"]
+            col_defs = sql.__table_definition__(r.source)  # type: ignore
+            pks = [c for c in col_defs.keys() if "PRIMARY" in col_defs[c]]
+            pk = pks[0]
+            qty_cols = [str(c) for c in args.keys() if c in [BOM_QTY, STOCK_QTY]]
+            if qty_cols != []:
+                # check if we updated (added qty) or created new record
+                qty_col: str = qty_cols[0]
+                curr_row = getDF(
+                    tab=r.source,  # type: ignore
+                    get_col=qty_cols,
+                    search=[args[pk]],
+                    where=pks,
+                )
+                curr_qty = int(curr_row.loc[0, qty_col])
+                log_qty = args[qty_col]
+            else:
+                log_qty = 0
+                curr_qty = 0
+                qty_col = ""
+            try:
+                if not curr_qty - log_qty:  # change was whole qty, remove
+                    rm(
+                        tab=r.source,  # type: ignore
+                        value=[r.subject],  # type: ignore
+                        column=pks,
+                    )
+                else:  # change was only qty, update
+                    edit(
+                        tab=r.source,  # type: ignore
+                        new_val=[curr_qty - log_qty],  # type: ignore
+                        col=qty_col,
+                        search=[args[pk]],
+                        where=pk,
+                    )
+            except SqlExecuteError as e:
+                if "FOREIGN KEY" not in str(e):
+                    sys.exit(1)
+    log.log_on = log_on
     return
 
 
-def store_man_alternatives(man_alt: dict) -> None:
+def write_man_alternatives(man_alt: dict) -> None:
     """store manufacturers into tables"""
     if [k for k in man_alt if k] == []:
         # nothing to do
@@ -149,9 +245,7 @@ def store_man_alternatives(man_alt: dict) -> None:
             )
             man = pd.concat([man, new_row], ignore_index=True)
     put(dat=pd.DataFrame({MAN_NAME: man[MAN_NAME].unique()}), tab="MANUFACTURER")
-    base_man = getDF(
-        tab="MANUFACTURER", search=list(man_alt.keys()), where=[MAN_NAME]
-    )  # fmt: on
+    base_man = getDF(tab="MANUFACTURER", search=list(man_alt.keys()), where=[MAN_NAME])
     alt_man = pd.merge(left=man, right=base_man, how="left", on=MAN_NAME)
     put(dat=alt_man, tab="ALTERNATIVE_MANUFACTURER")
 
@@ -201,7 +295,7 @@ def store_alternatives(
                 alt_exist[selection[i]] = list(set(alt_exist[selection[i]]))
             else:
                 alt_exist[selection[i]] = [alt_from[i]]
-    store_man_alternatives(alt_exist)
+    write_man_alternatives(alt_exist)
 
 
 def get_alternatives(manufacturers: list[str]) -> tuple[list[str], list[bool]]:
@@ -255,7 +349,11 @@ def put(dat: pd.DataFrame, tab: str, on_conflict: dict | None = None) -> Dict:
     d = dat.loc[:, [c in sql_columns for c in dat.columns]]
     if d.empty:
         return {}
-    return __write_table__(dat=d, tab=tab, on_conflict=on_conflict)  # pyright: ignore
+    return sql.__write_table__(
+        dat=d,
+        tab=tab,
+        on_conflict=on_conflict,  # pyright: ignore
+    )
 
 
 def getDF_other_tabs(  # pylint: disable=invalid-name
@@ -430,7 +528,9 @@ def get(  # pylint: disable=too-many-branches
         SqlGetOperationError
     """
     # check if tab exists!
-    tab_exists_scheme(tab)
+    # tab_exists_scheme(tab)
+    if tab not in sql.__list_tables__():
+        raise SqlTabError(tab=tab, tabs=sql.__list_tables__())
     # assign values if default
     all_cols = tab_columns(tab)
     # normalize input to list
@@ -444,11 +544,13 @@ def get(  # pylint: disable=too-many-branches
         get_col = set(norm_to_list_str(get_col))
     if search is not None:
         search = norm_to_list_str(search)
-        search = __escape_quote__(search)
+        search = sql.__escape_quote__(search)
 
     sql_scheme = read_json_dict(SQL_SCHEME)
 
-    if "FOREIGN" not in sql_scheme[tab].keys():
+    fk = sql.__table_foreign_keys__(tab)
+    if fk.empty:
+        # if "FOREIGN" not in sql_scheme[tab].keys():
         follow = False
 
     if follow:
@@ -476,7 +578,7 @@ def get(  # pylint: disable=too-many-branches
     else:
         if any(g not in all_cols for g in get_col):
             raise SqlGetError(get_col, all_cols)
-        resp = __get_tab__(
+        resp = sql.__get_tab__(
             tab=tab, get_col=get_col, search=search, where=where, oper=oper
         )
 
@@ -491,11 +593,13 @@ def rm(
     """
     Remove all instances of value from column in tab.
     if value or column is missing, default is all
+    Raises:
+        SqlExecuteError
     """
     log.log_write()
     if column is None or value is None:
         cmd = f"DELETE FROM {tab}"
-        __sql_execute__([cmd])
+        sql.__cmd_execute__([cmd])
         return
 
     value = norm_to_list_str(value)
@@ -503,7 +607,7 @@ def rm(
     for c in column:
         placeholders = ",".join("?" * len(value))
         cmd = f"DELETE FROM {tab} WHERE {c} IN ({placeholders})"
-        __sql_execute__([cmd], value)
+        sql.__cmd_execute__([cmd], value)
 
 
 def edit(
@@ -520,13 +624,13 @@ def edit(
     cmd = []
     for nv, s in zip(new_val, search):
         cmd.append(f"UPDATE {tab} SET {col} = '{nv}' WHERE {where} = '{s}'")
-    __sql_execute__(cmd)
+    sql.__cmd_execute__(cmd)
 
 
 def tab_columns(tab: str) -> set[str]:
     """return list of columns for table"""
     sql_cmd = f"pragma table_info({tab})"
-    resp = __sql_execute__([sql_cmd])
+    resp = sql.__cmd_execute__([sql_cmd])
     if not resp or resp[sql_cmd].empty:
         return set()
     return set(resp[sql_cmd]["name"].to_list())
@@ -535,7 +639,7 @@ def tab_columns(tab: str) -> set[str]:
 def tab_foreign(tab: str) -> List[Dict[str, str]]:
     """show FOREIGN keys for tab"""
     sql_cmd = f"pragma foreign_key_list({tab})"
-    resp = __sql_execute__([sql_cmd])
+    resp = sql.__cmd_execute__([sql_cmd])
     if not resp or resp[sql_cmd].empty:
         return []
     foreign_tab = []
@@ -546,7 +650,7 @@ def tab_foreign(tab: str) -> List[Dict[str, str]]:
     return foreign_tab
 
 
-def sql_check() -> None:
+def check() -> None:
     """Check db file if aligned with scheme written in sql_scheme.json.
     Check if table exists and if has the required columns.
     Creates one if necessery
@@ -555,11 +659,10 @@ def sql_check() -> None:
     # make sure if exists
     if not os.path.isfile(DB_FILE):
         msg.sql_file_miss(DB_FILE)
-        sql_create()
+        create()
 
     sql_scheme = read_json_dict(SQL_SCHEME)
-    for i in range(len(sql_scheme)):
-        tab = list(sql_scheme.keys())[i]
+    for tab in sql_scheme.keys():
         scheme_cols = [k for k in sql_scheme[tab].keys() if k not in SQL_KEYWORDS]
         # check if correct tables in sql
         if not any(c in tab_columns(tab) for c in scheme_cols):
@@ -569,12 +672,20 @@ def sql_check() -> None:
         from_json_scheme = [str(c) for c in sql_scheme[tab].get("FOREIGN", [])]
         if sorted(from_sql_scheme) != sorted(from_json_scheme):
             raise SqlCheckError(DB_FILE, tab)
+        # check if foreign keys DEFERRED
+        tab_sql = sql.__sqlite_master__(tab)
+        if "FOREIGN" in tab_sql and "DEFERRABLE" not in tab_sql:
+            raise SqlCheckError(DB_FILE, tab, foreign=True)
+        # in old db, STOCK table was missing UNIQUE directive (was handled by ON CONFLICT)
+        # now must be declared explicitly
+        if not sql.__sqlite_master__(f"uniqueRow_{tab}") and tab == "STOCK":
+            raise SqlCheckError(DB_FILE, tab, unique=True)
     # check auditing tables (audite_changefeed)
-    if "audite_changefeed" not in sql_tables():
+    if "audite_changefeed" not in sql.__list_tables__():
         raise SqlCheckError(DB_FILE, "audite")
 
 
-def sql_create(one_tab="") -> None:  # pylint: disable=too-many-branches
+def create(one_tab="") -> None:  # pylint: disable=too-many-branches
     """Creates sql query based on sql_scheme.json and send to db.
     Perform check if created DB is aligned with scheme from sql.json file.
     if one_tab!="" create only one tab. Raise SQL create error if tab exists
@@ -599,56 +710,34 @@ def sql_create(one_tab="") -> None:  # pylint: disable=too-many-branches
         sql_scheme = {one_tab: sql_scheme[one_tab]}
     for tab in sql_scheme:
         try:
-            __check_scheme__(tab=tab, col_def=sql_scheme[tab])
+            sql.__check_scheme__(tab=tab, col_def=sql_scheme[tab])
         except SqlSchemeError as err:
             print(err)
             raise SqlCreateError(SQL_SCHEME) from err
 
-        sql_cmd.append(__tab_cmd__(tab, sql_scheme[tab]))
-        if unique_cols := str(
-            sql_scheme[tab]["UNIQUE"] if "UNIQUE" in sql_scheme[tab].keys() else ""
-        ):
-            # replace square brackets with parenthesis
-            unique_cols = re.sub(r"\[", r"(", unique_cols)
-            unique_cols = re.sub(r"\]", r")", unique_cols)
-            tab_cmd = f"CREATE UNIQUE INDEX uniqueRow_{tab} ON {tab} {unique_cols}"
-            sql_cmd.append(tab_cmd)
+        sql_cmd.append(sql.__create_tab_cmd__(tab))
 
     # sort sql_cmd list (to make sure you refer to columns that already exists)
     # elements containing "FOREIGN" put at end
     sql_cmd.sort(key=lambda x: x.find("FOREIGN"))
-    # and then all UNIQUE INDEX put at end
-    sql_cmd.sort(key=lambda x: x.find("UNIQUE"))
-
-    # last command to check if all tables were created
-    sql_cmd.append("SELECT tbl_name FROM sqlite_master WHERE type='table'")
 
     try:
-        __sql_execute__(sql_cmd)
+        sql.__cmd_execute__(sql_cmd)
+        if one_tab:
+            sql.__add_unique__(tab=one_tab)
+        else:
+            sql.__add_unique__()
     except SqlExecuteError as err:
         os.remove(DB_FILE)
         msg.msg(str(err))
         raise SqlCreateError(SQL_SCHEME) from err
 
     # check if all tables created
-    all_tables = sql_tables()
+    all_tables = sql.__list_tables__()
     if not all(k in all_tables for k in sql_scheme.keys()):
         if os.path.isfile(DB_FILE):
             os.remove(DB_FILE)
         raise SqlCreateError(SQL_SCHEME)
     # add auditing all changes on all tables
     for tab in sql_scheme:
-        __sql_audit__(tab=tab)
-
-
-def sql_tables() -> List:
-    """
-    list all tables in sql db
-    """
-    sql_cmd = ["SELECT tbl_name FROM sqlite_master WHERE type='table'"]
-    try:
-        status = __sql_execute__(sql_cmd)
-        return status[sql_cmd[-1][0:100]]["tbl_name"].to_list()
-    except SqlExecuteError as err:
-        msg.msg(str(err))
-        return []
+        sql.__audit__(tab=tab)

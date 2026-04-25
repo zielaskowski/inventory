@@ -1,8 +1,6 @@
 """class handling messages"""
 
 import os
-import re
-from typing import List
 
 import pandas as pd
 
@@ -322,13 +320,13 @@ class MessageHandler:  # pylint: disable=too-many-public-methods
         """ask user to select logs to undo"""
         self.message.append("Will undo from selection to last command")
         self.message.append("Select command to start undo from:")
-        self.message.append(logs)
+        self.message.append(logs.loc[:, ["id", LOG_ARGS, "date_fmt"]])
         self.__exec__()
         while True:
             try:
                 idx = input("select log id (ctr-C to cancel): ")
                 idi = int(idx)
-                if idi > len(logs) or idi < 1:
+                if idi > len(logs) or idi < 0:
                     raise ValueError
                 break
             except ValueError:
@@ -337,7 +335,7 @@ class MessageHandler:  # pylint: disable=too-many-public-methods
             except KeyboardInterrupt:
                 print("\nAborted...")
                 sys.exit(1)
-        return idi
+        return len(logs) - idi
 
     def __exec__(self, warning: bool = False) -> None:
         """message method"""

@@ -9,17 +9,27 @@
     //** SPECIAL KEYWORDS
     //** reference with FOREIGN key only to UNIQUE/PRIMARY columns
     //** tables with FOREIGN should follow tables they refer (order matter)
+    //** foreign keys are deferred, mening the integrity is chck only during commit
+    //** becouse when REPLACING on conflict, the primary key is first deleted then 
+    //** written new one, which wil violate integrity if referenced by foreign
     //** FOREIGN	[
     //**	    	   {"col":"FOREIGN_TAB(foreign_col)"},
     //**		   ......
     //**		]
-    //** UNIQUE      	 columns are indexed automatically
+    //** UNIQUE      	 column ID is indexed automatically (when INTEGER type)
     //** HASH_COLS   	 is not SQL! it's aditional info to allow hashing automation
-    //** ON_CONFLICT 	 describes action to perform on conflict on table level 
-    //**             	 (so can be only one). If missing REAPLCE is default
+    //** ON_CONFLICT 	 describes action to perform on conflict on table level
+    //**             	 (so can be only one). Check is applied during INSERT|UPADTE
+    //**		 commands (not during CREATE TABLE), so no sql rebnuild is
+    //**		 necessery when changing ON CONFLICT logic.
+    //**		 If missing REAPLCE is default.
+    //**		 WARNING: REPLACE will create new id primary key
+    //**		 so you should never refer to it as foraign key.
+    //**		 Conflict is checking on unique columns from UNIQUE and PRIMARY key
+    //**		 When UPADE_SET and no add_col, algorithm will replace all columns
+    //**		 except primary key.
     //**		{
-    //**		'action': UPDATE SET|REPLACE|IGNORE|FAIL|ABORT|ROLLBACK
-    //**		'unique_col':[cols] //may be from UNIQUE or PRIMARY KEY
+    //**		'action': UPDATE_SET|REPLACE|IGNORE|FAIL|ABORT|ROLLBACK
     //**		'add_col':[cols] //UPDATE will add new value to existing
     //**		}
     //** COL_DESCRIPTION description of columns
@@ -83,11 +93,7 @@
         ],
         "ON_CONFLICT": 
             {
-                "action": "UPDATE SET",
-                "unique_col": [
-                    "device_hash",
-                    "project"
-                ],
+                "action": "UPDATE_SET",
                 "add_col": [
                     "qty"
                 ]
@@ -139,12 +145,10 @@
                 "device_hash": "DEVICE(hash)"
             }
         ],
+	"UNIQUE":["device_hash"],
         "ON_CONFLICT": 
             {
-                "action": "UPDATE SET",
-                "unique_col": [
-                    "device_hash"
-                ],
+                "action": "UPDATE_SET",
                 "add_col": [
                     "stock_qty"
                 ]
@@ -158,7 +162,7 @@
 		"manufacturer_name":"primary manufacturer name"
 	    },
 	    "UNIQUE":["manufacturer_name"],
-	    "ON_CONFLICT":{"action":"REPLACE"}
+	    "ON_CONFLICT":{"action":"UPDATE_SET"}
     },
     //** alternative manufacturer table
     "ALTERNATIVE_MANUFACTURER":{

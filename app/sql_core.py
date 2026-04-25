@@ -4,7 +4,7 @@ not to be used directly, see sql.py for user functions
 
 import re
 import sqlite3
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Sequence, Union
 
 import pandas as pd
 from audite import track_changes
@@ -15,6 +15,7 @@ from app.common import (
     unpack_foreign,
 )
 from app.error import (
+    ReadJsonError,
     SqlCreateError,
     SqlExecuteError,
     SqlGetOperationError,
@@ -23,6 +24,107 @@ from app.error import (
 )
 from app.message import msg
 from conf.config import *  # pylint: disable=unused-wildcard-import,wildcard-import
+
+
+def __list_tables__() -> List:
+    """
+    list all tables in sql db
+    """
+    sql_cmd = ["SELECT tbl_name FROM sqlite_master WHERE type='table'"]
+    try:
+        status = __cmd_execute__(sql_cmd)
+        return status[sql_cmd[-1][0:100]]["tbl_name"].to_list()
+    except SqlExecuteError as err:
+        msg.msg(str(err))
+        return []
+
+
+def __sqlite_master__(name: str, pattern: Union[None, str] = None) -> str:
+    """return sql column from db master information where name,
+    name=table_name -> table dfinition sql command
+    name=uniqueRow_{table name} -> uniqe column for table
+    match against pattern if given
+    """
+    cmd = f"SELECT sql FROM sqlite_schema WHERE name = '{name}'"
+    resp = __cmd_execute__([cmd])
+    resp_df = resp[cmd]
+    if resp_df.empty:
+        return ""
+    resps = str(resp_df.loc[0, "sql"])
+    if pattern is not None:
+        if match := re.search(pattern, resps):
+            resps = match[0]
+        else:
+            resps = ""
+    return resps
+
+
+def __table_definition__(tab: str) -> dict:
+    """return table definition as dicionary
+    with column names as keys and type as values
+    """
+    if tab not in __list_tables__():
+        raise SqlTabError(tab=tab, tabs=__list_tables__())
+    cmd = f"PRAGMA table_info({tab})"
+    resp = __cmd_execute__([cmd])
+    resp_df = resp[cmd]
+    # fmt: off
+    resp_df["notnull"] = ( # type: ignore
+            resp_df["notnull"]
+            .apply(lambda x: "NOT NULL" if x else "")
+            )
+    resp_df["pk"] = ( # type: ignore
+            resp_df["pk"]
+            .apply(lambda x: "PRIMARY KEY" if x else "")
+            )
+    resp_df["type"] = (
+            resp_df[["type", "notnull", "pk"]] # type: ignore
+            .apply(tuple,axis=1)
+            .str.join(" ")
+            )
+    # fmt: on
+    resp_dict = resp_df.loc[:, ["name", "type"]].to_dict(orient="records")
+    return {i["name"]: i["type"] for i in resp_dict}
+
+
+def __table_foreign_keys__(tab: str) -> pd.DataFrame:
+    """return a DataFrame with foreign keys:
+    id|seq|table|from|to|on_update|on_delete|match
+    Raises:
+        SqlTabError when table do not exists
+        SqlExecuteError
+    """
+    if tab not in __list_tables__():
+        raise SqlTabError(tab=tab, tabs=__list_tables__())
+    cmd = f"PRAGMA foreign_key_list({tab})"
+    resp = __cmd_execute__([cmd])
+    return resp[cmd]
+
+
+def __update_set__(tab: str, add_cols: Union[str, None]) -> str:
+    """create ON_CONFLICT UPDATE_SET cmd"""
+    cols = __table_definition__(tab=tab)
+    unique_col = __sqlite_master__(
+        name=f"uniqueRow_{tab}",
+        pattern=r"\(.*\)$",
+    )
+    if not unique_col:
+        msg.msg(f"Missing UNIQUE cols for ON CONFLICT directive for table '{tab}'")
+        sys.exit(1)
+    # unique cols in ON CONFLICT should not have quotes
+    unique_col = unique_col.replace("'", "")
+
+    if add_cols:
+        update_cols = ",".join([f"{c} = {c} + EXCLUDED.{c}" for c in add_cols])
+    else:  # replace all columns except primary
+        update_cols = ",".join(
+            [f"{c} = EXCLUDED.{c}" for c, v in cols.items() if "PRIMARY" not in v]
+        )
+
+    cmd = f"""ON CONFLICT {unique_col}
+              DO UPDATE SET {update_cols}
+           """
+    return cmd
 
 
 def __write_table__(
@@ -51,23 +153,18 @@ def __write_table__(
     col_names = col_names.replace("]", ")")
 
     action = on_conflict.get("action", "REPLACE")  # default is ON CONFLICT REPLACE
-    if action == "UPDATE SET":
-        unique_col = on_conflict["unique_col"]
-        update_cols = ",".join(
-            [f"{c} = {c} + EXCLUDED.{c}" for c in on_conflict["add_col"]]
-        )
-        cmd = f"""INSERT INTO {tab} {col_names}
-                  VALUES ({','.join(['?'] * len(dat.columns))})
-                  ON CONFLICT ({','.join(unique_col)})
-                  DO UPDATE SET {update_cols}
-               """
+    if action == "UPDATE_SET":
+        action = ""
+        update_cmd = __update_set__(tab=tab, add_cols=on_conflict.get("add_col", None))
     else:
         action = "OR " + action
-        cmd = f"""INSERT {action} INTO {tab} {col_names}
-                  VALUES ({','.join(['?'] * len(dat.columns))})
-               """
+        update_cmd = ""
 
-    return __sql_execute__([cmd], records)
+    cmd = f"""INSERT {action} INTO {tab} {col_names}
+              VALUES ({','.join(['?'] * len(dat.columns))})
+           """
+    cmd += update_cmd
+    return __cmd_execute__([cmd], records)
 
 
 def __get_tab__(
@@ -93,7 +190,6 @@ def __get_tab__(
         SqlExecuteError
         SqlGetOperationError
     """
-    sql_scheme = read_json_dict(SQL_SCHEME)
     resp = {}
     for c in where:
         if not search:
@@ -103,19 +199,19 @@ def __get_tab__(
             if oper == "IN":
                 placeholders = ",".join("?" * len(search))
             else:
-                # check if numeric
-                col_def = sql_scheme[tab][c]
-                if "INTEGER" not in col_def or "REAL" not in col_def:
+                # check if numeric for operations like >,<,<=,>=
+                col_def = __table_definition__(tab=tab)[c]
+                if all(i not in col_def for i in ["INTEGER", "REAL"]):
                     raise SqlGetOperationError(col=c, oper=oper)
                 placeholders = "?"
             cmd = f"SELECT {','.join(get_col)} FROM {tab} WHERE {c} {oper} ({placeholders})"
-        if resp_col := __sql_execute__([cmd], search):
+        if resp_col := __cmd_execute__([cmd], search):
             resp[c] = resp_col[cmd].drop_duplicates()
     return resp
 
 
-def __sql_execute__(
-    script: list,
+def __cmd_execute__(
+    script: List[str],
     params: Sequence[str | tuple[Any, ...] | list[str]] | None = None,
 ) -> Dict[str, pd.DataFrame]:
     """Execute provided SQL commands.
@@ -154,6 +250,7 @@ def __sql_execute__(
             | sqlite3.PARSE_DECLTYPES,  # pylint: disable=E1101
         )
         cur = con.cursor()
+        cur.execute("PRAGMA foreign_keys = ON")
         for cmd in script:
             if executemany:
                 cur.executemany(cmd, params)
@@ -167,23 +264,30 @@ def __sql_execute__(
         con.commit()
         return ans
     except sqlite3.IntegrityError as err:  # pylint: disable=E1101
-        raise SqlExecuteError(err, cmd) from err
+        con.rollback()  # type: ignore
+        raise SqlExecuteError(err=err, cmd=cmd, params=params) from err
     except sqlite3.Error as err:  # pylint: disable=E1101
-        raise SqlExecuteError(err, cmd) from err
+        raise SqlExecuteError(err=err, cmd=cmd, params=params) from err
     finally:
         cur.close()  # type: ignore
         con.close()  # type: ignore
 
 
-def __tab_cmd__(tab: str, col_def: Dict) -> str:
+def __create_tab_cmd__(tab: str) -> str:
     """
     craft sql command to create table
     """
+    try:
+        sql_scheme = read_json_dict(SQL_SCHEME)
+    except ReadJsonError as err:
+        print(err)
+        raise SqlCreateError(SQL_SCHEME) from err
+    col_def = sql_scheme[tab]
     tab_cmd = f"CREATE TABLE {tab} ("
-    for col in col_def:  # fmt: off
-        if col not in SQL_KEYWORDS:  # fmt: on
+    for col in col_def:
+        if col not in SQL_KEYWORDS:
             tab_cmd += f"{col} {col_def[col]}, "
-        elif col == "FOREIGN":  # FOREIGN
+        elif col == "FOREIGN":
             for foreign in col_def[col]:
                 k, v = list(foreign.items())[0]
                 # sqlite do not complain on missing foreign table
@@ -195,10 +299,57 @@ def __tab_cmd__(tab: str, col_def: Dict) -> str:
                     msg.msg(str(err))
                     raise SqlCreateError(SQL_SCHEME) from err
 
-                tab_cmd += f"FOREIGN KEY({k}) REFERENCES {v}, "
+                # foreign check will fail when REPLACEin table, which is defauly
+                # so db is created with foeign keys INITIALY DEFERRED
+                # in this case the integrity fails only at commit only
+                tab_cmd += f"FOREIGN KEY({k}) REFERENCES {v} "
+                tab_cmd += "DEFERRABLE INITIALLY DEFERRED, "
     tab_cmd = re.sub(",[^,]*$", "", tab_cmd)  # remove last comma
     tab_cmd += ") "
     return tab_cmd
+
+
+def __add_unique__(tab: Union[str, None] = None) -> None:
+    """create UNIQUE index for tables, or selected table if given
+    Raises:
+        SqlCreateError
+    """
+
+    try:
+        sql_scheme = read_json_dict(SQL_SCHEME)
+    except ReadJsonError as err:
+        print(err)
+        raise SqlCreateError(SQL_SCHEME) from err
+    cmd = []
+    if not tab:
+        tabs = sql_scheme.keys()
+    else:
+        tabs = [tab]
+    for t in tabs:
+        # get uniqe cols from sql_scheme
+        if "UNIQUE" in sql_scheme[t].keys():
+            unique_cols = sql_scheme[t]["UNIQUE"]
+        else:
+            continue
+        unique_cols = str(unique_cols)
+        # replace square brackets with parenthesis
+        unique_cols = re.sub(r"\[", r"(", unique_cols)
+        unique_cols = re.sub(r"\]", r")", unique_cols)
+        if unique_cols:
+            cmd.append(f"CREATE UNIQUE INDEX uniqueRow_{t} ON {t} {unique_cols}")
+    if cmd:
+        __cmd_execute__(cmd)
+
+
+def __defer_foreign__(tab: str) -> None:
+    """defer foraign key in existing table"""
+    if tab not in __list_tables__():
+        raise SqlTabError(tab=tab, tabs=__list_tables__())
+    cmd = [f"ALTER TABLE {tab} RENAME TO {tab}_old"]
+    cmd.append(__create_tab_cmd__(tab=tab))
+    cmd.append(f"INSERT INTO {tab} SELECT * FROM {tab}_old")
+    cmd.append(f"DROP TABLE {tab}_old")
+    __cmd_execute__(cmd)
 
 
 def __check_scheme__(tab: str, col_def: Dict) -> None:
@@ -234,7 +385,7 @@ def __escape_quote__(txt: list[str]) -> list[str]:
     return [re.sub(r"'", r"''", str(txt)) for txt in txt if txt is not None]
 
 
-def __sql_audit__(tab: str) -> None:
+def __audit__(tab: str) -> None:
     """add loging tables to sql"""
     db = sqlite3.connect(  # pylint: disable=E1101
         DB_FILE,

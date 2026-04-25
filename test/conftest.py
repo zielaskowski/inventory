@@ -50,7 +50,7 @@ def db_setup_fixture(tmpdir, monkeypatch, cli):
     importlib.reload(transaction)
     importlib.reload(message)
     # 5. Initialize the database, which will now use the correct temp paths
-    sql.sql_check()
+    sql.check()
 
 
 @pytest.fixture(name="find_file_fix")

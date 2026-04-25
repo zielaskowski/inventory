@@ -1,6 +1,6 @@
 """Error classes"""
 
-from typing import KeysView
+from typing import Any, KeysView, List, Sequence, Union
 
 import pandas as pd
 
@@ -46,7 +46,12 @@ class PrepareTabError(Exception):
 class SqlTabError(Exception):
     """exception class"""
 
-    def __init__(self, tab: str, tabs: KeysView[str], *args: object) -> None:
+    def __init__(
+        self,
+        tab: str,
+        tabs: Union[KeysView[str], List[str]],
+        *args: object,
+    ) -> None:
         self.message = f"Table '{tab}' is missing or corrupted.\n"
         self.message += f"Available tables are {str(tabs)}"
         super().__init__(*args)
@@ -85,7 +90,14 @@ class CheckDirError(Exception):
 class SqlCheckError(Exception):
     """exception class"""
 
-    def __init__(self, db_file: str, tab: str, *args: object) -> None:
+    def __init__(
+        self,
+        db_file: str,
+        tab: str,
+        *args: object,
+        foreign=False,
+        unique=False,
+    ) -> None:
         self.message = (
             "Wrong DB scheme in file '"
             + db_file
@@ -94,10 +106,18 @@ class SqlCheckError(Exception):
             + tab
             + "'."
         )
-        if tab in ["MANUFACTURER", "ALTERNATIVE_MANUFACTURER", "audite", "LOG"]:
+        if (
+            tab in ["MANUFACTURER", "ALTERNATIVE_MANUFACTURER", "audite", "LOG"]
+            or foreign
+            or unique
+        ):
             self.message += (
                 "\nConsider upgrading DB file with 'inv admin --sql_upgrade'"
             )
+        if foreign:
+            self.message += " FOREIGN key not DEFERRED."
+        if unique:
+            self.message += " UNIQUE key not defined."
         super().__init__(*args)
 
     def __str__(self) -> str:
@@ -185,10 +205,18 @@ class SqlSchemeError(Exception):
 class SqlExecuteError(Exception):
     """exception class"""
 
-    def __init__(self, err: object, cmd: str, *args: object) -> None:
+    def __init__(
+        self,
+        err: object,
+        cmd: str,
+        *args: object,
+        params: Sequence[str | tuple[Any, ...] | list[str]] | None = None,
+    ) -> None:
         self.message = str(err) + " on cmd:\n" + cmd[0:100]
         if len(cmd) > 100:
             self.message += "[...]"
+        if params is not None and params != []:
+            self.message += f" with params: {params}"
         super().__init__(*args)
 
     def __str__(self) -> str:

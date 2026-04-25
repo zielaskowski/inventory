@@ -8,7 +8,7 @@ from argparse import Namespace
 
 import pandas as pd
 
-from app import sql
+from app import sql, sql_core
 from app.common import (
     backup_config,
     create_loc_config,
@@ -17,7 +17,6 @@ from app.common import (
     read_json_list,
     restore_config,
     str_to_date_backup,
-    str_to_date_log,
     tab_cols,
     write_json,
 )
@@ -68,7 +67,7 @@ def admin(args: Namespace) -> None:
     if args.remove_project:
         remove_project(args)
     if args.sql_upgrade:
-        sql_upgrade()
+        upgrade()
     if args.import_manufacturers:
         import_manufacturers(file=args.import_manufacturers)
     if args.export_manufacturers:
@@ -81,13 +80,30 @@ def admin(args: Namespace) -> None:
         select_log_undo(args.undo)
 
 
+def upgrade() -> None:
+    """
+    upgade sql db to latest standard
+    """
+    backup_config()
+    try:
+        sql.sql_upgrade()
+        import_manufacturers(MAN_ALT)
+    except SqlCreateError as err:
+        restore_config()
+        print(err)
+        sys.exit(1)
+
+
 def select_log_undo(n: int):
     """undo commands
     from log selected to last one
     """
     logs = sql.log.log_read(n)
+    if logs.empty:
+        msg.msg("nothing to undo.")
+        sys.exit(1)
     log_no = msg.select_log(logs)
-    undo_date = str_to_date_log(logs.loc[log_no, LOG_DATE])
+    undo_date = logs.loc[log_no, LOG_DATE]
     sql.undo(undo_date)
 
 
@@ -116,42 +132,11 @@ def import_manufacturers(file: str):
     """import manufacturers from json to sql"""
     try:
         alt_exist = read_json_list(file)
-        sql.store_man_alternatives(alt_exist)
+        sql.write_man_alternatives(alt_exist)
         msg.msg(f"imported manufacturer alternatives from '{file}'")
     except (ReadJsonError, SqlCreateError) as e:
         msg.msg(str(e))
         msg.msg("skipping importing manufacturers")
-
-
-def sql_upgrade() -> None:
-    """
-    add sql auditing
-    add manufacters table and try to import from manufacturer_alternatives.json
-    """
-    missing_tabs = [
-        t
-        for t in [
-            "MANUFACTURER",
-            "ALTERNATIVE_MANUFACTURER",
-            "LOG",
-            "audite_changefeed",
-        ]
-        if t not in sql.sql_tables()
-    ]
-    if missing_tabs == []:
-        msg.msg("sql DB already in latest version")
-        sys.exit(1)
-    backup_config()
-    try:
-        for t in missing_tabs:
-            sql.sql_create(t)
-        if "MANUFACTURER" in missing_tabs:
-            import_manufacturers(MAN_ALT)
-    except SqlCreateError as err:
-        restore_config()
-        print(err)
-        sys.exit(1)
-    msg.sql_upgrade()
 
 
 def remove_project(args: Namespace) -> None:

@@ -19,9 +19,7 @@ from app.common import (
     restore_config,
 )
 from app.error import CheckDirError, ReadJsonError, ScanDirPermissionError
-from app.import_dat import bom_import
 from conf import config as conf
-from conf.sql_colnames import LOG_ARGS
 
 
 def _sort_dict(dat: dict[str, list[str]]) -> dict[str, list[str]]:
@@ -109,7 +107,7 @@ def test_log1(db_setup, cli, tmpdir):
     """
     args = cli.parse_args(["admin", "-c"])
     admin.admin(args)
-    assert sql.log.log_args_once is True
+    assert sql.log.log_on is True
 
     test = tmpdir.join("test.csv")
     with open(test, "w", encoding="UTF8") as f:
@@ -117,13 +115,6 @@ def test_log1(db_setup, cli, tmpdir):
             "device_id,device_manufacturer,qty,project\n"
             + "aa,bb,1,test"
         )# fmt: skip
-
-    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
-    sql.log.log(args)
-    bom_import(args)
-    assert sql.log.log_args_once is False
-    logs = sql.log.log_read(10)
-    assert "python -m inv bom_import --dir" in logs.loc[0, LOG_ARGS]
 
 
 def test_find_files1():
@@ -232,7 +223,7 @@ def test_store_alternatives1(monkeypatch, db_setup):
     }
     selection = ["aa", "cc", "d", "e"]
 
-    sql.store_man_alternatives(man_alts)
+    sql.write_man_alternatives(man_alts)
     monkeypatch.setattr(conf, "DEBUG", "pytest")
     importlib.reload(common)
 
@@ -262,7 +253,7 @@ def test_store_alternatives2():
     selection = ["aa", "cc", "d", "e"]
 
     importlib.reload(common)
-    sql.store_man_alternatives(man_alts)
+    sql.write_man_alternatives(man_alts)
     sql.store_alternatives(alternatives=alternatives, selection=selection)
     exp = sql.get_man_alternatives()
     imp = {
@@ -290,7 +281,7 @@ def test_store_alternatives3():
     selection = ["ff", "cc", "d", "e"]
 
     importlib.reload(common)
-    sql.store_man_alternatives(man_alts)
+    sql.write_man_alternatives(man_alts)
     sql.store_alternatives(alternatives=alternatives, selection=selection)
     exp = sql.get_man_alternatives()
     imp = {

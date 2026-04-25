@@ -17,7 +17,7 @@ from app.common import (
 from app.error import SqlCheckError, SqlCreateError
 from app.import_dat import bom_import, shop_import, stock_import
 from app.message import msg
-from app.sql import log, sql_check
+from app.sql import check, log
 from app.transaction import trans
 from conf import config as conf
 
@@ -517,16 +517,7 @@ def cli_parser() -> AbbreviationParser:
         inside 'bom|BOM' folder. Can be changed in config.py. Each imported file 
         will be treated as project. You can combine multiple project and export to
         file suitable for importing into shop cart. There is also a function to 
-        import cart
-        import If
-        import import
-        import many
-        import prices.
-        import shop
-        import Shoping
-        import shops
-        import with
-        import you
+        import Shoping cart with prices. If you import shop cart from many shops,
         BOM can export separate file for each shop considering best cost combination.
         Finaly, you can commit the selected projects, which will store the
         devices in the STOCK table.
@@ -570,9 +561,10 @@ if __name__ == "__main__":
 
     # check if we have proper sql file
     # but skip to allow upgrading
-    if not getattr(args, "sql_upgrade", False):
+    args_skip = [getattr(args, a, False) for a in ["sql_upgrade", "restore_config"]]
+    if not any(args_skip):
         try:
-            sql_check()
+            check()
         except SqlCheckError as e:
             msg.msg(str(e))
             sys.exit(1)
@@ -584,6 +576,7 @@ if __name__ == "__main__":
         last_backup = str_to_date_backup(list_backups()[-1])
         diff = datetime.now() - last_backup
         if diff.days > conf.BACKUP_FREQ:
+            msg.msg(f"Last backup {last_backup.strftime('%Y-%b-%d')}. Backuping...")
             backup_config()
 
     if "func" in args:

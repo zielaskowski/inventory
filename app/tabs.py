@@ -601,7 +601,7 @@ def vimdiff_selection(  # pylint: disable=too-many-positional-arguments,too-many
 ) -> list[str]:
     """
     present alternatives in vimdiff
-    input is dict, wher key is column_name and values are to be displayed
+    input is dict, where key is column_name and values are to be displayed
     column_name is also used to name the file where values are written and then displayed by vimdiff
     """
     cols = []

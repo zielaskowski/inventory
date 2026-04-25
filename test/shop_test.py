@@ -7,7 +7,7 @@ import pytest
 
 from app.common import DEV_MAN
 from app.import_dat import shop_import
-from app.sql import getDF, put, sql_check
+from app.sql import check, getDF, put
 from app.tabs import align_manufacturers, columns_align, foreign_tabs, prepare_tab
 from inv import cli_parser
 

@@ -84,40 +84,12 @@ def restore_config(idx=-1) -> None:
     msg.msg(f"Backup files restored: {config_files}")
 
 
-def str_to_date_log(logi: str) -> datetime:
+def int_to_date_log(logi_date: int) -> str:
     """convert log date to string
-    date in format %Y-%b-%d %h:%M:%s
+    from format %s to %Y-%b-%d %H:%M:%S
     """
-    pattern = re.compile(
-        r"""
-                         ^
-                         (?P<year>\d{4})-
-                         (?P<month>\d{2})-
-                         (?P<day>\d{2})\s
-                         (?P<hour>\d{2}):
-                         (?P<minute>\d{2}):
-                         (?P<sec>\d{2})
-                         $
-                         """,
-        re.VERBOSE,
-    )
-    match = pattern.match(logi)
-    if not match:
-        return datetime.now()
-    date_yr = int(match["year"])
-    date_month = int(match["month"])
-    date_day = int(match["day"])
-    time_hrs = int(match["hour"])
-    time_min = int(match["minute"])
-    time_sec = int(match["sec"])
-    return datetime(
-        date_yr,
-        date_month,
-        date_day,
-        time_hrs,
-        time_min,
-        time_sec,
-    )
+    logi_dt = datetime.fromtimestamp(logi_date)
+    return logi_dt.strftime("%Y-%b-%d %H:%M:%S")
 
 
 def str_to_date_backup(date: str) -> datetime:

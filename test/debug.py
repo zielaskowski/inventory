@@ -4,15 +4,15 @@ import os
 
 from app.admin import align
 from app.bom import bom_import
-from app.sql import sql_check
 from app.common import conf
+from app.sql import check
 from inv import cli_parser
 
 #####DEBUG
 os.remove(conf.DB_FILE)
 conf.DEBUG = "debugpy"
 conf.SCAN_DIR = ""
-sql_check()
+check()
 with open("/tmp/bom1.csv", "w", encoding="UTF8") as f:
     f.write(
         "device_id,device_manufacturer,qty,device_description,project,dev_category1,dev_category2,package\n"

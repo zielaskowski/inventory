@@ -8,7 +8,7 @@ from argparse import Namespace
 
 import pandas as pd
 
-from app import sql, sql_core
+from app import sql
 from app.common import (
     backup_config,
     create_loc_config,

@@ -275,7 +275,7 @@ def columns_align(n_stock: pd.DataFrame, file: str, args: Namespace) -> pd.DataF
         try:
             n_stock = n_stock.astype(exist_col_dtypes)
         except ValueError as e:
-            msg.msg(e.__str__())
+            msg.msg(str(e))
             sys.exit(1)
 
     # Strip whitespace from all string elements in the DataFrame

@@ -25,6 +25,12 @@ from app.error import (
 from app.message import msg
 from conf.config import *  # pylint: disable=unused-wildcard-import,wildcard-import
 
+try:
+    sql_scheme = read_json_dict(SQL_SCHEME)
+except ReadJsonError as err:
+    print(err)
+    sys.exit(1)
+
 
 def __list_tables__() -> List:
     """
@@ -277,11 +283,6 @@ def __create_tab_cmd__(tab: str) -> str:
     """
     craft sql command to create table
     """
-    try:
-        sql_scheme = read_json_dict(SQL_SCHEME)
-    except ReadJsonError as err:
-        print(err)
-        raise SqlCreateError(SQL_SCHEME) from err
     col_def = sql_scheme[tab]
     tab_cmd = f"CREATE TABLE {tab} ("
     for col in col_def:
@@ -314,12 +315,6 @@ def __add_unique__(tab: Union[str, None] = None) -> None:
     Raises:
         SqlCreateError
     """
-
-    try:
-        sql_scheme = read_json_dict(SQL_SCHEME)
-    except ReadJsonError as err:
-        print(err)
-        raise SqlCreateError(SQL_SCHEME) from err
     cmd = []
     if not tab:
         tabs = sql_scheme.keys()

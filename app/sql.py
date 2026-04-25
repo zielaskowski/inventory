@@ -5,10 +5,8 @@ DB structure is described in ./conf/sql_scheme.json
 
 import json
 import os
-import re
 from argparse import Namespace
 from datetime import datetime
-from enum import unique
 from typing import Dict, List, Set
 
 import pandas as pd
@@ -16,7 +14,6 @@ import pandas as pd
 from app import sql_core as sql
 from app.common import (
     int_to_date_log,
-    read_json_dict,
     tab_exists_scheme,
     unpack_foreign,
 )
@@ -124,7 +121,6 @@ def sql_upgrade() -> None:
     add LOG table
     add UNIQE key to STOCK table
     """
-    sql_scheme = read_json_dict(SQL_SCHEME)
     missing_tabs = [
         t
         for t in [
@@ -162,7 +158,7 @@ def sql_upgrade() -> None:
     # anyway better to rebuild all
     for t in [
         t
-        for t in sql_scheme.keys()
+        for t in sql.sql_scheme.keys()
         if t not in SQL_KEYWORDS and t in sql.__list_tables__()
     ]:
         sql.__audit__(t)
@@ -331,7 +327,6 @@ def put(dat: pd.DataFrame, tab: str, on_conflict: dict | None = None) -> Dict:
     """
     log.log_write()
     tab_exists_scheme(tab)
-    sql_scheme = read_json_dict(SQL_SCHEME)
 
     if dat.empty:
         return {}
@@ -342,7 +337,7 @@ def put(dat: pd.DataFrame, tab: str, on_conflict: dict | None = None) -> Dict:
     # define action on conflict
     # on_conflict is a list of dictionary defined in sql_scheme.jsonc
     if on_conflict is None:
-        on_conflict = sql_scheme[tab].get("ON_CONFLICT", {})
+        on_conflict = sql.sql_scheme[tab].get("ON_CONFLICT", {})
     # add new data to sql
     sql_columns = tab_columns(tab)
     # take only columns applicable to table
@@ -411,11 +406,10 @@ def getDF_other_tabs(  # pylint: disable=invalid-name
 def rm_all_tabs(hash_list: list[str]) -> None:
     """remove from all tabs per hash list"""
     log.log_write()
-    sql_schem = read_json_dict(SQL_SCHEME)
-    tabs = list(sql_schem.keys())
+    tabs = list(sql.sql_scheme.keys())
     tab_hash = []
     for t in tabs:
-        th, _, _ = unpack_foreign(sql_schem[t].get("FOREIGN"))
+        th, _, _ = unpack_foreign(sql.sql_scheme[t].get("FOREIGN"))
         tab_hash.append(th)
     for table, hash_col in {
         "BOM": BOM_HASH,
@@ -546,8 +540,6 @@ def get(  # pylint: disable=too-many-branches
         search = norm_to_list_str(search)
         search = sql.__escape_quote__(search)
 
-    sql_scheme = read_json_dict(SQL_SCHEME)
-
     fk = sql.__table_foreign_keys__(tab)
     if fk.empty:
         # if "FOREIGN" not in sql_scheme[tab].keys():
@@ -558,7 +550,7 @@ def get(  # pylint: disable=too-many-branches
         base_tab = getDF(tab=tab)
         if base_tab.empty:
             return {"": pd.DataFrame()}
-        for f in sql_scheme[tab].get("FOREIGN", []):
+        for f in sql.sql_scheme[tab].get("FOREIGN", []):
             col, f_tab, f_col = unpack_foreign(f)
             f_df = getDF(tab=f_tab)
             base_tab = base_tab.merge(f_df, left_on=col, right_on=f_col)
@@ -661,15 +653,14 @@ def check() -> None:
         msg.sql_file_miss(DB_FILE)
         create()
 
-    sql_scheme = read_json_dict(SQL_SCHEME)
-    for tab in sql_scheme.keys():
-        scheme_cols = [k for k in sql_scheme[tab].keys() if k not in SQL_KEYWORDS]
+    for tab in sql.sql_scheme.keys():
+        scheme_cols = [k for k in sql.sql_scheme[tab].keys() if k not in SQL_KEYWORDS]
         # check if correct tables in sql
         if not any(c in tab_columns(tab) for c in scheme_cols):
             raise SqlCheckError(DB_FILE, tab)
         # check if correct foreign keys
         from_sql_scheme = [str(c) for c in tab_foreign(tab)]
-        from_json_scheme = [str(c) for c in sql_scheme[tab].get("FOREIGN", [])]
+        from_json_scheme = [str(c) for c in sql.sql_scheme[tab].get("FOREIGN", [])]
         if sorted(from_sql_scheme) != sorted(from_json_scheme):
             raise SqlCheckError(DB_FILE, tab)
         # check if foreign keys DEFERRED
@@ -698,19 +689,15 @@ def create(one_tab="") -> None:  # pylint: disable=too-many-branches
     if not os.path.isdir(path):
         raise CheckDirError(directory=path)
 
-    try:
-        sql_scheme = read_json_dict(SQL_SCHEME)
-    except ReadJsonError as err:
-        print(err)
-        raise SqlCreateError(SQL_SCHEME) from err
-
     # create tables query for db
     sql_cmd = []
     if one_tab:
-        sql_scheme = {one_tab: sql_scheme[one_tab]}
-    for tab in sql_scheme:
+        scheme = {one_tab: sql.sql_scheme[one_tab]}
+    else:
+        scheme = sql.sql_scheme
+    for tab in scheme:
         try:
-            sql.__check_scheme__(tab=tab, col_def=sql_scheme[tab])
+            sql.__check_scheme__(tab=tab, col_def=scheme[tab])
         except SqlSchemeError as err:
             print(err)
             raise SqlCreateError(SQL_SCHEME) from err
@@ -734,10 +721,10 @@ def create(one_tab="") -> None:  # pylint: disable=too-many-branches
 
     # check if all tables created
     all_tables = sql.__list_tables__()
-    if not all(k in all_tables for k in sql_scheme.keys()):
+    if not all(k in all_tables for k in scheme.keys()):
         if os.path.isfile(DB_FILE):
             os.remove(DB_FILE)
         raise SqlCreateError(SQL_SCHEME)
     # add auditing all changes on all tables
-    for tab in sql_scheme:
+    for tab in scheme:
         sql.__audit__(tab=tab)

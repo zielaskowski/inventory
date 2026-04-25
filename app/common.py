@@ -12,7 +12,7 @@ import shutil
 import sys
 from datetime import datetime
 from json import JSONDecodeError
-from typing import Dict, List
+from typing import Dict
 
 from jinja2 import Template
 

@@ -74,7 +74,7 @@ def _add_bom_import_parser(command_parser):
         nargs="+",
         type=str,
         help="""Show columns during export (overwrite default columns).
-                See --import for columns description.""",
+                See --info for columns description.""",
         default=None,
     )
     cli_import_bom.add_argument(
@@ -395,8 +395,9 @@ def _add_admin_parser(command_parser):
         const=9,
         nargs="?",
         metavar="n",
-        help="""Undo last commands. Will ask for selection how far into hostory undo (default=9). You can provide
-        how many last commands to present for selection""",
+        help="""
+        Undo last commands. Will ask for selection how far into hostory undo (default=9).
+        You can provide how many last commands to present for selection""",
     )
     admin_group.add_argument(
         "--sql_upgrade",
@@ -432,7 +433,7 @@ def _add_admin_parser(command_parser):
         "--import_manufacturers",
         metavar="json_file",
         help="""Import alternative manufacturers from json file.
-                File content shall be Dictionary wit List as values, like this: 
+                File content shall be Dictionary with List as values, like this: 
                 {manufacturer:[alternative_manufacturer1,alternative_manufacturer2]}
                 Keeps what already exists.""",
     )

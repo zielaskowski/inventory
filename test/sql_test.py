@@ -33,59 +33,6 @@ def test_sql_create2(monkeypatch):
     assert err_info.match(".test")
 
 
-def test_sql_create3(monkeypatch):
-    """missing json"""
-    db_file = "./test/db_test.sql"
-    sql_json = "./test/sql.json"
-    monkeypatch.setattr(conf, "DB_FILE", db_file)
-    monkeypatch.setattr(conf, "SQL_SCHEME", sql_json)
-    monkeypatch.setattr(conf, "LOG_FILE", "")
-    importlib.reload(sql)
-    with pytest.raises(SqlCreateError) as err_info:
-        create()
-    assert err_info.match(sql_json)
-
-
-def test_sql_create4(monkeypatch, tmpdir):
-    """mising TABLE name - expecting dict"""
-    json_txt = """
-    //** test
-    {
-    "key":"value",
-    "key2":"value"
-     }
-    """
-    jfile = tmpdir.join("json.txt")
-    jfile.write(json_txt)
-    monkeypatch.setattr(conf, "DB_FILE", tmpdir + "db.sql")
-    monkeypatch.setattr(conf, "SQL_SCHEME", jfile)
-    monkeypatch.setattr(conf, "LOG_FILE", "")
-    importlib.reload(sql)
-    with pytest.raises(SqlCreateError) as err_info:
-        create()
-    assert err_info.match(jfile.strpath)
-
-
-def test_sql_create5(monkeypatch, tmpdir):
-    """misspell sql keyword"""
-    json_txt = """
-    //** test
-    "TAB":{
-    "key":"value",
-    "key2":"value"
-     }
-    """
-    jfile = tmpdir.join("json.txt")
-    jfile.write(json_txt)
-    monkeypatch.setattr(conf, "DB_FILE", tmpdir + "db.sql")
-    monkeypatch.setattr(conf, "SQL_SCHEME", jfile)
-    monkeypatch.setattr(conf, "LOG_FILE", "")
-    importlib.reload(sql)
-    with pytest.raises(SqlCreateError) as err_info:
-        create()
-    assert err_info.match(jfile.basename)
-
-
 def test_sql_check1(monkeypatch, tmpdir):
     """change in FOREIGN"""
     json_txt = {
@@ -109,6 +56,7 @@ def test_sql_check1(monkeypatch, tmpdir):
     monkeypatch.setattr(conf, "DB_FILE", tmpdir.strpath + "db.sql")
     monkeypatch.setattr(conf, "SQL_SCHEME", jfile)
     monkeypatch.setattr(conf, "LOG_FILE", "")
+    monkeypatch.setattr(sql_core, "sql_scheme", common.read_json_dict(conf.SQL_SCHEME))
     importlib.reload(sql)
     importlib.reload(sql_core)
     importlib.reload(common)
@@ -148,6 +96,7 @@ def test_sql_check2(monkeypatch, tmpdir, capsys):
     monkeypatch.setattr(conf, "DB_FILE", tmpdir.strpath + "db.sql")
     monkeypatch.setattr(conf, "SQL_SCHEME", jfile)
     monkeypatch.setattr(conf, "LOG_FILE", "")
+    monkeypatch.setattr(sql_core, "sql_scheme", common.read_json_dict(conf.SQL_SCHEME))
     importlib.reload(sql)
     importlib.reload(common)
     with pytest.raises(SqlCreateError):
@@ -176,6 +125,7 @@ def test_sql_check3(monkeypatch, tmpdir, capsys):
     monkeypatch.setattr(conf, "DB_FILE", tmpdir.strpath + "db.sql")
     monkeypatch.setattr(conf, "SQL_SCHEME", jfile)
     monkeypatch.setattr(conf, "LOG_FILE", "")
+    monkeypatch.setattr(sql_core, "sql_scheme", common.read_json_dict(conf.SQL_SCHEME))
     importlib.reload(sql)
     importlib.reload(common)
     with pytest.raises(SqlCreateError):
@@ -207,6 +157,7 @@ def test_sql_check4(monkeypatch, tmpdir, capsys):
     monkeypatch.setattr(conf, "DB_FILE", tmpdir.strpath + "db.sql")
     monkeypatch.setattr(conf, "SQL_SCHEME", jfile)
     monkeypatch.setattr(conf, "LOG_FILE", "")
+    monkeypatch.setattr(sql_core, "sql_scheme", common.read_json_dict(conf.SQL_SCHEME))
     importlib.reload(sql)
     importlib.reload(common)
     with pytest.raises(SqlCreateError):
@@ -239,6 +190,7 @@ def test_sql_check5(monkeypatch, tmpdir, capsys):
     monkeypatch.setattr(conf, "DB_FILE", tmpdir.strpath + "db.sql")
     monkeypatch.setattr(conf, "SQL_SCHEME", jfile)
     monkeypatch.setattr(conf, "LOG_FILE", "")
+    monkeypatch.setattr(sql_core, "sql_scheme", common.read_json_dict(conf.SQL_SCHEME))
     importlib.reload(sql)
     importlib.reload(common)
     with pytest.raises(SqlCreateError):

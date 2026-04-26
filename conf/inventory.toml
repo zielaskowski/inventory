@@ -1,10 +1,6 @@
 # database file location and name
 DB_FILE = "/home/mi/docs/prog/python/inventory/conf/inventory.sqlite"
 
-# log file location and name
-# set LOG_FILE = '' to turn off
-LOG_FILE = "/home/mi/docs/prog/python/inventory/conf/log.txt"
-
 # file with manufacturer alternative names
 # DEPRECIATED. manufacturers are stored in sql DB.
 # Used only for importing
@@ -50,3 +46,4 @@ STOCK_EXPORT_COL = [
   'DEV_CAT2',
 ]
 COL_WIDTH = { 'STOCK_QTY' = 4, 'DEV_ID' = 17, 'DEV_MAN' = 15, 'DEV_PACK' = 8, 'DEV_DESC' = 30, 'DEV_CAT1' = 25, 'DEV_CAT2' = 25, 'BOM_PROJECT' = 12, 'BOM_QTY' = 3, 'SHOP_ID' = 17 }
+LOG_FILE = "/home/mi/docs/prog/python/inventory/conf/log.txt"

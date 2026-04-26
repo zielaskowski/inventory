@@ -8,7 +8,7 @@ You can copy {{WHAT_DIFFER}} from right panel or leave as is.
 if you mess up, <ESC>u undo the changes ;)
 
 1. to select one or more lines press <SHIFT>v and arrows; press <ESC> to cancel selection
-2. press <SPACE>p to copy from right to left panel
+2. press <SPACE>p to copy from right to left panel (only in selection mode!)
 3. press 'i' for manual editing the text, then <ESC> back to normal mode
 4. press <ESC><Ctr>s when you are happy; or <ESC><Ctr>c to discard all changes and continue
 5. press <Shift>q to abort the process

@@ -35,6 +35,10 @@ from app.error import (
     SqlTabError,
     VimdiffSelError,
 )
+from app.manufacturers import (
+    get_alternatives,
+    store_alternatives,
+)
 from app.message import msg
 
 
@@ -65,7 +69,7 @@ def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:
         return
 
     # if we have stored alternatives, use it
-    dat.loc[:, conf.DEV_MAN], _ = sql.get_alternatives(dat[conf.DEV_MAN].to_list())
+    dat.loc[:, conf.DEV_MAN], _ = get_alternatives(dat[conf.DEV_MAN].to_list())
 
     # hash columns - must be last so all columns aligned and present
     dat = hash_tab(dat=dat)
@@ -159,7 +163,9 @@ def prepare_tab(
     missing_cols = [c for c in must_cols if c not in dat.columns]
     # if 'project' column is missing, take file name col, inform user
     if conf.BOM_PROJECT in missing_cols:
-        dat[conf.BOM_PROJECT] = dat[conf.BOM_FILE].apply(lambda cell: cell.split(".")[0])
+        dat[conf.BOM_PROJECT] = dat[conf.BOM_FILE].apply(
+            lambda cell: cell.split(".")[0]
+        )
         missing_cols = [c for c in missing_cols if c != conf.BOM_PROJECT]
         msg.project_as_filename()
     # must after 'project' column creation, otherway possibly missing
@@ -287,7 +293,9 @@ def columns_align(n_stock: pd.DataFrame, file: str, args: Namespace) -> pd.DataF
     n_stock[conf.BOM_FORMAT] = args.format
     n_stock[conf.SHOP_DATE] = date.today().strftime("%Y-%m-%d")
     if conf.SHOP_SHOP not in n_stock.columns:
-        n_stock[conf.SHOP_SHOP] = conf.import_format[args.format].get("shop", args.format)
+        n_stock[conf.SHOP_SHOP] = conf.import_format[args.format].get(
+            "shop", args.format
+        )
 
     return n_stock
 
@@ -319,7 +327,7 @@ def align_data(dat: pd.DataFrame, just_inform: bool = False) -> pd.DataFrame:
     if just_inform==True, just collect duplication and display, no action
     return dataframe with changed devices with aditional column 'dev_rm'
     with device hashes before change
-    raise KeyboardInterrupt when user abort
+    raise  VimdiffSelError when user abort or mess with vimdiff
     """
     align_dat = align_manufacturers(
         dat.copy(deep=True),
@@ -557,27 +565,21 @@ def align_manufacturers(  # pylint: disable=too-many-return-statements
             dat_dup.loc[r.Index, man_grp_col] = " | ".join(opts)
 
         if just_inform:
-            msg.inform_duplications(dup=dat_dup.loc[:, [conf.DEV_MAN, man_grp_col, conf.DEV_ID]])
+            msg.inform_duplications(
+                dup=dat_dup.loc[:, [conf.DEV_MAN, man_grp_col, conf.DEV_ID]]
+            )
             return dat
         # sort data on device_id, much easier to understand in vimdiff
         dat_dup.sort_values(by=conf.DEV_ID, inplace=True)
-        try:
-            chosen = vimdiff_selection(
-                ref_col={"devices": dat_dup.loc[:, conf.DEV_ID].to_list()},
-                change_col={conf.DEV_MAN: dat_dup.loc[:, conf.DEV_MAN].to_list()},
-                opt_col={man_grp_col: dat_dup.loc[:, man_grp_col].to_list()},
-                what_differ=conf.DEV_MAN,
-                dev_id="",
-                exit_on_change=True,
-                start_line=start_line,
-            )
-        except KeyboardInterrupt:
-            msg.msg("Interupted by user. Changes discarded.")
-            return pd.DataFrame()
-        except VimdiffSelError as err:
-            # user messed up with line numbers
-            print(str(err))
-            return pd.DataFrame()
+        chosen = vimdiff_selection(
+            ref_col={"devices": dat_dup.loc[:, conf.DEV_ID].to_list()},
+            change_col={conf.DEV_MAN: dat_dup.loc[:, conf.DEV_MAN].to_list()},
+            opt_col={man_grp_col: dat_dup.loc[:, man_grp_col].to_list()},
+            what_differ=conf.DEV_MAN,
+            dev_id="",
+            exit_on_change=True,
+            start_line=start_line,
+        )
         # if no change from user, finish
         if dat_dup[conf.DEV_MAN].to_list() == chosen:
             break
@@ -646,7 +648,9 @@ def vimdiff_selection(  # pylint: disable=too-many-positional-arguments,too-many
         with subprocess.Popen("konsole -e " + vim_cmd, shell=True) as p:
             p.wait()
 
-    with open(conf.TEMP_DIR + cols[change_k] + "_2.txt", mode="r", encoding="UTF8") as f:
+    with open(
+        conf.TEMP_DIR + cols[change_k] + "_2.txt", mode="r", encoding="UTF8"
+    ) as f:
         chosen = f.read().splitlines()
 
     # clean up files
@@ -654,7 +658,8 @@ def vimdiff_selection(  # pylint: disable=too-many-positional-arguments,too-many
         os.remove(conf.TEMP_DIR + cols[key] + "_" + str(key) + ".txt")
 
     if chosen == []:  # user interrupt
-        raise KeyboardInterrupt("Interupted by user. Changes discarded.")
+        raise VimdiffSelError(user_inerrupt=True)
+
     # remove line numbers
     chosen = [re.sub(r"^\d+\|\s*", "", c) for c in chosen]
     chosen = [c.strip() for c in chosen]
@@ -667,7 +672,7 @@ def vimdiff_selection(  # pylint: disable=too-many-positional-arguments,too-many
         raise VimdiffSelError(select=df, interact=conf.DEV_MAN != cols[change_k])
     # write matches selected by user, so next time save some time
     if conf.DEV_MAN == cols[change_k]:
-        sql.store_alternatives(
+        store_alternatives(
             alternatives={
                 cols[change_k]: cols[change_v],
                 cols[opt_k]: cols[opt_v],

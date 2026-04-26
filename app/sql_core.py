@@ -2,24 +2,28 @@
 not to be used directly, see sql.py for user functions
 """
 
+import os
 import re
 import sqlite3
 import sys
-from typing import Any, Dict, List, Sequence, Union
+from typing import Any, Dict, List, Sequence, Set, Union
 
 import pandas as pd
 from audite import track_changes
 
 import conf.config as conf
 from app.common import (
+    norm_to_list_str,
     read_json_dict,
     tab_exists_scheme,
     unpack_foreign,
 )
 from app.error import (
+    CheckDirError,
     ReadJsonError,
     SqlCreateError,
     SqlExecuteError,
+    SqlGetError,
     SqlGetOperationError,
     SqlSchemeError,
     SqlTabError,
@@ -33,6 +37,60 @@ except ReadJsonError as err:
     sys.exit(1)
 
 
+def __create__(one_tab="") -> None:  # pylint: disable=too-many-branches
+    """Creates sql query based on sql_scheme.json and send to db.
+    Perform check if created DB is aligned with scheme from sql.json file.
+    If one_tab!="" create only one tab. Raise SQL create error if tab exists
+    """
+    if os.path.isfile(conf.DB_FILE) and not one_tab:
+        # just in case the file exists
+        # when creating only one tab assumption is that we want to add to existing db
+        os.remove(conf.DB_FILE)
+    path = os.path.dirname(conf.DB_FILE)
+    if not os.path.isdir(path):
+        raise CheckDirError(directory=path)
+
+    # create tables query for db
+    sql_cmd = []
+    if one_tab:
+        scheme = {one_tab: sql_scheme[one_tab]}
+    else:
+        scheme = sql_scheme
+    for tab in scheme:
+        try:
+            __check_scheme__(tab=tab, col_def=scheme[tab])
+        except SqlSchemeError as err:
+            print(err)
+            raise SqlCreateError(conf.SQL_SCHEME) from err
+
+        sql_cmd.append(__create_tab_cmd__(tab))
+
+    # sort sql_cmd list (to make sure you refer to columns that already exists)
+    # elements containing "FOREIGN" put at end
+    sql_cmd.sort(key=lambda x: x.find("FOREIGN"))
+
+    try:
+        __cmd_execute__(sql_cmd)
+        if one_tab:
+            __add_unique__(tab=one_tab)
+        else:
+            __add_unique__()
+    except SqlExecuteError as err:
+        os.remove(conf.DB_FILE)
+        msg.msg(str(err))
+        raise SqlCreateError(conf.SQL_SCHEME) from err
+
+    # check if all tables created
+    all_tables = __list_tables__()
+    if not all(k in all_tables for k in scheme.keys()):
+        if os.path.isfile(conf.DB_FILE):
+            os.remove(conf.DB_FILE)
+        raise SqlCreateError(conf.SQL_SCHEME)
+    # add auditing all changes on all tables
+    for tab in scheme:
+        __audit__(tab=tab)
+
+
 def __list_tables__() -> List:
     """
     list all tables in sql db
@@ -44,6 +102,15 @@ def __list_tables__() -> List:
     except SqlExecuteError as err:
         msg.msg(str(err))
         return []
+
+
+def __tab_columns__(tab: str) -> set[str]:
+    """return list of columns for table"""
+    sql_cmd = f"pragma table_info({tab})"
+    resp = __cmd_execute__([sql_cmd])
+    if not resp or resp[sql_cmd].empty:
+        return set()
+    return set(resp[sql_cmd]["name"].to_list())
 
 
 def __sqlite_master__(name: str, pattern: Union[None, str] = None) -> str:
@@ -94,44 +161,20 @@ def __table_definition__(tab: str) -> dict:
     return {i["name"]: i["type"] for i in resp_dict}
 
 
-def __table_foreign_keys__(tab: str) -> pd.DataFrame:
-    """return a DataFrame with foreign keys:
-    id|seq|table|from|to|on_update|on_delete|match
-    Raises:
-        SqlTabError when table do not exists
-        SqlExecuteError
+def __tab_foreign__(tab: str) -> List[Dict[str, str]]:
+    """show FOREIGN keys for tab
+    return empty list if no foreign key
     """
-    if tab not in __list_tables__():
-        raise SqlTabError(tab=tab, tabs=__list_tables__())
-    cmd = f"PRAGMA foreign_key_list({tab})"
-    resp = __cmd_execute__([cmd])
-    return resp[cmd]
-
-
-def __update_set__(tab: str, add_cols: Union[str, None]) -> str:
-    """create ON_CONFLICT UPDATE_SET cmd"""
-    cols = __table_definition__(tab=tab)
-    unique_col = __sqlite_master__(
-        name=f"uniqueRow_{tab}",
-        pattern=r"\(.*\)$",
-    )
-    if not unique_col:
-        msg.msg(f"Missing UNIQUE cols for ON CONFLICT directive for table '{tab}'")
-        sys.exit(1)
-    # unique cols in ON CONFLICT should not have quotes
-    unique_col = unique_col.replace("'", "")
-
-    if add_cols:
-        update_cols = ",".join([f"{c} = {c} + EXCLUDED.{c}" for c in add_cols])
-    else:  # replace all columns except primary
-        update_cols = ",".join(
-            [f"{c} = EXCLUDED.{c}" for c, v in cols.items() if "PRIMARY" not in v]
-        )
-
-    cmd = f"""ON CONFLICT {unique_col}
-              DO UPDATE SET {update_cols}
-           """
-    return cmd
+    sql_cmd = f"pragma foreign_key_list({tab})"
+    resp = __cmd_execute__([sql_cmd])
+    if not resp or resp[sql_cmd].empty:
+        return []
+    foreign_tab = []
+    for _, r in resp[sql_cmd].iterrows():
+        key = {}
+        key[r["from"]] = r["table"] + "(" + r["to"] + ")"
+        foreign_tab.append(key)
+    return foreign_tab
 
 
 def __write_table__(
@@ -214,6 +257,89 @@ def __get_tab__(
             cmd = f"SELECT {','.join(get_col)} FROM {tab} WHERE {c} {oper} ({placeholders})"
         if resp_col := __cmd_execute__([cmd], search):
             resp[c] = resp_col[cmd].drop_duplicates()
+    return resp
+
+
+def __get__(  # pylint: disable=R0917, R0913, R0914, R0912
+    tab: str,
+    get_col: List[str] | Set[str] | pd.Series | None = None,
+    search: List[str] | List[int] | List[bool] | pd.Series | None = None,
+    where: List[str] | Set[str] | pd.Series | None = None,
+    follow: bool = False,
+    oper="IN",
+) -> Dict[str, pd.DataFrame]:
+    """get info from table
+    return as Dict:
+    - each key for column searched,
+    - value as DataFrame with columns selected by get
+    return only unique values
+
+    Args:
+        tab: table to search
+        get_col: column name to extract (default None for all columns)
+        search: what to get (default None for everything)
+        where: columns used for searching (default None for everything)
+        follow: if True, search in all FOREIGN sub-tables
+    Raises:
+        SqlExecuteError
+        SqlGetError
+        SqlGetOperationError
+    """
+    # check if tab exists!
+    # tab_exists_scheme(tab)
+    if tab not in __list_tables__():
+        raise SqlTabError(tab=tab, tabs=__list_tables__())
+    # assign values if default
+    all_cols = __tab_columns__(tab)
+    # normalize input to list
+    if where is None:
+        where = all_cols
+    else:
+        where = set(norm_to_list_str(where))
+    if get_col is None:
+        get_col = all_cols
+    else:
+        get_col = set(norm_to_list_str(get_col))
+    if search is not None:
+        search = norm_to_list_str(search)
+        search = __escape_quote__(search)
+
+    if not __tab_foreign__(tab):
+        # if "FOREIGN" not in sql_scheme[tab].keys():
+        follow = False
+
+    if follow:
+        # get tab DF and all that follow
+        resp = __get__(tab=tab)
+        base_tab = list(resp.values())[0] if resp else pd.DataFrame()
+
+        if base_tab.empty:
+            return {"": pd.DataFrame()}
+        for f in sql_scheme[tab].get("FOREIGN", []):
+            col, f_tab, f_col = unpack_foreign(f)
+            resp = __get__(tab=f_tab)
+            f_df = list(resp.values())[0] if resp else pd.DataFrame()
+            base_tab = base_tab.merge(f_df, left_on=col, right_on=f_col)
+        # mock __get_tab__ response
+        # key for each column to search and value for DF
+        resp = {}
+        for w in where:
+            if search:
+                resp[w] = base_tab.loc[base_tab[w].isin(search), :]
+            else:
+                resp[w] = base_tab
+            if get_col != all_cols:
+                if any(c not in resp[w].columns for c in get_col):
+                    raise SqlGetError(get_col, resp[w].columns.to_list())
+                resp[w] = resp[w].loc[:, list(get_col)]
+
+    else:
+        if any(g not in all_cols for g in get_col):
+            raise SqlGetError(get_col, all_cols)
+        resp = __get_tab__(
+            tab=tab, get_col=get_col, search=search, where=where, oper=oper
+        )
+
     return resp
 
 
@@ -312,6 +438,32 @@ def __create_tab_cmd__(tab: str) -> str:
     return tab_cmd
 
 
+def __update_set__(tab: str, add_cols: Union[str, None]) -> str:
+    """create ON_CONFLICT UPDATE_SET cmd"""
+    cols = __table_definition__(tab=tab)
+    unique_col = __sqlite_master__(
+        name=f"uniqueRow_{tab}",
+        pattern=r"\(.*\)$",
+    )
+    if not unique_col:
+        msg.msg(f"Missing UNIQUE cols for ON CONFLICT directive for table '{tab}'")
+        sys.exit(1)
+    # unique cols in ON CONFLICT should not have quotes
+    unique_col = unique_col.replace("'", "")
+
+    if add_cols:
+        update_cols = ",".join([f"{c} = {c} + EXCLUDED.{c}" for c in add_cols])
+    else:  # replace all columns except primary
+        update_cols = ",".join(
+            [f"{c} = EXCLUDED.{c}" for c, v in cols.items() if "PRIMARY" not in v]
+        )
+
+    cmd = f"""ON CONFLICT {unique_col}
+              DO UPDATE SET {update_cols}
+           """
+    return cmd
+
+
 def __add_unique__(tab: Union[str, None] = None) -> None:
     """create UNIQUE index for tables, or selected table if given
     Raises:
@@ -349,7 +501,7 @@ def __defer_foreign__(tab: str) -> None:
     __cmd_execute__(cmd)
 
 
-def __check_scheme__(tab: str, col_def: Dict) -> None:
+def __check_scheme__(tab: str, col_def: Dict) -> None:  # pylint: disable=R0912
     """
     check correctness of sql scheme json file
     """

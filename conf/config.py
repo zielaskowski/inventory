@@ -100,14 +100,10 @@ def write_TOML(path: str):  # pylint: disable=invalid-name
     also make sure to write default vals if missing
     """
     base_conf = read_TOML(os.path.join(MODULE_PATH, "conf", TOML_FILE))
-    # modify dir in DB_FILE, LOG_FILE, MAN_ALT
+    # modify dir in DB_FILE, MAN_ALT
     base_conf["DB_FILE"] = replace_path(
         path,
         base_conf.get("DB_FILE", "inventory.sqlite"),
-    )
-    base_conf["LOG_FILE"] = replace_path(
-        path,
-        base_conf.get("LOG_FILE", "log.txt"),
     )
     base_conf["MAN_ALT"] = replace_path(
         path,
@@ -168,10 +164,6 @@ toml_def = read_TOML(os.path.join(MODULE_PATH, "conf", TOML_FILE))
 
 # database file location and name
 DB_FILE = str(toml_loc.get("DB_FILE", toml_def["DB_FILE"]))
-
-# log file location and name
-# set LOG_FILE = '' to turn off
-LOG_FILE = str(toml_loc.get("LOG_FILE", toml_def["LOG_FILE"]))
 
 # file with manufacturer alternative names
 MAN_ALT = str(toml_loc.get("MAN_ALT", toml_def["MAN_ALT"]))

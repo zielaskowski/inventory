@@ -549,13 +549,13 @@ def cli_parser() -> AbbreviationParser:
 
 
 if __name__ == "__main__":
-    # when dubuging with debugpy, it should be somwhere in path
+    # when debugging with debugpy, it should be somewhere in path
     # of one of the stack frame
     try:
         if "debugpy" in inspect.stack()[1].filename:
             conf.DEBUG = "debugpy"  # pyright: ignore
     except IndexError:
-        # normall call (no debug)
+        # normal call (no debug)
         pass
     parser = cli_parser()
     args = parser.parse_args()

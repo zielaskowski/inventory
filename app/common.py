@@ -12,8 +12,9 @@ import shutil
 import sys
 from datetime import datetime
 from json import JSONDecodeError
-from typing import Dict
+from typing import Dict, List, Set
 
+import pandas as pd
 from jinja2 import Template
 
 import conf.config as conf
@@ -60,7 +61,6 @@ def backup_config() -> None:
         in [
             conf.DB_FILE,
             os.path.join(conf.CONFIG_PATH, conf.TOML_FILE),
-            conf.LOG_FILE,
             conf.MAN_ALT,
         ]
     ]
@@ -209,23 +209,6 @@ def vimdiff_config(  # pylint: disable=too-many-arguments,too-many-positional-ar
         f.write(help_txt)
 
 
-def log_create() -> None:
-    """
-    remove old file and check if dir exists
-    create dir if possible
-    raises PermissionError
-    """
-    if conf.LOG_FILE == "":
-        return
-    path = os.path.dirname(conf.LOG_FILE)
-    if not os.path.exists(path):
-        os.makedirs(path)
-    if os.path.exists(conf.LOG_FILE):
-        os.remove(conf.LOG_FILE)
-    with open(conf.LOG_FILE, "w", encoding="UTF8") as f:
-        f.close()
-
-
 def write_json(file: str, content: dict[str, dict] | dict[str, list[str]]) -> None:
     """
     write content to a file in json format
@@ -341,35 +324,6 @@ def check_dir_file(args: argparse.Namespace) -> list[str]:
     return files
 
 
-def unpack_foreign(foreign: dict[str, str] | None | list) -> tuple[str, str, str]:
-    """
-    read foreign key from sql_scheme
-    expected input:
-        sql_scheme[tab].get('FOREIGN') -> list[dict] | None
-        for foreign in sql_scheme[tab].get('FOREIGN',[]) -> dict
-    tab without FOREIGN key will return None: mean DEVICE tab
-    returns col which is connected and destination table and column
-    """
-    # DEVICE is very special: do not have FOREIGN key
-    if foreign is None:
-        return "hash", "", ""
-    if isinstance(foreign, list):
-        foreign_dict = foreign[0]
-    else:
-        foreign_dict = foreign
-    col = list(foreign_dict.keys())[0]
-    # get foreign table and column
-    f_tab_col = list(foreign_dict.values())[0]
-
-    # get foreign_tab
-    (
-        f_tab,
-        f_col,
-    ) = f_tab_col.split("(")
-    f_col = f_col.replace(")", "")
-    return col, f_tab, f_col
-
-
 def tab_exists_scheme(tab: str) -> None:
     """
     check if tab exists
@@ -447,6 +401,53 @@ def foreign_tabs(tab: str) -> list[str]:
         _, f_tab, _ = unpack_foreign(k)
         tabs += [f_tab]
     return tabs
+
+
+def unpack_foreign(foreign: dict[str, str] | None | list) -> tuple[str, str, str]:
+    """
+    read foreign key from sql_scheme
+    expected input:
+        sql_scheme[tab].get('FOREIGN') -> list[dict] | None
+        for foreign in sql_scheme[tab].get('FOREIGN',[]) -> dict
+    tab without FOREIGN key will return None: mean DEVICE tab
+    returns col which is connected and destination table and column
+    """
+    # DEVICE is very special: do not have FOREIGN key
+    if foreign is None:
+        return "hash", "", ""
+    if isinstance(foreign, list):
+        foreign_dict = foreign[0]
+    else:
+        foreign_dict = foreign
+    col = list(foreign_dict.keys())[0]
+    # get foreign table and column
+    f_tab_col = list(foreign_dict.values())[0]
+
+    # get foreign_tab
+    (
+        f_tab,
+        f_col,
+    ) = f_tab_col.split("(")
+    f_col = f_col.replace(")", "")
+    return col, f_tab, f_col
+
+
+def norm_to_list_str(
+    norm: List[str] | List[int] | List[bool] | Set[str] | pd.Series,
+) -> list[str]:
+    """
+    normalize to list of string
+    remove duplicates
+    also check if all elements are str (rise ValueError)
+    """
+    if isinstance(norm, pd.Series):
+        out = list(norm.astype(str).to_list())
+    else:
+        out = norm
+    # Convert boolean columns to integers (0 for False, 1 for True)
+    out = [int(s) if isinstance(s, bool) else s for s in out]
+
+    return [str(s) for s in out]
 
 
 def match_from_list(cmd: str, choices: Dict | list) -> str:

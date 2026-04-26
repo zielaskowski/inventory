@@ -95,7 +95,7 @@ class MessageHandler:  # pylint: disable=too-many-public-methods
             return True
         self.message.append("Found manufacturer alternative names for incoming data")
         self.message.append(
-            f"Manufacturer alternatives are defined in '{conf.MAN_ALT}'"
+            "To manage manufacturer alternatives see 'inv admin' functions'"
         )
         self.message.append(alternatives.drop_duplicates().to_string())
         self.message.append("Do you accept? (y/n)")

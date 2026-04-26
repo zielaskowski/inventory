@@ -21,12 +21,16 @@ from app.common import (
     tab_cols,
     write_json,
 )
-from app.error import ReadJsonError, SqlCreateError, SqlExecuteError
+from app.error import ReadJsonError, SqlCreateError, SqlExecuteError, VimdiffSelError
+from app.manufacturers import (
+    get_man_alternatives,
+    write_man_alternatives,
+)
 from app.message import msg
 from app.tabs import NA_rows, align_data, prepare_project, tabs_in_data
 
 
-def admin(args: Namespace) -> None:
+def admin(args: Namespace) -> None:  # pylint: disable=R0912
     """admin methods"""
     ids = []
     if args.align_manufacturers:
@@ -126,7 +130,7 @@ def select_restore_backup():
 
 def export_manufacturers(file: str) -> None:
     """export manufacturers to a file"""
-    alt_man = sql.get_man_alternatives()
+    alt_man = get_man_alternatives()
     write_json(file=file, content=alt_man)
     msg.msg(f"Exported data to {file}")
 
@@ -140,7 +144,7 @@ def import_manufacturers(file: str, force=False):
         if force:
             sql.rm("ALTERNATIVE_MANUFACTURER")
             sql.rm("MANUFACTURER")
-        sql.write_man_alternatives(alt_exist)
+        write_man_alternatives(alt_exist)
         msg.msg(f"imported manufacturer alternatives from '{file}'")
     except (ReadJsonError, SqlCreateError, SqlExecuteError) as e:
         msg.msg(str(e))
@@ -201,8 +205,8 @@ def align() -> None:
     devs = sql.getDF(tab="DEVICE")
     try:
         dat = align_data(dat=devs)
-    except KeyboardInterrupt as e:
-        print(e)
+    except VimdiffSelError as e:
+        msg.msg(str(e))
         sys.exit(0)
     # aborted by user or data aligned
     if dat.empty:

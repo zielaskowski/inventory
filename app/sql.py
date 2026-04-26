@@ -6,8 +6,6 @@ DB structure is described in ./conf/sql_scheme.json
 import json
 import os
 import sys
-from argparse import Namespace
-from datetime import datetime
 from typing import Dict, List, Set
 
 import pandas as pd
@@ -15,112 +13,24 @@ import pandas as pd
 import conf.config as conf
 from app import sql_core as sql
 from app.common import (
-    int_to_date_log,
+    norm_to_list_str,
     tab_exists_scheme,
     unpack_foreign,
 )
 from app.error import (
-    CheckDirError,
-    ReadJsonError,
     SqlCheckError,
-    SqlCreateError,
     SqlExecuteError,
-    SqlGetError,
-    SqlSchemeError,
-    SqlTabError,
 )
+from app.log import log
 from app.message import msg
-
-
-class Log:
-    """loging methods"""
-
-    def __init__(self) -> None:
-        # log only once, each logging by sql_execute will change to FALSE
-        # one command usualy trigger mutliple sql operation
-        self.log_on = True
-        self.cmd = []
-
-    def log(self, args: Namespace) -> None:
-        """
-        log command in ./conf/log.txt
-        """
-        if conf.LOG_FILE == "":
-            return
-
-        self.cmd = ["python -m inv"]
-        for var, val in vars(args).items():
-            if callable(val):
-                continue
-            if val:
-                if var == "command":
-                    self.cmd += [val]
-                else:
-                    if isinstance(val, list):
-                        val = " ".join(f"'{v}'" for v in val)
-                    self.cmd += [
-                        "--"
-                        + var
-                        + " "
-                        + (str(val) if not isinstance(val, bool) else "")
-                    ]
-
-    def log_read(self, n: int) -> pd.DataFrame:
-        """
-        read form log
-        can rise IsDirectoryError and FileNotFoundError
-        split dates from commands and return as tuple
-        """
-        try:
-            logs = getDF(tab="LOG")
-            if logs.empty:
-                return logs
-        except (SqlGetError, SqlExecuteError) as e:
-            msg.msg(str(e))
-            sys.exit(1)
-        n = min(n, len(logs))
-        logs = logs.loc[len(logs) - n : len(logs), :]
-        # reverse index so easier to select
-        logs.sort_values(by=conf.LOG_DATE, inplace=True, ascending=False)
-        logs.reset_index(inplace=True, drop=True)
-        logs.sort_values(by=conf.LOG_DATE, inplace=True)
-        logs.reset_index(inplace=True)
-        logs["id"] = logs["index"].apply(lambda x: x + 1)
-        logs["date_fmt"] = logs["date"].apply(int_to_date_log)
-        return logs
-
-    def log_write(self, force=False) -> None:
-        """
-        write to log only once (unless force==True)
-        can rise IsDirectoryError and FileNotFoundError
-        """
-        if not self.log_on and not force:
-            return
-        self.log_on = False
-        now = datetime.now()
-        now = now.strftime("%s")
-        try:
-            put(
-                tab="LOG",
-                dat=pd.DataFrame(
-                    {conf.LOG_DATE: now, conf.LOG_ARGS: " ".join(self.cmd)},
-                    index=[1],  # pyright: ignore
-                ),
-            )
-        except (SqlExecuteError, SqlTabError) as e:
-            msg.msg(str(e))
-            sys.exit(1)
-
-
-log = Log()
 
 
 def sql_upgrade() -> None:
     """
     add sql auditing
-    add manufacters table and try to import from manufacturer_alternatives.json
+    add manufacturers table and try to import from manufacturer_alternatives.json
     add LOG table
-    add UNIQE key to STOCK table
+    add UNIQUE key to STOCK table
     """
     missing_tabs = [
         t
@@ -153,7 +63,7 @@ def sql_upgrade() -> None:
         # and defer_foreign delete old and create new tab
         sql.__add_unique__(tab=t)
     for t in missing_tabs:
-        create(t)
+        sql.__create__(t)
 
     # copying tables (inside defer_tables())is not preserving triggers
     # anyway better to rebuild all
@@ -228,106 +138,6 @@ def undo(from_date: int) -> None:
     return
 
 
-def write_man_alternatives(man_alt: dict) -> None:
-    """store manufacturers into tables"""
-    if [k for k in man_alt if k] == []:
-        # nothing to do
-        msg.msg("empty file")
-        raise ReadJsonError(conf.MAN_ALT, type_val="List")
-    man = pd.DataFrame(columns=[conf.MAN_NAME, conf.MAN_ALT_NAME])  # pyright: ignore
-    for k, val in man_alt.items():
-        if not k:
-            continue
-        for v in val:
-            new_row = pd.DataFrame(
-                {conf.MAN_NAME: k, conf.MAN_ALT_NAME: v}, index=[0]  # pyright: ignore
-            )
-            man = pd.concat([man, new_row], ignore_index=True)
-    put(
-        dat=pd.DataFrame({conf.MAN_NAME: man[conf.MAN_NAME].unique()}),
-        tab="MANUFACTURER",
-    )
-    base_man = getDF(
-        tab="MANUFACTURER",
-        search=list(man_alt.keys()),
-        where=[conf.MAN_NAME],
-    )
-    alt_man = pd.merge(left=man, right=base_man, how="left", on=conf.MAN_NAME)
-    put(dat=alt_man, tab="ALTERNATIVE_MANUFACTURER")
-
-
-def get_man_alternatives() -> dict:
-    """get manufacturers from"""
-    alt_man = {}
-    alt_man_df = getDF("ALTERNATIVE_MANUFACTURER", follow=True)
-    if alt_man_df.empty:
-        return alt_man
-    for m in alt_man_df[conf.MAN_NAME].unique():
-        mask = alt_man_df[conf.MAN_NAME] == m
-        alt_man[m] = alt_man_df.loc[mask, conf.MAN_ALT_NAME].to_list()
-    return alt_man
-
-
-def store_alternatives(
-    alternatives: dict[str, list[str]],
-    selection: list[str],
-) -> None:
-    """
-    write selection made by user, so next time no need to choose
-    only for DEV_MAN column and only if selection was one-to-one
-    """
-    if alternatives == {}:
-        return
-    alt_keys = list(alternatives.keys())
-    alt_len = len(alternatives[alt_keys[0]])
-    alt_from = alternatives[alt_keys[0]]
-    try:
-        alt_exist = get_man_alternatives()
-    except ReadJsonError as e:
-        msg.msg(str(e))
-        return
-
-    for i in range(alt_len):
-        # only one-to-one alternatives and changed
-        if alt_from[i] != selection[i]:
-            # remove alternative if already exists
-            for k in list(alt_exist.keys()):
-                if alt_from[i] in alt_exist[k]:
-                    alt_exist[k].remove(alt_from[i])
-                    if alt_exist[k] == []:
-                        alt_exist.pop(k)
-            if selection[i] in alt_exist.keys():
-                alt_exist[selection[i]].append(alt_from[i])
-                alt_exist[selection[i]] = list(set(alt_exist[selection[i]]))
-            else:
-                alt_exist[selection[i]] = [alt_from[i]]
-    write_man_alternatives(alt_exist)
-
-
-def get_alternatives(manufacturers: list[str]) -> tuple[list[str], list[bool]]:
-    """
-    check if we have match from stored alternative
-    return list with replaced manufacturers
-    (complete list, including not replaced also)
-    and list of bools indicating where replaced
-    """
-    alt_exist = get_man_alternatives()
-    man_replaced = []
-    for man in manufacturers:
-        rep = [k for k, v in alt_exist.items() if man in v]
-        if rep != []:
-            man_replaced.append(rep[0])
-        else:
-            man_replaced.append(man)
-    # inform user about alternatives (be explicit!)
-    alt = pd.DataFrame({"was": manufacturers, "alternative": man_replaced})
-    differ_row = alt["was"] != alt["alternative"]
-    if not alt.loc[differ_row, :].empty:
-        if not msg.inform_alternatives(alternatives=alt.loc[differ_row, :]):
-            return manufacturers, []
-    return man_replaced, differ_row.to_list()
-
-
 def put(dat: pd.DataFrame, tab: str, on_conflict: dict | None = None) -> Dict:
     """
     put DataFrame into sql at table=tab
@@ -349,7 +159,7 @@ def put(dat: pd.DataFrame, tab: str, on_conflict: dict | None = None) -> Dict:
     if on_conflict is None:
         on_conflict = sql.sql_scheme[tab].get("ON_CONFLICT", {})
     # add new data to sql
-    sql_columns = tab_columns(tab)
+    sql_columns = sql.__tab_columns__(tab)
     # take only columns applicable to table
     d = dat.loc[:, [c in sql_columns for c in dat.columns]]
     if d.empty:
@@ -393,7 +203,9 @@ def getDF_other_tabs(  # pylint: disable=invalid-name
             left_on=merge_on,
             right_on=conf.BOM_HASH,
             how="left",
-        ).drop(columns=[conf.BOM_HASH, conf.SHOP_HASH, conf.STOCK_HASH], errors="ignore")
+        ).drop(
+            columns=[conf.BOM_HASH, conf.SHOP_HASH, conf.STOCK_HASH], errors="ignore"
+        )
     if not shop_tab.empty:
         dat = pd.merge(
             left=dat,
@@ -401,7 +213,9 @@ def getDF_other_tabs(  # pylint: disable=invalid-name
             left_on=merge_on,
             right_on=conf.SHOP_HASH,
             how="left",
-        ).drop(columns=[conf.BOM_HASH, conf.SHOP_HASH, conf.STOCK_HASH], errors="ignore")
+        ).drop(
+            columns=[conf.BOM_HASH, conf.SHOP_HASH, conf.STOCK_HASH], errors="ignore"
+        )
     if not stock_tab.empty:
         dat = pd.merge(
             left=dat,
@@ -409,7 +223,9 @@ def getDF_other_tabs(  # pylint: disable=invalid-name
             left_on=merge_on,
             right_on=conf.STOCK_HASH,
             how="left",
-        ).drop(columns=[conf.BOM_HASH, conf.SHOP_HASH, conf.STOCK_HASH], errors="ignore")
+        ).drop(
+            columns=[conf.BOM_HASH, conf.SHOP_HASH, conf.STOCK_HASH], errors="ignore"
+        )
     return dat
 
 
@@ -430,7 +246,7 @@ def rm_all_tabs(hash_list: list[str]) -> None:
         rm(tab=table, value=hash_list, column=[hash_col])
 
 
-def getDF(  # pylint: disable=invalid-name
+def getDF(  # pylint: disable=R0913,R0917,C0103
     tab: str,
     get_col: List[str] | Set[str] | pd.Series | None = None,
     search: List[str] | List[int] | List[bool] | pd.Series | None = None,
@@ -452,13 +268,13 @@ def getDF(  # pylint: disable=invalid-name
         SqlGetError
         SqlGetOperationError
     """
-    resp = get(
+    resp = sql.__get__(
         tab=tab, get_col=get_col, search=search, where=where, follow=follow, oper=oper
     )
     return list(resp.values())[0] if resp else pd.DataFrame()
 
 
-def getL(  # pylint: disable=invalid-name
+def getL(  # pylint: disable=R0913,R0917,C0103
     tab: str,
     get_col: List[str] | Set[str] | pd.Series | None = None,
     search: List[str] | List[int] | List[bool] | pd.Series | None = None,
@@ -481,110 +297,11 @@ def getL(  # pylint: disable=invalid-name
         SqlGetError
         SqlGetOperationError
     """
-    resp = get(
+    resp = sql.__get__(
         tab=tab, get_col=get_col, search=search, where=where, follow=follow, oper=oper
     )
     df = list(resp.values())[0]
     return [] if df.empty else list(df.to_dict(orient="list").values())[0]
-
-
-def norm_to_list_str(
-    norm: List[str] | List[int] | List[bool] | Set[str] | pd.Series,
-) -> list[str]:
-    """
-    normalize to list of string
-    remove duplicates
-    also check if all elements are str (rise ValueError)
-    """
-    if isinstance(norm, pd.Series):
-        out = list(norm.astype(str).to_list())
-    else:
-        out = norm
-    # Convert boolean columns to integers (0 for False, 1 for True)
-    out = [int(s) if isinstance(s, bool) else s for s in out]
-
-    return [str(s) for s in out]
-
-
-def get(  # pylint: disable=too-many-branches
-    tab: str,
-    get_col: List[str] | Set[str] | pd.Series | None = None,
-    search: List[str] | List[int] | List[bool] | pd.Series | None = None,
-    where: List[str] | Set[str] | pd.Series | None = None,
-    follow: bool = False,
-    oper="IN",
-) -> Dict[str, pd.DataFrame]:
-    """get info from table
-    return as Dict:
-    - each key for column searched,
-    - value as DataFrame with columns selected by get
-    return only unique values
-
-    Args:
-        tab: table to search
-        get_col: column name to extract (default None for all columns)
-        search: what to get (default None for everything)
-        where: columns used for searching (default None for everything)
-        follow: if True, search in all FOREIGN subtables
-    Raises:
-        SqlExecuteError
-        SqlGetError
-        SqlGetOperationError
-    """
-    # check if tab exists!
-    # tab_exists_scheme(tab)
-    if tab not in sql.__list_tables__():
-        raise SqlTabError(tab=tab, tabs=sql.__list_tables__())
-    # assign values if default
-    all_cols = tab_columns(tab)
-    # normalize input to list
-    if where is None:
-        where = all_cols
-    else:
-        where = set(norm_to_list_str(where))
-    if get_col is None:
-        get_col = all_cols
-    else:
-        get_col = set(norm_to_list_str(get_col))
-    if search is not None:
-        search = norm_to_list_str(search)
-        search = sql.__escape_quote__(search)
-
-    fk = sql.__table_foreign_keys__(tab)
-    if fk.empty:
-        # if "FOREIGN" not in sql_scheme[tab].keys():
-        follow = False
-
-    if follow:
-        # get tab DF and all that follow
-        base_tab = getDF(tab=tab)
-        if base_tab.empty:
-            return {"": pd.DataFrame()}
-        for f in sql.sql_scheme[tab].get("FOREIGN", []):
-            col, f_tab, f_col = unpack_foreign(f)
-            f_df = getDF(tab=f_tab)
-            base_tab = base_tab.merge(f_df, left_on=col, right_on=f_col)
-        # mock __get_tab__ response
-        # key for each column to search and value for DF
-        resp = {}
-        for w in where:
-            if search:
-                resp[w] = base_tab.loc[base_tab[w].isin(search), :]
-            else:
-                resp[w] = base_tab
-            if get_col != all_cols:
-                if any(c not in resp[w].columns for c in get_col):
-                    raise SqlGetError(get_col, resp[w].columns.to_list())
-                resp[w] = resp[w].loc[:, list(get_col)]
-
-    else:
-        if any(g not in all_cols for g in get_col):
-            raise SqlGetError(get_col, all_cols)
-        resp = sql.__get_tab__(
-            tab=tab, get_col=get_col, search=search, where=where, oper=oper
-        )
-
-    return resp
 
 
 def rm(
@@ -629,29 +346,6 @@ def edit(
     sql.__cmd_execute__(cmd)
 
 
-def tab_columns(tab: str) -> set[str]:
-    """return list of columns for table"""
-    sql_cmd = f"pragma table_info({tab})"
-    resp = sql.__cmd_execute__([sql_cmd])
-    if not resp or resp[sql_cmd].empty:
-        return set()
-    return set(resp[sql_cmd]["name"].to_list())
-
-
-def tab_foreign(tab: str) -> List[Dict[str, str]]:
-    """show FOREIGN keys for tab"""
-    sql_cmd = f"pragma foreign_key_list({tab})"
-    resp = sql.__cmd_execute__([sql_cmd])
-    if not resp or resp[sql_cmd].empty:
-        return []
-    foreign_tab = []
-    for _, r in resp[sql_cmd].iterrows():
-        key = {}
-        key[r["from"]] = r["table"] + "(" + r["to"] + ")"
-        foreign_tab.append(key)
-    return foreign_tab
-
-
 def check() -> None:
     """Check db file if aligned with scheme written in sql_scheme.json.
     Check if table exists and if has the required columns.
@@ -661,15 +355,17 @@ def check() -> None:
     # make sure if exists
     if not os.path.isfile(conf.DB_FILE):
         msg.sql_file_miss(conf.DB_FILE)
-        create()
+        sql.__create__()
 
     for tab in sql.sql_scheme.keys():
-        scheme_cols = [k for k in sql.sql_scheme[tab].keys() if k not in conf.SQL_KEYWORDS]
+        scheme_cols = [
+            k for k in sql.sql_scheme[tab].keys() if k not in conf.SQL_KEYWORDS
+        ]
         # check if correct tables in sql
-        if not any(c in tab_columns(tab) for c in scheme_cols):
+        if not any(c in sql.__tab_columns__(tab) for c in scheme_cols):
             raise SqlCheckError(conf.DB_FILE, tab)
         # check if correct foreign keys
-        from_sql_scheme = [str(c) for c in tab_foreign(tab)]
+        from_sql_scheme = [str(c) for c in sql.__tab_foreign__(tab)]
         from_json_scheme = [str(c) for c in sql.sql_scheme[tab].get("FOREIGN", [])]
         if sorted(from_sql_scheme) != sorted(from_json_scheme):
             raise SqlCheckError(conf.DB_FILE, tab)
@@ -684,57 +380,3 @@ def check() -> None:
     # check auditing tables (audite_changefeed)
     if "audite_changefeed" not in sql.__list_tables__():
         raise SqlCheckError(conf.DB_FILE, "audite")
-
-
-def create(one_tab="") -> None:  # pylint: disable=too-many-branches
-    """Creates sql query based on sql_scheme.json and send to db.
-    Perform check if created DB is aligned with scheme from sql.json file.
-    if one_tab!="" create only one tab. Raise SQL create error if tab exists
-    """
-    if os.path.isfile(conf.DB_FILE) and not one_tab:
-        # just in case the file exists
-        # when creating only one tab assumption is that we want to add to existng db
-        os.remove(conf.DB_FILE)
-    path = os.path.dirname(conf.DB_FILE)
-    if not os.path.isdir(path):
-        raise CheckDirError(directory=path)
-
-    # create tables query for db
-    sql_cmd = []
-    if one_tab:
-        scheme = {one_tab: sql.sql_scheme[one_tab]}
-    else:
-        scheme = sql.sql_scheme
-    for tab in scheme:
-        try:
-            sql.__check_scheme__(tab=tab, col_def=scheme[tab])
-        except SqlSchemeError as err:
-            print(err)
-            raise SqlCreateError(conf.SQL_SCHEME) from err
-
-        sql_cmd.append(sql.__create_tab_cmd__(tab))
-
-    # sort sql_cmd list (to make sure you refer to columns that already exists)
-    # elements containing "FOREIGN" put at end
-    sql_cmd.sort(key=lambda x: x.find("FOREIGN"))
-
-    try:
-        sql.__cmd_execute__(sql_cmd)
-        if one_tab:
-            sql.__add_unique__(tab=one_tab)
-        else:
-            sql.__add_unique__()
-    except SqlExecuteError as err:
-        os.remove(conf.DB_FILE)
-        msg.msg(str(err))
-        raise SqlCreateError(conf.SQL_SCHEME) from err
-
-    # check if all tables created
-    all_tables = sql.__list_tables__()
-    if not all(k in all_tables for k in scheme.keys()):
-        if os.path.isfile(conf.DB_FILE):
-            os.remove(conf.DB_FILE)
-        raise SqlCreateError(conf.SQL_SCHEME)
-    # add auditing all changes on all tables
-    for tab in scheme:
-        sql.__audit__(tab=tab)

@@ -129,12 +129,16 @@ class VimdiffSelError(Exception):
 
     def __init__(
         self,
-        select: pd.DataFrame,
         *args: object,
+        select=pd.DataFrame(),
         interact: bool = False,
+        user_inerrupt=False,
     ) -> None:
-        self.message = "Do not remove or add rows.\n"
-        self.message += select.to_string(max_colwidth=40)
+        if user_inerrupt:
+            self.message = "Interupted by user. Changes discarded."
+        else:
+            self.message = "Do not remove or add rows.\n"
+            self.message += select.to_string(max_colwidth=40)
         self.interact = interact
         super().__init__(*args)
 

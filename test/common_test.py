@@ -19,6 +19,14 @@ from app.common import (
     restore_config,
 )
 from app.error import CheckDirError, ReadJsonError, ScanDirPermissionError
+from app.import_dat import bom_import
+from app.log import log
+from app.manufacturers import (
+    get_alternatives,
+    get_man_alternatives,
+    store_alternatives,
+    write_man_alternatives,
+)
 from conf import config as conf
 
 
@@ -102,12 +110,13 @@ def test_log1(db_setup, cli, tmpdir):
     """
     1. no log for args not changing db
     2. log write
-    3. assert l.og_args_once
-    4. log read
+    3. log replace
+    4. assert log_args_once
+    5. log read
     """
     args = cli.parse_args(["admin", "-c"])
     admin.admin(args)
-    assert sql.log.log_on is True
+    assert log.log_on is True
 
     test = tmpdir.join("test.csv")
     with open(test, "w", encoding="UTF8") as f:
@@ -115,6 +124,10 @@ def test_log1(db_setup, cli, tmpdir):
             "device_id,device_manufacturer,qty,project\n"
             + "aa,bb,1,test"
         )# fmt: skip
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
+    bom_import(args)
+    logs = log.log_read(10)
+    assert len(logs) == 1
 
 
 def test_find_files1():
@@ -211,17 +224,6 @@ def test_foreign_tabs1(monkeypatch, tmpdir):
     assert tabs == ["tab2", "tab3"]
 
 
-# alternatives are presented in two columns and user can select
-# one of it or give something else
-# man_in the db | man_opt possible alternatives | user selection
-# 1. user leaving what is:
-#   - do nothing
-# 2. user selecting one of presented alternatives
-#   - modify device, do not change alternatives
-# 3. user write own manufacturer
-#   - modify device, add new manuufacturer and alternative to db
-# CHECK
-# if any manufacturer is in alternative list, move it this lternatives
 def test_store_alternatives1(monkeypatch, db_setup):
     """default behaviour"""
     man_alts = {
@@ -234,12 +236,12 @@ def test_store_alternatives1(monkeypatch, db_setup):
     }
     selection = ["aa", "cc", "d", "e"]
 
-    sql.write_man_alternatives(man_alts)
+    write_man_alternative(man_alts)
     monkeypatch.setattr(conf, "DEBUG", "pytest")
     importlib.reload(common)
 
-    sql.store_alternatives(alternatives=alternatives, selection=selection)
-    exp = sql.get_man_alternatives()
+    store_alternatives(alternatives=alternatives, selection=selection)
+    exp = get_man_alternatives()
     imp = {
         "aa": ["a1", "a2", "a3", "a4"],
         "bb": ["b1", "b2", "b3"],
@@ -264,9 +266,9 @@ def test_store_alternatives2():
     selection = ["aa", "cc", "d", "e"]
 
     importlib.reload(common)
-    sql.write_man_alternatives(man_alts)
-    sql.store_alternatives(alternatives=alternatives, selection=selection)
-    exp = sql.get_man_alternatives()
+    write_man_alternatives(man_alts)
+    store_alternatives(alternatives=alternatives, selection=selection)
+    exp = get_man_alternatives()
     imp = {
         "aa": ["a1", "a2", "a3", "a4"],
         "bb": ["b1", "b2", "b3"],
@@ -292,9 +294,9 @@ def test_store_alternatives3():
     selection = ["ff", "cc", "d", "e"]
 
     importlib.reload(common)
-    sql.write_man_alternatives(man_alts)
-    sql.store_alternatives(alternatives=alternatives, selection=selection)
-    exp = sql.get_man_alternatives()
+    write_man_alternatives(man_alts)
+    store_alternatives(alternatives=alternatives, selection=selection)
+    exp = get_man_alternatives()
     imp = {
         "aa": ["a2", "a3"],
         "bb": ["b1", "b3"],
@@ -323,7 +325,7 @@ def test_get_alternatives1(tmpdir, monkeypatch):
     with open(man_json.strpath, "w", encoding="UTF8") as f:
         json.dump(man_alts, f)
 
-    man_alt, diff_rows = sql.get_alternatives(man)
+    man_alt, diff_rows = get_alternatives(man)
     assert man_alt == ["aa", "aa", "bb", "c"]
     assert diff_rows == [True, True, True, False]
 

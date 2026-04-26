@@ -63,6 +63,7 @@ function! PickOption_nmode(n)
 
         " Split on '|', trim whitespace
         let options = map(split(line, '|'), 'trim(v:val)')
+	echo options
 
 	" limit slection to available options
 	if len(options) < opt +1
@@ -113,7 +114,7 @@ nnoremap <silent> <Leader>p6 :<C-u>call PickOption_nmode(6)<CR>
 nnoremap <silent> <Leader>p7 :<C-u>call PickOption_nmode(7)<CR>
 nnoremap <silent> <Leader>p8 :<C-u>call PickOption_nmode(8)<CR>
 nnoremap <silent> <Leader>p9 :<C-u>call PickOption_nmode(9)<CR>
-
+nnoremap <silent> <Leader>p <nop>
 xnoremap <silent> <Leader>p  :<C-u>call PickOption_vmode()<CR>
 
 

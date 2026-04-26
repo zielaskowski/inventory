@@ -12,24 +12,25 @@ from app.error import (
     SqlCheckError,
     SqlCreateError,
 )
-from app.sql import check, create
+from app.manufacturers import (
+    get_man_alternatives,
+)
 from conf import config as conf
 
 
 def test_sql_create1(db_setup):
     """should be fine"""
-    create()
-    check()
+    sql_core.__create__()
+    sql.check()
 
 
 def test_sql_create2(monkeypatch):
     """wrong DB_FILE path"""
     db_file = ".test//db_test.sql"
     monkeypatch.setattr(conf, "DB_FILE", db_file)
-    monkeypatch.setattr(conf, "LOG_FILE", "")
     importlib.reload(sql)
     with pytest.raises(CheckDirError) as err_info:
-        create()
+        sql_core.__create__()
     assert err_info.match(".test")
 
 
@@ -55,12 +56,11 @@ def test_sql_check1(monkeypatch, tmpdir):
     jfile.write(json.dumps(json_txt))
     monkeypatch.setattr(conf, "DB_FILE", tmpdir.strpath + "db.sql")
     monkeypatch.setattr(conf, "SQL_SCHEME", jfile)
-    monkeypatch.setattr(conf, "LOG_FILE", "")
     monkeypatch.setattr(sql_core, "sql_scheme", common.read_json_dict(conf.SQL_SCHEME))
     importlib.reload(sql)
     importlib.reload(sql_core)
     importlib.reload(common)
-    create()
+    sql_core.__create__()
     json_txt["BOM"]["FOREIGN"].pop()
     jfile2 = tmpdir.join("json2.txt")
     jfile2.write(json.dumps(json_txt))
@@ -69,7 +69,7 @@ def test_sql_check1(monkeypatch, tmpdir):
     importlib.reload(sql_core)
     importlib.reload(common)
     with pytest.raises(SqlCheckError) as err_info:
-        check()
+        sql.check()
     assert err_info.match("db.sql")
 
 
@@ -95,12 +95,11 @@ def test_sql_check2(monkeypatch, tmpdir, capsys):
     jfile.write(json.dumps(json_txt))
     monkeypatch.setattr(conf, "DB_FILE", tmpdir.strpath + "db.sql")
     monkeypatch.setattr(conf, "SQL_SCHEME", jfile)
-    monkeypatch.setattr(conf, "LOG_FILE", "")
     monkeypatch.setattr(sql_core, "sql_scheme", common.read_json_dict(conf.SQL_SCHEME))
     importlib.reload(sql)
     importlib.reload(common)
     with pytest.raises(SqlCreateError):
-        check()
+        sql.check()
     out, _ = capsys.readouterr()
     assert "expected: 'String'" in out
 
@@ -124,12 +123,11 @@ def test_sql_check3(monkeypatch, tmpdir, capsys):
     jfile.write(json.dumps(json_txt))
     monkeypatch.setattr(conf, "DB_FILE", tmpdir.strpath + "db.sql")
     monkeypatch.setattr(conf, "SQL_SCHEME", jfile)
-    monkeypatch.setattr(conf, "LOG_FILE", "")
     monkeypatch.setattr(sql_core, "sql_scheme", common.read_json_dict(conf.SQL_SCHEME))
     importlib.reload(sql)
     importlib.reload(common)
     with pytest.raises(SqlCreateError):
-        check()
+        sql.check()
     out, _ = capsys.readouterr()
     assert "expected: 'List'" in out
 
@@ -156,12 +154,11 @@ def test_sql_check4(monkeypatch, tmpdir, capsys):
     jfile.write(json.dumps(json_txt))
     monkeypatch.setattr(conf, "DB_FILE", tmpdir.strpath + "db.sql")
     monkeypatch.setattr(conf, "SQL_SCHEME", jfile)
-    monkeypatch.setattr(conf, "LOG_FILE", "")
     monkeypatch.setattr(sql_core, "sql_scheme", common.read_json_dict(conf.SQL_SCHEME))
     importlib.reload(sql)
     importlib.reload(common)
     with pytest.raises(SqlCreateError):
-        check()
+        sql.check()
     out, _ = capsys.readouterr()
     assert "expected: 'List of Dict'" in out
 
@@ -189,12 +186,11 @@ def test_sql_check5(monkeypatch, tmpdir, capsys):
     jfile.write(json.dumps(json_txt))
     monkeypatch.setattr(conf, "DB_FILE", tmpdir.strpath + "db.sql")
     monkeypatch.setattr(conf, "SQL_SCHEME", jfile)
-    monkeypatch.setattr(conf, "LOG_FILE", "")
     monkeypatch.setattr(sql_core, "sql_scheme", common.read_json_dict(conf.SQL_SCHEME))
     importlib.reload(sql)
     importlib.reload(common)
     with pytest.raises(SqlCreateError):
-        check()
+        sql.check()
     out, _ = capsys.readouterr()
     assert "expected: 'List'" in out
 
@@ -202,8 +198,8 @@ def test_sql_check5(monkeypatch, tmpdir, capsys):
 def test_sql_upgrade(db_setup, cli, tmpdir, monkeypatch):
     """upgrading db as expected"""
     os.remove(conf.DB_FILE)
-    create(one_tab="DEVICE")
-    create(one_tab="STOCK")
+    sql_core.__create__(one_tab="DEVICE")
+    sql_core.__create__(one_tab="STOCK")
     man_alts = {
         "aa": ["a1", "a2", "a3"],
         "bb": ["b1", "b2", "b3"],
@@ -225,7 +221,7 @@ def test_sql_upgrade(db_setup, cli, tmpdir, monkeypatch):
     assert "MANUFACTURER" in sql_core.__list_tables__()
     assert "ALTERNATIVE_MANUFACTURER" in sql_core.__list_tables__()
     # check if imported manufacturers
-    alt_man = sql.get_man_alternatives()
+    alt_man = get_man_alternatives()
     assert alt_man == man_alts
 
 

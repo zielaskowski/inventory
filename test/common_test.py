@@ -211,6 +211,17 @@ def test_foreign_tabs1(monkeypatch, tmpdir):
     assert tabs == ["tab2", "tab3"]
 
 
+# alternatives are presented in two columns and user can select
+# one of it or give something else
+# man_in the db | man_opt possible alternatives | user selection
+# 1. user leaving what is:
+#   - do nothing
+# 2. user selecting one of presented alternatives
+#   - modify device, do not change alternatives
+# 3. user write own manufacturer
+#   - modify device, add new manuufacturer and alternative to db
+# CHECK
+# if any manufacturer is in alternative list, move it this lternatives
 def test_store_alternatives1(monkeypatch, db_setup):
     """default behaviour"""
     man_alts = {

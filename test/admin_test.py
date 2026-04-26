@@ -7,9 +7,8 @@ import pandas as pd
 
 from app import sql
 from app.admin import admin, align, remove_dev, select_log_undo
-from app.common import DEV_DESC, DEV_MAN
 from app.import_dat import bom_import, shop_import
-from conf.sql_colnames import BOM_QTY, DEV_ID
+from conf.config import BOM_QTY, DEV_DESC, DEV_ID, DEV_MAN
 
 
 def test_undo_device1(db_setup, tmpdir, cli):

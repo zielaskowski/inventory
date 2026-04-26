@@ -5,10 +5,10 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-from app.common import DEV_MAN
 from app.import_dat import shop_import
-from app.sql import check, getDF, put
+from app.sql import getDF, put
 from app.tabs import align_manufacturers, columns_align, foreign_tabs, prepare_tab
+from conf.config import DEV_MAN
 from inv import cli_parser
 
 

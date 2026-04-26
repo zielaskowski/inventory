@@ -4,7 +4,7 @@ from typing import Any, KeysView, List, Sequence, Union
 
 import pandas as pd
 
-from conf import config as conf
+import conf.config as conf
 
 
 class SqlGetError(Exception):

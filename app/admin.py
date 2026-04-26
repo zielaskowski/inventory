@@ -8,6 +8,7 @@ from argparse import Namespace
 
 import pandas as pd
 
+import conf.config as conf
 from app import sql
 from app.common import (
     backup_config,
@@ -23,7 +24,6 @@ from app.common import (
 from app.error import ReadJsonError, SqlCreateError, SqlExecuteError
 from app.message import msg
 from app.tabs import NA_rows, align_data, prepare_project, tabs_in_data
-from conf.config import *  # pylint: disable=unused-wildcard-import,wildcard-import
 
 
 def admin(args: Namespace) -> None:
@@ -33,7 +33,7 @@ def admin(args: Namespace) -> None:
         align()
         return
     if args.display_config:
-        print("config from: " + os.path.join(CONFIG_PATH, "config.py"))
+        print("config from: " + os.path.join(conf.CONFIG_PATH, "config.py"))
         display_conf()
         return
     if args.set_local_config:
@@ -61,7 +61,7 @@ def admin(args: Namespace) -> None:
     if args.remove_shop_id is not False:
         if not ids:
             ids = args.remove_shop_id
-        sql.rm(tab="SHOP", value=ids, column=[SHOP_ID])
+        sql.rm(tab="SHOP", value=ids, column=[conf.SHOP_ID])
         print(f"removed {len(ids)} devices")
         sys.exit(1)
     if args.remove_project:
@@ -90,7 +90,7 @@ def upgrade() -> None:
     backup_config()
     try:
         sql.sql_upgrade()
-        import_manufacturers(MAN_ALT)
+        import_manufacturers(conf.MAN_ALT)
     except SqlCreateError as err:
         restore_config()
         print(err)
@@ -106,7 +106,7 @@ def select_log_undo(n: int):
         msg.msg("nothing to undo.")
         sys.exit(1)
     log_no = msg.select_log(logs)
-    undo_date = logs.loc[log_no, LOG_DATE]
+    undo_date = logs.loc[log_no, conf.LOG_DATE]
     sql.undo(undo_date)
 
 
@@ -132,7 +132,9 @@ def export_manufacturers(file: str) -> None:
 
 
 def import_manufacturers(file: str, force=False):
-    """import manufacturers from json to sql"""
+    """import manufacturers from json to sql
+    if force==True, first remove what in db and import
+    """
     try:
         alt_exist = read_json_list(file)
         if force:
@@ -151,7 +153,7 @@ def remove_project(args: Namespace) -> None:
     """
     if (projects := prepare_project(projects=args.remove_project)) == []:
         return
-    sql.rm(tab="BOM", value=projects, column=[BOM_PROJECT])
+    sql.rm(tab="BOM", value=projects, column=[conf.BOM_PROJECT])
     msg.bom_remove(projects)
 
 
@@ -165,21 +167,23 @@ def remove_dev(dev: list[str], force: bool) -> list[str]:
 
     # do not delete device if present in PROJECT table
     if not force:
-        project_devs = sql.getL(tab="BOM", get_col=[DEV_ID], follow=True)
+        project_devs = sql.getL(tab="BOM", get_col=[conf.DEV_ID], follow=True)
         dev = [d for d in dev if d not in project_devs]
     else:
         # unless you Forced to remove whole projects with device_id
         project_tab = sql.getDF(
             tab="BOM",
-            get_col=[BOM_PROJECT, DEV_ID],
+            get_col=[conf.BOM_PROJECT, conf.DEV_ID],
             search=dev,
-            where=[DEV_ID],
+            where=[conf.DEV_ID],
             follow=True,
         )
-        project_tab = list(set(project_tab[BOM_PROJECT].tolist()))
-        sql.rm(tab="BOM", value=project_tab, column=[BOM_PROJECT])
+        project_tab = list(set(project_tab[conf.BOM_PROJECT].tolist()))
+        sql.rm(tab="BOM", value=project_tab, column=[conf.BOM_PROJECT])
 
-    dev_hash = sql.getL(tab="DEVICE", get_col=[DEV_HASH], search=dev, where=[DEV_ID])
+    dev_hash = sql.getL(
+        tab="DEVICE", get_col=[conf.DEV_HASH], search=dev, where=[conf.DEV_ID]
+    )
 
     sql.rm_all_tabs(hash_list=dev_hash)
     return dev
@@ -199,7 +203,7 @@ def align() -> None:
         dat = align_data(dat=devs)
     except KeyboardInterrupt as e:
         print(e)
-        sys.exit(1)
+        sys.exit(0)
     # aborted by user or data aligned
     if dat.empty:
         sys.exit(1)

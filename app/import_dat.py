@@ -10,6 +10,7 @@ from argparse import Namespace
 import pandas as pd
 from pandas.errors import EmptyDataError, ParserError
 
+import conf.config as conf
 from app import sql
 from app.message import msg
 from app.tabs import (
@@ -19,7 +20,6 @@ from app.tabs import (
     tab_info,
     tab_template,
 )
-from conf.config import *  # pylint: disable=unused-wildcard-import,wildcard-import
 
 
 def stock_import(args: Namespace) -> None:
@@ -112,8 +112,8 @@ def import_csv(file: str) -> pd.DataFrame:
             file,
             **{
                 k: v
-                for k, v in import_format["csv"].items()
-                if k not in IMPORT_FORMAT_SPECIAL_KEYS
+                for k, v in conf.import_format["csv"].items()
+                if k not in conf.IMPORT_FORMAT_SPECIAL_KEYS
             },
         )
     except ParserError as err:
@@ -137,8 +137,8 @@ def import_xls(file: str, file_format: str) -> pd.DataFrame:
             file,
             **{
                 k: v
-                for k, v in import_format[file_format].items()
-                if k not in IMPORT_FORMAT_SPECIAL_KEYS
+                for k, v in conf.import_format[file_format].items()
+                if k not in conf.IMPORT_FORMAT_SPECIAL_KEYS
             },
         )
     except ParserError as e:
@@ -158,7 +158,7 @@ def import_xls(file: str, file_format: str) -> pd.DataFrame:
 
 def import_file(args: Namespace, file: str) -> pd.DataFrame:
     """import files"""
-    file_ext = import_format[args.format].get("file_ext", "")
+    file_ext = conf.import_format[args.format].get("file_ext", "")
     if "csv" in file_ext:
         return import_csv(file)
     if "xls" in file_ext or "xlsx" in file_ext:
@@ -174,8 +174,8 @@ def export(args: Namespace, tab: str) -> None:  # pylint: disable=too-many-branc
     if tab == "BOM":
         if (projects := prepare_project(args.export)) == []:
             return
-        df = sql.getDF(tab=tab, search=projects, where=[BOM_PROJECT], follow=True)
-        cols = BOM_EXPORT_COL
+        df = sql.getDF(tab=tab, search=projects, where=[conf.BOM_PROJECT], follow=True)
+        cols = conf.BOM_EXPORT_COL
     elif tab == "STOCK":
         df = sql.getDF(tab=tab, follow=True)
         if df.empty:
@@ -188,8 +188,8 @@ def export(args: Namespace, tab: str) -> None:  # pylint: disable=too-many-branc
             df = pd.merge(
                 left=df,
                 right=df_shop,
-                left_on=DEV_HASH,
-                right_on=SHOP_HASH,
+                left_on=conf.DEV_HASH,
+                right_on=conf.SHOP_HASH,
                 suffixes=("", "_drop"),
                 how="left",
             )
@@ -197,22 +197,26 @@ def export(args: Namespace, tab: str) -> None:  # pylint: disable=too-many-branc
             df = pd.merge(
                 left=df,
                 right=df_bom,
-                left_on=DEV_HASH,
-                right_on=BOM_HASH,
+                left_on=conf.DEV_HASH,
+                right_on=conf.BOM_HASH,
                 suffixes=("", "_drop"),
                 how="left",
             )
         df.drop(
             columns=[col for col in df.columns if col.endswith("_drop")], inplace=True
         )
-        cols = [c for c in STOCK_EXPORT_COL + [SHOP_ID, BOM_PROJECT] if c in df.columns]
+        cols = [
+            c
+            for c in conf.STOCK_EXPORT_COL + [conf.SHOP_ID, conf.BOM_PROJECT]
+            if c in df.columns
+        ]
     else:
         df = sql.getDF(tab=tab, follow=True)
         cols = df.columns
     if df.empty:
         msg.msg(f"No data in table {tab}.")
         sys.exit(1)
-    df.drop(columns=NO_EXPORT_COLS, inplace=True, errors="ignore")
+    df.drop(columns=conf.NO_EXPORT_COLS, inplace=True, errors="ignore")
     if args.export_columns:
         try:
             df = df[args.export_columns]
@@ -224,10 +228,10 @@ def export(args: Namespace, tab: str) -> None:  # pylint: disable=too-many-branc
     else:
         df = df[cols]
     if getattr(args, "fzf", False):
-        file = TEMP_DIR + "stock_export.csv"
+        file = conf.TEMP_DIR + "stock_export.csv"
         df.to_csv(
             file,
-            columns=[c for c in cols if c != DEV_DESC] + [DEV_DESC],
+            columns=[c for c in cols if c != conf.DEV_DESC] + [conf.DEV_DESC],
             sep="|",
             index=False,
         )
@@ -238,8 +242,10 @@ def export(args: Namespace, tab: str) -> None:  # pylint: disable=too-many-branc
         def truncate(width):
             return lambda x: str(x)[:width] + (".." if len(str(x)) > width else "")
 
-        formatter = {c: truncate(w) for c, w in COL_WIDTH.items() if c in df.columns}
-        col_width = {c: w + 4 for c, w in COL_WIDTH.items() if c in df.columns}
+        formatter = {
+            c: truncate(w) for c, w in conf.COL_WIDTH.items() if c in df.columns
+        }
+        col_width = {c: w + 4 for c, w in conf.COL_WIDTH.items() if c in df.columns}
         print(
             df.to_string(
                 index=False,
@@ -260,20 +266,20 @@ def add_stock(args: Namespace) -> None:
         dat = sql.getDF(
             tab="BOM",
             search=projects,
-            where=[BOM_PROJECT],
+            where=[conf.BOM_PROJECT],
             follow=True,
         )
-        dat["use_qty"] = dat[BOM_QTY] * args.qty
+        dat["use_qty"] = dat[conf.BOM_QTY] * args.qty
         if dat.empty:
             msg.msg("No devices in database")
             sys.exit(1)
     else:
         dat = sql.getDF("DEVICE", follow=True)
     if args.add_device_id:
-        dat = dat.loc[dat[DEV_ID] == args.add_device_id, :]
+        dat = dat.loc[dat[conf.DEV_ID] == args.add_device_id, :]
         dat["use_qty"] = 1
     if args.add_device_manufacturer:
-        dat = dat.loc[dat[DEV_MAN] == args.add_device_manufacturer, :]
+        dat = dat.loc[dat[conf.DEV_MAN] == args.add_device_manufacturer, :]
         dat["use_qty"] = 1
     if dat.empty:
         msg.stock_add(
@@ -286,26 +292,26 @@ def add_stock(args: Namespace) -> None:
     # add 'empty' devices that we want to use
     # other way we have problem with adding to missing devs in stock
     zero_stock = dat.copy(deep=True)
-    zero_stock[STOCK_QTY] = 0
-    zero_stock[STOCK_HASH] = zero_stock[DEV_HASH]
+    zero_stock[conf.STOCK_QTY] = 0
+    zero_stock[conf.STOCK_HASH] = zero_stock[conf.DEV_HASH]
     sql.put(zero_stock, "STOCK", on_conflict={"action": "IGNORE"})
     stock = sql.getDF(tab="STOCK")
     # merge and add
     dat = pd.merge(
         left=dat,
-        left_on=DEV_HASH,
+        left_on=conf.DEV_HASH,
         right=stock,
-        right_on=STOCK_HASH,
+        right_on=conf.STOCK_HASH,
         how="left",
     )
 
-    dat[STOCK_QTY] = dat[STOCK_QTY] + dat["use_qty"]
+    dat[conf.STOCK_QTY] = dat[conf.STOCK_QTY] + dat["use_qty"]
     sql.edit(
         tab="STOCK",
-        new_val=dat[STOCK_QTY].to_list(),
-        col=STOCK_QTY,
-        search=dat[DEV_HASH].to_list(),
-        where=STOCK_HASH,
+        new_val=dat[conf.STOCK_QTY].to_list(),
+        col=conf.STOCK_QTY,
+        search=dat[conf.DEV_HASH].to_list(),
+        where=conf.STOCK_HASH,
     )
     msg.stock_add(
         project=projects,
@@ -327,17 +333,17 @@ def use_stock(args: Namespace) -> None:
         dat = sql.getDF(
             tab="BOM",
             search=projects,
-            where=[BOM_PROJECT],
+            where=[conf.BOM_PROJECT],
             follow=True,
         )
-        dat["use_qty"] = dat[BOM_QTY] * args.qty
+        dat["use_qty"] = dat[conf.BOM_QTY] * args.qty
     else:
         dat = sql.getDF("DEVICE")
     if args.use_device_id:
-        dat = dat.loc[dat[DEV_ID] == args.use_device_id, :]
+        dat = dat.loc[dat[conf.DEV_ID] == args.use_device_id, :]
         dat["use_qty"] = 1
     if args.use_device_manufacturer:
-        dat = dat.loc[dat[DEV_MAN] == args.use_device_manufacturer, :]
+        dat = dat.loc[dat[conf.DEV_MAN] == args.use_device_manufacturer, :]
         dat["use_qty"] = 1
     if dat.empty:
         msg.stock_use(
@@ -354,17 +360,17 @@ def use_stock(args: Namespace) -> None:
     # merge and substract
     dat = pd.merge(
         left=dat,
-        left_on=DEV_HASH,
+        left_on=conf.DEV_HASH,
         right=stock,
-        right_on=STOCK_HASH,
+        right_on=conf.STOCK_HASH,
         how="left",
     )
-    dat[STOCK_QTY] = dat[STOCK_QTY] - dat["use_qty"]
+    dat[conf.STOCK_QTY] = dat[conf.STOCK_QTY] - dat["use_qty"]
     # do we have enough stock?
-    dat_missing = dat.loc[(dat[STOCK_QTY] < 0) | (dat[STOCK_QTY].isna()), :]
+    dat_missing = dat.loc[(dat[conf.STOCK_QTY] < 0) | (dat[conf.STOCK_QTY].isna()), :]
     if not dat_missing.empty:
-        if BOM_PROJECT in dat_missing.columns:
-            missing_proj = dat_missing[BOM_PROJECT].unique()
+        if conf.BOM_PROJECT in dat_missing.columns:
+            missing_proj = dat_missing[conf.BOM_PROJECT].unique()
         else:
             missing_proj = None
         msg.stock_use(
@@ -375,22 +381,22 @@ def use_stock(args: Namespace) -> None:
         )
         return
     # remove what zeroed
-    stock_end = dat.loc[dat[STOCK_QTY] == 0, :]
+    stock_end = dat.loc[dat[conf.STOCK_QTY] == 0, :]
     if not stock_end.empty:
-        sql.rm(tab="STOCK", value=stock_end[DEV_HASH], column=[STOCK_HASH])
+        sql.rm(tab="STOCK", value=stock_end[conf.DEV_HASH], column=[conf.STOCK_HASH])
         msg.stock_use(
             project=projects,
             dev_id=args.use_device_id,
             dev_man=args.use_device_manufacturer,
         )
         return
-    new_stock = dat.loc[dat[STOCK_QTY] > 0, :]
+    new_stock = dat.loc[dat[conf.STOCK_QTY] > 0, :]
     sql.edit(
         tab="STOCK",
-        new_val=new_stock[STOCK_QTY].to_list(),
-        col=STOCK_QTY,
-        search=new_stock[DEV_HASH].to_list(),
-        where=STOCK_HASH,
+        new_val=new_stock[conf.STOCK_QTY].to_list(),
+        col=conf.STOCK_QTY,
+        search=new_stock[conf.DEV_HASH].to_list(),
+        where=conf.STOCK_HASH,
     )
     msg.stock_use(
         project=projects,

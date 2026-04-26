@@ -5,12 +5,14 @@ DB structure is described in ./conf/sql_scheme.json
 
 import json
 import os
+import sys
 from argparse import Namespace
 from datetime import datetime
 from typing import Dict, List, Set
 
 import pandas as pd
 
+import conf.config as conf
 from app import sql_core as sql
 from app.common import (
     int_to_date_log,
@@ -28,7 +30,6 @@ from app.error import (
     SqlTabError,
 )
 from app.message import msg
-from conf.config import *  # pylint: disable=unused-wildcard-import,wildcard-import
 
 
 class Log:
@@ -44,7 +45,7 @@ class Log:
         """
         log command in ./conf/log.txt
         """
-        if LOG_FILE == "":
+        if conf.LOG_FILE == "":
             return
 
         self.cmd = ["python -m inv"]
@@ -80,9 +81,9 @@ class Log:
         n = min(n, len(logs))
         logs = logs.loc[len(logs) - n : len(logs), :]
         # reverse index so easier to select
-        logs.sort_values(by=LOG_DATE, inplace=True, ascending=False)
+        logs.sort_values(by=conf.LOG_DATE, inplace=True, ascending=False)
         logs.reset_index(inplace=True, drop=True)
-        logs.sort_values(by=LOG_DATE, inplace=True)
+        logs.sort_values(by=conf.LOG_DATE, inplace=True)
         logs.reset_index(inplace=True)
         logs["id"] = logs["index"].apply(lambda x: x + 1)
         logs["date_fmt"] = logs["date"].apply(int_to_date_log)
@@ -102,7 +103,7 @@ class Log:
             put(
                 tab="LOG",
                 dat=pd.DataFrame(
-                    {LOG_DATE: now, LOG_ARGS: " ".join(self.cmd)},
+                    {conf.LOG_DATE: now, conf.LOG_ARGS: " ".join(self.cmd)},
                     index=[1],  # pyright: ignore
                 ),
             )
@@ -159,7 +160,7 @@ def sql_upgrade() -> None:
     for t in [
         t
         for t in sql.sql_scheme.keys()
-        if t not in SQL_KEYWORDS and t in sql.__list_tables__()
+        if t not in conf.SQL_KEYWORDS and t in sql.__list_tables__()
     ]:
         sql.__audit__(t)
 
@@ -187,7 +188,9 @@ def undo(from_date: int) -> None:
             col_defs = sql.__table_definition__(r.source)  # type: ignore
             pks = [c for c in col_defs.keys() if "PRIMARY" in col_defs[c]]
             pk = pks[0]
-            qty_cols = [str(c) for c in args.keys() if c in [BOM_QTY, STOCK_QTY]]
+            qty_cols = [
+                str(c) for c in args.keys() if c in [conf.BOM_QTY, conf.STOCK_QTY]
+            ]
             if qty_cols != []:
                 # check if we updated (added qty) or created new record
                 qty_col: str = qty_cols[0]
@@ -230,19 +233,26 @@ def write_man_alternatives(man_alt: dict) -> None:
     if [k for k in man_alt if k] == []:
         # nothing to do
         msg.msg("empty file")
-        raise ReadJsonError(MAN_ALT, type_val="List")
-    man = pd.DataFrame(columns=[MAN_NAME, MAN_ALT_NAME])  # pyright: ignore
+        raise ReadJsonError(conf.MAN_ALT, type_val="List")
+    man = pd.DataFrame(columns=[conf.MAN_NAME, conf.MAN_ALT_NAME])  # pyright: ignore
     for k, val in man_alt.items():
         if not k:
             continue
         for v in val:
             new_row = pd.DataFrame(
-                {MAN_NAME: k, MAN_ALT_NAME: v}, index=[0]  # pyright: ignore
+                {conf.MAN_NAME: k, conf.MAN_ALT_NAME: v}, index=[0]  # pyright: ignore
             )
             man = pd.concat([man, new_row], ignore_index=True)
-    put(dat=pd.DataFrame({MAN_NAME: man[MAN_NAME].unique()}), tab="MANUFACTURER")
-    base_man = getDF(tab="MANUFACTURER", search=list(man_alt.keys()), where=[MAN_NAME])
-    alt_man = pd.merge(left=man, right=base_man, how="left", on=MAN_NAME)
+    put(
+        dat=pd.DataFrame({conf.MAN_NAME: man[conf.MAN_NAME].unique()}),
+        tab="MANUFACTURER",
+    )
+    base_man = getDF(
+        tab="MANUFACTURER",
+        search=list(man_alt.keys()),
+        where=[conf.MAN_NAME],
+    )
+    alt_man = pd.merge(left=man, right=base_man, how="left", on=conf.MAN_NAME)
     put(dat=alt_man, tab="ALTERNATIVE_MANUFACTURER")
 
 
@@ -252,9 +262,9 @@ def get_man_alternatives() -> dict:
     alt_man_df = getDF("ALTERNATIVE_MANUFACTURER", follow=True)
     if alt_man_df.empty:
         return alt_man
-    for m in alt_man_df[MAN_NAME].unique():
-        mask = alt_man_df[MAN_NAME] == m
-        alt_man[m] = alt_man_df.loc[mask, MAN_ALT_NAME].to_list()
+    for m in alt_man_df[conf.MAN_NAME].unique():
+        mask = alt_man_df[conf.MAN_NAME] == m
+        alt_man[m] = alt_man_df.loc[mask, conf.MAN_ALT_NAME].to_list()
     return alt_man
 
 
@@ -364,42 +374,42 @@ def getDF_other_tabs(  # pylint: disable=invalid-name
     bom_tab = getDF(
         tab="BOM",
         search=hash_list,
-        where=[BOM_HASH],
+        where=[conf.BOM_HASH],
     )
     shop_tab = getDF(
         tab="SHOP",
         search=hash_list,
-        where=[SHOP_HASH],
+        where=[conf.SHOP_HASH],
     )
     stock_tab = getDF(
         tab="STOCK",
         search=hash_list,
-        where=[STOCK_HASH],
+        where=[conf.STOCK_HASH],
     )
     if not bom_tab.empty:
         dat = pd.merge(
             left=dat,
             right=bom_tab,
             left_on=merge_on,
-            right_on=BOM_HASH,
+            right_on=conf.BOM_HASH,
             how="left",
-        ).drop(columns=[BOM_HASH, SHOP_HASH, STOCK_HASH], errors="ignore")
+        ).drop(columns=[conf.BOM_HASH, conf.SHOP_HASH, conf.STOCK_HASH], errors="ignore")
     if not shop_tab.empty:
         dat = pd.merge(
             left=dat,
             right=shop_tab,
             left_on=merge_on,
-            right_on=SHOP_HASH,
+            right_on=conf.SHOP_HASH,
             how="left",
-        ).drop(columns=[BOM_HASH, SHOP_HASH, STOCK_HASH], errors="ignore")
+        ).drop(columns=[conf.BOM_HASH, conf.SHOP_HASH, conf.STOCK_HASH], errors="ignore")
     if not stock_tab.empty:
         dat = pd.merge(
             left=dat,
             right=stock_tab,
             left_on=merge_on,
-            right_on=STOCK_HASH,
+            right_on=conf.STOCK_HASH,
             how="left",
-        ).drop(columns=[BOM_HASH, SHOP_HASH, STOCK_HASH], errors="ignore")
+        ).drop(columns=[conf.BOM_HASH, conf.SHOP_HASH, conf.STOCK_HASH], errors="ignore")
     return dat
 
 
@@ -412,10 +422,10 @@ def rm_all_tabs(hash_list: list[str]) -> None:
         th, _, _ = unpack_foreign(sql.sql_scheme[t].get("FOREIGN"))
         tab_hash.append(th)
     for table, hash_col in {
-        "BOM": BOM_HASH,
-        "SHOP": SHOP_HASH,
-        "STOCK": STOCK_HASH,
-        "DEVICE": DEV_HASH,
+        "BOM": conf.BOM_HASH,
+        "SHOP": conf.SHOP_HASH,
+        "STOCK": conf.STOCK_HASH,
+        "DEVICE": conf.DEV_HASH,
     }.items():
         rm(tab=table, value=hash_list, column=[hash_col])
 
@@ -649,31 +659,31 @@ def check() -> None:
     DB location and name taken from ./conf/config.py
     """
     # make sure if exists
-    if not os.path.isfile(DB_FILE):
-        msg.sql_file_miss(DB_FILE)
+    if not os.path.isfile(conf.DB_FILE):
+        msg.sql_file_miss(conf.DB_FILE)
         create()
 
     for tab in sql.sql_scheme.keys():
-        scheme_cols = [k for k in sql.sql_scheme[tab].keys() if k not in SQL_KEYWORDS]
+        scheme_cols = [k for k in sql.sql_scheme[tab].keys() if k not in conf.SQL_KEYWORDS]
         # check if correct tables in sql
         if not any(c in tab_columns(tab) for c in scheme_cols):
-            raise SqlCheckError(DB_FILE, tab)
+            raise SqlCheckError(conf.DB_FILE, tab)
         # check if correct foreign keys
         from_sql_scheme = [str(c) for c in tab_foreign(tab)]
         from_json_scheme = [str(c) for c in sql.sql_scheme[tab].get("FOREIGN", [])]
         if sorted(from_sql_scheme) != sorted(from_json_scheme):
-            raise SqlCheckError(DB_FILE, tab)
+            raise SqlCheckError(conf.DB_FILE, tab)
         # check if foreign keys DEFERRED
         tab_sql = sql.__sqlite_master__(tab)
         if "FOREIGN" in tab_sql and "DEFERRABLE" not in tab_sql:
-            raise SqlCheckError(DB_FILE, tab, foreign=True)
+            raise SqlCheckError(conf.DB_FILE, tab, foreign=True)
         # in old db, STOCK table was missing UNIQUE directive (was handled by ON CONFLICT)
         # now must be declared explicitly
         if not sql.__sqlite_master__(f"uniqueRow_{tab}") and tab == "STOCK":
-            raise SqlCheckError(DB_FILE, tab, unique=True)
+            raise SqlCheckError(conf.DB_FILE, tab, unique=True)
     # check auditing tables (audite_changefeed)
     if "audite_changefeed" not in sql.__list_tables__():
-        raise SqlCheckError(DB_FILE, "audite")
+        raise SqlCheckError(conf.DB_FILE, "audite")
 
 
 def create(one_tab="") -> None:  # pylint: disable=too-many-branches
@@ -681,11 +691,11 @@ def create(one_tab="") -> None:  # pylint: disable=too-many-branches
     Perform check if created DB is aligned with scheme from sql.json file.
     if one_tab!="" create only one tab. Raise SQL create error if tab exists
     """
-    if os.path.isfile(DB_FILE) and not one_tab:
+    if os.path.isfile(conf.DB_FILE) and not one_tab:
         # just in case the file exists
         # when creating only one tab assumption is that we want to add to existng db
-        os.remove(DB_FILE)
-    path = os.path.dirname(DB_FILE)
+        os.remove(conf.DB_FILE)
+    path = os.path.dirname(conf.DB_FILE)
     if not os.path.isdir(path):
         raise CheckDirError(directory=path)
 
@@ -700,7 +710,7 @@ def create(one_tab="") -> None:  # pylint: disable=too-many-branches
             sql.__check_scheme__(tab=tab, col_def=scheme[tab])
         except SqlSchemeError as err:
             print(err)
-            raise SqlCreateError(SQL_SCHEME) from err
+            raise SqlCreateError(conf.SQL_SCHEME) from err
 
         sql_cmd.append(sql.__create_tab_cmd__(tab))
 
@@ -715,16 +725,16 @@ def create(one_tab="") -> None:  # pylint: disable=too-many-branches
         else:
             sql.__add_unique__()
     except SqlExecuteError as err:
-        os.remove(DB_FILE)
+        os.remove(conf.DB_FILE)
         msg.msg(str(err))
-        raise SqlCreateError(SQL_SCHEME) from err
+        raise SqlCreateError(conf.SQL_SCHEME) from err
 
     # check if all tables created
     all_tables = sql.__list_tables__()
     if not all(k in all_tables for k in scheme.keys()):
-        if os.path.isfile(DB_FILE):
-            os.remove(DB_FILE)
-        raise SqlCreateError(SQL_SCHEME)
+        if os.path.isfile(conf.DB_FILE):
+            os.remove(conf.DB_FILE)
+        raise SqlCreateError(conf.SQL_SCHEME)
     # add auditing all changes on all tables
     for tab in scheme:
         sql.__audit__(tab=tab)

@@ -4,11 +4,13 @@ not to be used directly, see sql.py for user functions
 
 import re
 import sqlite3
+import sys
 from typing import Any, Dict, List, Sequence, Union
 
 import pandas as pd
 from audite import track_changes
 
+import conf.config as conf
 from app.common import (
     read_json_dict,
     tab_exists_scheme,
@@ -23,10 +25,9 @@ from app.error import (
     SqlTabError,
 )
 from app.message import msg
-from conf.config import *  # pylint: disable=unused-wildcard-import,wildcard-import
 
 try:
-    sql_scheme = read_json_dict(SQL_SCHEME)
+    sql_scheme = read_json_dict(conf.SQL_SCHEME)
 except ReadJsonError as err:
     print(err)
     sys.exit(1)
@@ -251,7 +252,7 @@ def __cmd_execute__(
 
     try:
         con = sqlite3.connect(  # pylint: disable=E1101
-            DB_FILE,
+            conf.DB_FILE,
             detect_types=sqlite3.PARSE_COLNAMES  # pylint: disable=E1101
             | sqlite3.PARSE_DECLTYPES,  # pylint: disable=E1101
         )
@@ -287,7 +288,7 @@ def __create_tab_cmd__(tab: str) -> str:
     col_def = sql_scheme[tab]
     tab_cmd = f"CREATE TABLE {tab} ("
     for col in col_def:
-        if col not in SQL_KEYWORDS:
+        if col not in conf.SQL_KEYWORDS:
             tab_cmd += f"{col} {col_def[col]}, "
         elif col == "FOREIGN":
             for foreign in col_def[col]:
@@ -299,7 +300,7 @@ def __create_tab_cmd__(tab: str) -> str:
                     tab_exists_scheme(f_table)
                 except SqlTabError as err:
                     msg.msg(str(err))
-                    raise SqlCreateError(SQL_SCHEME) from err
+                    raise SqlCreateError(conf.SQL_SCHEME) from err
 
                 # foreign check will fail when REPLACEin table, which is defauly
                 # so db is created with foeign keys INITIALY DEFERRED
@@ -354,7 +355,7 @@ def __check_scheme__(tab: str, col_def: Dict) -> None:
     """
     # read_json already checks if each table is a dict
     for col in col_def:
-        if col not in SQL_KEYWORDS:  # fmt: on
+        if col not in conf.SQL_KEYWORDS:  # fmt: on
             if not isinstance(col_def[col], str):
                 raise SqlSchemeError(tab=tab, key=col, expected="String")
         elif col == "FOREIGN":  # FOREIGN
@@ -384,7 +385,7 @@ def __escape_quote__(txt: list[str]) -> list[str]:
 def __audit__(tab: str) -> None:
     """add loging tables to sql"""
     db = sqlite3.connect(  # pylint: disable=E1101
-        DB_FILE,
+        conf.DB_FILE,
         detect_types=sqlite3.PARSE_COLNAMES  # pylint: disable=E1101
         | sqlite3.PARSE_DECLTYPES,  # pylint: disable=E1101
     )

@@ -7,6 +7,7 @@ import inspect
 import sys
 from datetime import datetime
 
+import conf.config as conf
 from app.admin import admin
 from app.common import (
     AbbreviationParser,
@@ -19,7 +20,6 @@ from app.import_dat import bom_import, shop_import, stock_import
 from app.message import msg
 from app.sql import check, log
 from app.transaction import trans
-from conf import config as conf
 
 
 def _add_bom_import_parser(command_parser):

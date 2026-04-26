@@ -1,10 +1,11 @@
 """class handling messages"""
 
 import os
+import sys
 
 import pandas as pd
 
-from conf.config import *  # pylint: disable=unused-wildcard-import,wildcard-import
+import conf.config as conf
 
 
 class MessageHandler:  # pylint: disable=too-many-public-methods
@@ -61,7 +62,7 @@ class MessageHandler:  # pylint: disable=too-many-public-methods
 
     def project_already_imported(self, project: str) -> bool:
         """message method"""
-        if DEBUG in ["pytest", "debugpy"]:
+        if conf.DEBUG in ["pytest", "debugpy"]:
             return True
         self.message.append(f"Project '{project}' was already imported.")
         self.message.append("Consider using option --overwrite.")
@@ -75,10 +76,10 @@ class MessageHandler:  # pylint: disable=too-many-public-methods
 
     def data_already_imported(self, dat: pd.DataFrame) -> bool:
         """message method"""
-        if DEBUG in ["pytest", "debugpy"]:
+        if conf.DEBUG in ["pytest", "debugpy"]:
             return True
         self.message.append("These devices were already imported:")
-        self.message.append(dat.loc[:, [DEV_ID, DEV_MAN]].to_string())
+        self.message.append(dat.loc[:, [conf.DEV_ID, conf.DEV_MAN]].to_string())
         self.message.append("Consider using option --overwrite.")
         self.message.append(
             "Are you sure you want to add this file again (will add to stock_qty.)? (y/n)"
@@ -90,10 +91,12 @@ class MessageHandler:  # pylint: disable=too-many-public-methods
 
     def inform_alternatives(self, alternatives: pd.DataFrame) -> bool:
         """found manufacturer alternatives. Do you accept?"""
-        if DEBUG in ["pytest", "debugpy"]:
+        if conf.DEBUG in ["pytest", "debugpy"]:
             return True
         self.message.append("Found manufacturer alternative names for incoming data")
-        self.message.append(f"Manufacturer alternatives are defined in '{MAN_ALT}'")
+        self.message.append(
+            f"Manufacturer alternatives are defined in '{conf.MAN_ALT}'"
+        )
         self.message.append(alternatives.drop_duplicates().to_string())
         self.message.append("Do you accept? (y/n)")
         self.__exec__()
@@ -205,7 +208,7 @@ class MessageHandler:  # pylint: disable=too-many-public-methods
                 dat["tot_cost"] = dat["price"] * dat["qty"]
                 cost = round(dat["tot_cost"].sum(), 2)
                 self.message.append(
-                    f"{len(dat)} With cost of {cost}{DISP_CURR} in total."
+                    f"{len(dat)} With cost of {cost}{conf.DISP_CURR} in total."
                 )
         self.message.append("*********************************************************")
         self.__exec__()
@@ -244,9 +247,9 @@ class MessageHandler:  # pylint: disable=too-many-public-methods
         self.message.append("Upgraded sql DB.")
         self.__exec__()
 
-    def msg(self, msg: str) -> None:
+    def msg(self, message: str) -> None:
         """message method"""
-        self.message.append(msg)
+        self.message.append(message)
         self.__exec__()
 
     def trans_summary(self, txt: list[dict]) -> None:
@@ -277,7 +280,7 @@ class MessageHandler:  # pylint: disable=too-many-public-methods
     def log_path_error(self, err: str) -> None:
         """message method"""
         self.message.append(err)
-        self.message.append(f"Provide correct path in '{CONFIG_PATH}' file.")
+        self.message.append(f"Provide correct path in '{conf.CONFIG_PATH}' file.")
         self.__exec__(warning=True)
 
     def unknown_project(self, project: str, projects: list[str]) -> None:
@@ -320,7 +323,7 @@ class MessageHandler:  # pylint: disable=too-many-public-methods
         """ask user to select logs to undo"""
         self.message.append("Will undo from selection to last command")
         self.message.append("Select command to start undo from:")
-        self.message.append(logs.loc[:, ["id", LOG_ARGS, "date_fmt"]])
+        self.message.append(logs.loc[:, ["id", conf.LOG_ARGS, "date_fmt"]])
         self.__exec__()
         while True:
             try:
@@ -339,17 +342,17 @@ class MessageHandler:  # pylint: disable=too-many-public-methods
 
     def __exec__(self, warning: bool = False) -> None:
         """message method"""
-        msg = [str(s) for s in self.message]  # possibly DataFrame, not only strings
-        msg_hash = hash("".join(msg))
-        if msg_hash == self.msg_hash or msg == []:
+        message = [str(s) for s in self.message]  # possibly DataFrame, not only strings
+        msg_hash = hash("".join(message))
+        if msg_hash == self.msg_hash or message == []:
             self.message = []
             return
         self.msg_hash = msg_hash
         if warning:
             print("")
             print("WARNING:")
-        for msg in self.message:
-            print(msg)
+        for message in self.message:
+            print(message)
         self.message = []
 
 

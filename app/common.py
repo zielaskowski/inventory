@@ -16,6 +16,7 @@ from typing import Dict
 
 from jinja2 import Template
 
+import conf.config as conf
 from app.error import (
     AmbigousMatchError,
     CheckDirError,
@@ -26,7 +27,6 @@ from app.error import (
     WriteJsonError,
 )
 from app.message import MessageHandler
-from conf.config import *  # pylint: disable=unused-wildcard-import,wildcard-import
 
 msg = MessageHandler()
 
@@ -39,11 +39,11 @@ def create_loc_config():
     """
     conf_dir = os.path.join(os.getcwd(), ".config")
     os.makedirs(conf_dir, exist_ok=True)
-    glob_conf = os.path.join(MODULE_PATH, "conf", TOML_FILE)
-    dest_conf = os.path.join(conf_dir, TOML_FILE)
+    glob_conf = os.path.join(conf.MODULE_PATH, "conf", conf.TOML_FILE)
+    dest_conf = os.path.join(conf_dir, conf.TOML_FILE)
     shutil.copy2(glob_conf, dest_conf)
     msg.msg(f"created local config in '{dest_conf}'")
-    write_TOML(conf_dir)
+    conf.write_TOML(conf_dir)
 
 
 def backup_config() -> None:
@@ -51,12 +51,18 @@ def backup_config() -> None:
     create backup copy of .config
     """
     backup_suffix = "backup_" + datetime.now().strftime("%Y-%m-%d-%H%M%S%f")
-    backup_path = os.path.join(CONFIG_PATH, backup_suffix)
-    config_files = [f.path for f in os.scandir(CONFIG_PATH) if f.is_file()]
+    backup_path = os.path.join(conf.CONFIG_PATH, backup_suffix)
+    config_files = [f.path for f in os.scandir(conf.CONFIG_PATH) if f.is_file()]
     config_files = [
         f
         for f in config_files
-        if f in [DB_FILE, os.path.join(CONFIG_PATH, TOML_FILE), LOG_FILE, MAN_ALT]
+        if f
+        in [
+            conf.DB_FILE,
+            os.path.join(conf.CONFIG_PATH, conf.TOML_FILE),
+            conf.LOG_FILE,
+            conf.MAN_ALT,
+        ]
     ]
     os.mkdir(backup_path)
     for f in config_files:
@@ -68,7 +74,7 @@ def backup_config() -> None:
 
 def list_backups() -> list:
     """list backup sub-folders in config folder"""
-    backup_dirs = [d.path for d in os.scandir(CONFIG_PATH) if d.is_dir()]
+    backup_dirs = [d.path for d in os.scandir(conf.CONFIG_PATH) if d.is_dir()]
     backup_dirs = [d for d in backup_dirs if os.path.basename(d).startswith("backup")]
     backup_dirs.sort()
     return backup_dirs
@@ -80,7 +86,7 @@ def restore_config(idx=-1) -> None:
     """
     config_files = [f.path for f in os.scandir(list_backups()[idx]) if f.is_file()]
     for f in config_files:
-        shutil.copy2(f, CONFIG_PATH)
+        shutil.copy2(f, conf.CONFIG_PATH)
     msg.msg(f"Backup files restored: {config_files}")
 
 
@@ -134,8 +140,8 @@ def display_conf() -> None:
     """
     Display configuration
     """
-    conf = read_TOML(os.path.join(CONFIG_PATH, TOML_FILE))
-    for var, val in conf.items():
+    conf_txt = conf.read_TOML(os.path.join(conf.CONFIG_PATH, conf.TOML_FILE))
+    for var, val in conf_txt.items():
         print(var + ": " + str(val))
 
 
@@ -170,13 +176,13 @@ def vimdiff_config(  # pylint: disable=too-many-arguments,too-many-positional-ar
                    (to update file context for exmple)
     """
     with open(
-        os.path.join(MODULE_PATH, "conf", "vimdiff_help.txt"),
+        os.path.join(conf.MODULE_PATH, "conf", "vimdiff_help.txt"),
         mode="r",
         encoding="UTF8",
     ) as f:
         help_temp = Template(f.read())
     with open(
-        os.path.join(MODULE_PATH, "conf", ".vimrc"),
+        os.path.join(conf.MODULE_PATH, "conf", ".vimrc"),
         mode="r",
         encoding="UTF8",
     ) as f:
@@ -184,20 +190,22 @@ def vimdiff_config(  # pylint: disable=too-many-arguments,too-many-positional-ar
 
     substitutions = {
         "START_LINE": start_line,
-        "TEMP_DIR": TEMP_DIR,
+        "TEMP_DIR": conf.TEMP_DIR,
         "LEFT_NAME": opt_col,
         "RIGHT_NAME": change_col,
         "WHAT_DIFFER": what_differ,
         "DEV_ID": dev_id,
         "REF_COL": ref_col,
-        "MULTIPLE_MANUFACTURERS": DEV_MAN == what_differ,
+        "MULTIPLE_MANUFACTURERS": conf.DEV_MAN == what_differ,
         "EXIT_ON_CHANGE": exit_on_change,
     }
     vimrc_txt = vimrc_temp.render(substitutions)
     help_txt = help_temp.render(substitutions)
-    with open(os.path.join(TEMP_DIR, ".vimrc"), mode="w", encoding="UTF8") as f:
+    with open(os.path.join(conf.TEMP_DIR, ".vimrc"), mode="w", encoding="UTF8") as f:
         f.write(vimrc_txt)
-    with open(os.path.join(TEMP_DIR, "vimdiff_help.txt"), "w", encoding="UTF8") as f:
+    with open(
+        os.path.join(conf.TEMP_DIR, "vimdiff_help.txt"), "w", encoding="UTF8"
+    ) as f:
         f.write(help_txt)
 
 
@@ -207,14 +215,14 @@ def log_create() -> None:
     create dir if possible
     raises PermissionError
     """
-    if LOG_FILE == "":
+    if conf.LOG_FILE == "":
         return
-    path = os.path.dirname(LOG_FILE)
+    path = os.path.dirname(conf.LOG_FILE)
     if not os.path.exists(path):
         os.makedirs(path)
-    if os.path.exists(LOG_FILE):
-        os.remove(LOG_FILE)
-    with open(LOG_FILE, "w", encoding="UTF8") as f:
+    if os.path.exists(conf.LOG_FILE):
+        os.remove(conf.LOG_FILE)
+    with open(conf.LOG_FILE, "w", encoding="UTF8") as f:
         f.close()
 
 
@@ -287,8 +295,8 @@ def find_files(directory: str, file_format: str) -> list:
         raise ScanDirPermissionError(directory=directory)
     console_width = shutil.get_terminal_size().columns
     match_files = []
-    file_ext = import_format[file_format]["file_ext"]
-    s_dir = SCAN_DIR.upper()
+    file_ext = conf.import_format[file_format]["file_ext"]
+    s_dir = conf.SCAN_DIR.upper()
     msg.msg(f"searching for *.{file_ext} files in {s_dir} folder:")
     for folder, _, files in os.walk(directory):
         for file in files:
@@ -300,7 +308,7 @@ def find_files(directory: str, file_format: str) -> list:
             cur_dir = cur_dir.split("/")[-1].upper()
             if s_dir == "":
                 s_dir = cur_dir
-            if cur_dir == s_dir or (INCLUDE_SUB_DIR and s_dir in folder.upper()):
+            if cur_dir == s_dir or (conf.INCLUDE_SUB_DIR and s_dir in folder.upper()):
                 if any(file.endswith(e) for e in file_ext):
                     match_files.append(os.path.join(folder, file))
     print(" " * 200, end="\r")
@@ -317,7 +325,7 @@ def check_dir_file(args: argparse.Namespace) -> list[str]:
     # find_files (in particular os.walk()) ignores '.' and '..'
     args.dir = os.path.abspath(args.dir)
     if not os.path.exists(args.dir):
-        raise CheckDirError(directory=args.dir, scan_dir=SCAN_DIR)
+        raise CheckDirError(directory=args.dir, scan_dir=conf.SCAN_DIR)
     files = find_files(args.dir, args.format)
 
     # filter by file name
@@ -328,7 +336,7 @@ def check_dir_file(args: argparse.Namespace) -> list[str]:
                 file=args.file,
                 directory=args.dir,
                 project=getattr(args, "project", args.file),
-                scan_dir=SCAN_DIR,
+                scan_dir=conf.SCAN_DIR,
             )
     return files
 
@@ -367,7 +375,7 @@ def tab_exists_scheme(tab: str) -> None:
     check if tab exists
     raises sql_tabError if not
     """
-    sql_scheme = read_json_dict(SQL_SCHEME)
+    sql_scheme = read_json_dict(conf.SQL_SCHEME)
     if tab not in sql_scheme.keys():
         raise SqlTabError(tab, sql_scheme.keys())
 
@@ -381,7 +389,7 @@ def tab_cols(
     and list of columns that are "nice to have"
     follow FOREIGN key constraints to other tab
     """
-    sql_scheme = read_json_dict(SQL_SCHEME)
+    sql_scheme = read_json_dict(conf.SQL_SCHEME)
     tab_exists_scheme(tab)  # will raise sql_tabError if not
 
     cols = list(sql_scheme.get(tab, ""))
@@ -419,10 +427,12 @@ def tab_cols(
     nice_cols = list(set(nice_cols))
     if not all_cols:
         # remove COMMANDS which are filled utomatically
-        nice_cols = [c for c in nice_cols if c not in SQL_KEYWORDS + HIDDEN_COLS]
-        must_cols = [c for c in must_cols if c not in HIDDEN_COLS]
+        nice_cols = [
+            c for c in nice_cols if c not in conf.SQL_KEYWORDS + conf.HIDDEN_COLS
+        ]
+        must_cols = [c for c in must_cols if c not in conf.HIDDEN_COLS]
     else:
-        nice_cols = [c for c in nice_cols if c not in SQL_KEYWORDS]
+        nice_cols = [c for c in nice_cols if c not in conf.SQL_KEYWORDS]
         if "id" in must_cols:
             must_cols.remove("id")
     return (must_cols, nice_cols)
@@ -431,7 +441,7 @@ def tab_cols(
 def foreign_tabs(tab: str) -> list[str]:
     """return list of tables refrenced in FOREIGN key"""
     tab_exists_scheme(tab)  # will raise sql_tabError if not
-    sql_scheme = read_json_dict(SQL_SCHEME)
+    sql_scheme = read_json_dict(conf.SQL_SCHEME)
     tabs = []
     for k in sql_scheme[tab].get("FOREIGN", []):
         _, f_tab, _ = unpack_foreign(k)

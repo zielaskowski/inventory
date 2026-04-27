@@ -44,12 +44,12 @@ def test_undo_device1(db_setup, tmpdir, cli):
     logs = sql.getDF(tab="LOG")
     devices = sql.getDF(tab="DEVICE")
     bom = sql.getDF(
-            tab="BOM",
-            get_col=[BOM_QTY],
-            search=["device2"],
-            where=[DEV_ID],
-            follow=True,
-            )
+        tab="BOM",
+        get_col=[BOM_QTY],
+        search=["device2"],
+        where=[DEV_ID],
+        follow=True,
+    )
     assert len(logs) == 1
     assert "bom1" in logs.loc[0, "args"]
     assert "bom2" not in logs.loc[0, "args"]
@@ -80,11 +80,11 @@ def test_align_man1(cli, db_setup, tmpdir):
     bom_import(args)
 
     with patch(
-        "app.vimdiff.vimdiff_selection",
+        "app.manufacturers.vimdiff_selection",
         side_effect=[
-            (["maa", "mab", "mbc", "mbc", "mcc"],{}),
-            (["maa", "mab", "mbc", "mbc", "mcc"],{}),
-            (["desc22"],{}),
+            (["maa", "mab", "mbc", "mbc", "mcc"], {}),
+            (["maa", "mab", "mbc", "mbc", "mcc"], {}),
+            (["desc22"], {}),
         ],
     ):
         align()
@@ -134,12 +134,12 @@ def test_align_man2(cli, db_setup, tmpdir):
     bom_import(args)
 
     with patch(
-        "app.vimdiff.vimdiff_selection",
+        "app.manufacturers.vimdiff_selection",
         side_effect=[
-            (["maa", "maa", "mbb", "mbb"],{}),
-            (["maa", "maa", "mbb", "mbb"],{}),
-            (["desc11"],{}),
-            (["desc11"],{}),
+            (["maa", "maa", "mbb", "mbb"], {}),
+            (["maa", "maa", "mbb", "mbb"], {}),
+            (["desc11"], {}),
+            (["desc11"], {}),
         ],
     ):
         align()
@@ -189,11 +189,11 @@ def test_align_man4(cli, db_setup, tmpdir):
     bom_import(args)
 
     with patch(
-        "app.vimdiff.vimdiff_selection",
+        "app.manufacturers.vimdiff_selection",
         side_effect=[
-            (["maa", "mab", "mcc", "mcc"],{}),
-            (["maa", "mab", "mcc", "mcc"],{}),
-            (["desc11"],{}),
+            (["maa", "mab", "mcc", "mcc"], {}),
+            (["maa", "mab", "mcc", "mcc"], {}),
+            (["desc11"], {}),
         ],
     ):
         align()
@@ -241,11 +241,11 @@ def test_align_man5(cli, db_setup, tmpdir):
     bom_import(args)
 
     with patch(
-        "app.vimdiff.vimdiff_selection",
+        "app.manufacturers.vimdiff_selection",
         side_effect=[
-            (["maa", "mab", "mcc", "mcc"],{}),
-            (["maa", "mab", "mcc", "mcc"],{}),
-            (["cat3", "cat4", "desc11", "pack5"],{}),
+            (["maa", "mab", "mcc", "mcc"], {}),
+            (["maa", "mab", "mcc", "mcc"], {}),
+            (["cat3", "cat4", "desc11", "pack5"], {}),
         ],
     ):
         align()
@@ -396,15 +396,15 @@ def test_align_manufacturers_complex(cli, db_setup, tmpdir):
 
     # 2. Mock the interactive part and run the alignment
     with patch(
-        "app.vimdiff.vimdiff_selection",
+        "app.manufacturers.vimdiff_selection",
         side_effect=[
-            ["MAN_A"] * 5,
-            ["MAN_A"] * 5,
-            ["desc"],
-            ["desc"],
-            ["desc"],
-            ["desc"],
-            ["desc"],
+            (["MAN_A"] * 5, {}),
+            (["MAN_A"] * 5, {}),
+            (["desc"], {}),
+            (["desc"], {}),
+            (["desc"], {}),
+            (["desc"], {}),
+            (["desc"], {}),
         ],
     ):
         align()
@@ -456,15 +456,15 @@ def test_align_manufacturers_complex1(cli, db_setup, tmpdir):
     # 2. Mock the interactive part and run the alignment
     # The user is "choosing" UNIFIED_MANUFACTURER from the vimdiff
     with patch(
-        "app.vimdiff.vimdiff_selection",
+        "app.manufacturers.vimdiff_selection",
         side_effect=[
-            ["MAN"] * 5,
-            ["MAN"] * 5,
-            ["desc1"],
-            ["desc1"],
-            ["desc1"],
-            ["desc1"],
-            ["desc1"],
+            (["MAN"] * 5, {}),
+            (["MAN"] * 5, {}),
+            (["desc1"], {}),
+            (["desc1"], {}),
+            (["desc1"], {}),
+            (["desc1"], {}),
+            (["desc1"], {}),
         ],
     ):
         align()
@@ -492,24 +492,6 @@ def test_align_manufacturers_complex1(cli, db_setup, tmpdir):
     assert set(shop_df["shop"]) == {"shop1", "shop2", "shop3"}
 
 
-def _setup_bom_data_for_align1(cli, tmpdir):
-    """
-    Helper to import BOM data with conflicting manufacturers.
-    When chosen device has null in display_cols
-    """
-    bom_file = tmpdir.join("bom_align_test.csv")
-    with open(bom_file, "w", encoding="UTF8") as f:
-        f.write(
-            "device_id,device_manufacturer,qty,project,device_description\n"
-            + "device1,MAN_A,10,proj1\n"
-            + "device1,MAN_B,20,proj2,desc2\n"
-        )
-    args = cli.parse_args(
-        ["bom", "-d", tmpdir.strpath, "-f", "bom_align_test", "-F", "csv"]
-    )
-    bom_import(args)
-
-
 def test_align_manufacturers_complex2(cli, db_setup, tmpdir):
     """
     Tests aligning a device with multiple manufacturers from both BOM and SHOP imports.
@@ -529,16 +511,16 @@ def test_align_manufacturers_complex2(cli, db_setup, tmpdir):
 
     # 2. Mock the interactive part and run the alignment
     with patch(
-        "app.vimdiff.vimdiff_selection",
-        side_effect=([
-            ["MAN_A"] * 5,
-            ["MAN_A"] * 5,
-            [],  # none in keep_dat so will use rm_dat without asking
-            ["desc"],
-            ["desc"],
-            ["desc"],
-            ["desc"],
-            ],{}),
+        "app.manufacturers.vimdiff_selection",
+        side_effect=[
+            (["MAN_A"] * 5, {}),
+            (["MAN_A"] * 5, {}),
+            ([], {}),  # none in keep_dat so will use rm_dat without asking
+            (["desc"], {}),
+            (["desc"], {}),
+            (["desc"], {}),
+            (["desc"], {}),
+        ],
     ):
         align()
 
@@ -567,6 +549,24 @@ def test_align_manufacturers_complex2(cli, db_setup, tmpdir):
     shop_df = sql.getDF(tab="SHOP", follow=True)
     assert len(shop_df) == 3
     assert set(shop_df["shop"]) == {"shop1", "shop2", "shop3"}
+
+
+def _setup_bom_data_for_align1(cli, tmpdir):
+    """
+    Helper to import BOM data with conflicting manufacturers.
+    When chosen device has null in display_cols
+    """
+    bom_file = tmpdir.join("bom_align_test.csv")
+    with open(bom_file, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,qty,project,device_description\n"
+            + "device1,MAN_A,10,proj1\n"
+            + "device1,MAN_B,20,proj2,desc2\n"
+        )
+    args = cli.parse_args(
+        ["bom", "-d", tmpdir.strpath, "-f", "bom_align_test", "-F", "csv"]
+    )
+    bom_import(args)
 
 
 def test_admin_project_remove1(cli, db_setup, tmpdir, capsys):

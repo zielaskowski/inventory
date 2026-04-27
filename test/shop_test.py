@@ -142,8 +142,8 @@ def test_shop_import_csv6(db_setup, tmpdir, cli):
         "opt_col": {DEV_MAN + "_opts": ["aa | ab"]},
     }
     with patch(
-        "app.tabs.vimdiff_selection",
-        side_effect=[["ac"]],
+        "app.manufacturers.vimdiff_selection",
+        side_effect=[(["ac"], {})],
     ) as mock_select_column:
         find_alt_man(inp)
         mock_select_column.assert_called_with(

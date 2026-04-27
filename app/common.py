@@ -325,7 +325,7 @@ def tab_cols(
     must_cols = list(set(must_cols))
     nice_cols = list(set(nice_cols))
     if not all_cols:
-        # remove COMMANDS which are filled utomatically
+        # remove COMMANDS which are filled automatically
         nice_cols = [
             c for c in nice_cols if c not in conf.SQL_KEYWORDS + conf.HIDDEN_COLS
         ]

@@ -153,7 +153,7 @@ def find_alt_man(  # pylint: disable=too-many-return-statements
     3.  tricky is when are many devices in stock: present manufacturers separated with
         '|' as list. Special macro in vim to pick option
     return DataFrame modified by user
-    when 'just_inform', just display messages about possible duplications
+    when 'just_inform', just display messages about possible duplication
     and ref to admin funcs
     """
     start_line = 1  # start line for vim (vim count from 1)

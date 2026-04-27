@@ -236,7 +236,7 @@ def test_store_alternatives1(monkeypatch, db_setup):
     }
     selection = ["aa", "cc", "d", "e"]
 
-    write_man_alternative(man_alts)
+    write_alt_man(man_alts)
     monkeypatch.setattr(conf, "DEBUG", "pytest")
     importlib.reload(common)
 

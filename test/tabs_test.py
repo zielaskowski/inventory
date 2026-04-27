@@ -117,7 +117,7 @@ def test_vimdiff_selection_handles_none_input():
 
     # 2. Mock all external dependencies (file I/O and subprocess)
     m = mock_open(read_data=mock_read_data)
-    with patch("app.tabs.open", m), patch("app.tabs.vimdiff_config"), patch(
+    with patch("app.vimdiff.open", m), patch("app.vimdiff.vimdiff_config"), patch(
         "subprocess.run"
     ), patch("os.remove"):
         # 3. Call the function
@@ -132,7 +132,7 @@ def test_vimdiff_selection_handles_none_input():
 
     # 4. Assertions
     # Assert that the function returned the list we specified in mock_read_data
-    assert result == ["val1", "new_val2", "val3"]
+    assert result[0] == ["val1", "new_val2", "val3"]
 
     # Find the call that wrote the file for 'change_col' and check its content.
     # We iterate through all write calls made by the mock_open object.
@@ -165,7 +165,7 @@ def test_vimdiff_selection_raises_on_length_mismatch():
 
     # 3. Mock external dependencies and expect the exception
     m = mock_open(read_data=mock_read_data)
-    with patch("app.tabs.open", m), patch("app.tabs.vimdiff_config"), patch(
+    with patch("app.vimdiff.open", m), patch("app.vimdiff.vimdiff_config"), patch(
         "subprocess.run"
     ), patch("os.remove"):
         with pytest.raises(VimdiffSelError) as excinfo:
@@ -183,8 +183,8 @@ def test_vimdiff_selection_raises_on_length_mismatch():
     assert "val2" not in str(excinfo.value)
 
 
-@patch("app.tabs.vimdiff_selection")
-@patch("app.tabs.tab_cols")
+@patch("app.manufacturers.vimdiff_selection")
+@patch("app.manufacturers.tab_cols")
 def test_align_other_cols_user_selects_rm_dat(mock_tab_cols, mock_vimdiff):
     """
     GIVEN rm_dat and keep_dat with different device_description,
@@ -213,7 +213,7 @@ def test_align_other_cols_user_selects_rm_dat(mock_tab_cols, mock_vimdiff):
         start_line=1,  # pylint: disable=unused-argument
     ):
         # The value of the dict is the list of column values to show.
-        return next(iter(opt_col.values()))
+        return (next(iter(opt_col.values())), {})
 
     mock_vimdiff.side_effect = vimdiff_side_effect
 
@@ -260,15 +260,15 @@ def test_align_other_cols_user_selects_rm_dat(mock_tab_cols, mock_vimdiff):
     assert call_kwargs["opt_col"]["manuf_Y"] == ["Description from RM"]
 
 
-@patch("app.tabs.tab_cols")
+@patch("app.manufacturers.tab_cols")
 def test_align_other_cols_replace_none1(mock_tab_cols):
     """
     GIVEN rm_dat and keep_dat with different device_description,
     incoming data with None in description
     WHEN align_other_cols is called,
     AND user selects the description from rm_dat via vimdiff,
-    THEN the returned dataframe contains the description from rm_dat.
-    automatically fill None in description, without user interraction.
+    THEN the returned DataFrame contains the description from rm_dat.
+    Automatically fill None in description, without user interaction.
     """
     # 1. Setup mocks
     # Mock tab_cols to control the columns being processed

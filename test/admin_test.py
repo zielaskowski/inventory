@@ -80,11 +80,11 @@ def test_align_man1(cli, db_setup, tmpdir):
     bom_import(args)
 
     with patch(
-        "app.tabs.vimdiff_selection",
+        "app.vimdiff.vimdiff_selection",
         side_effect=[
-            ["maa", "mab", "mbc", "mbc", "mcc"],
-            ["maa", "mab", "mbc", "mbc", "mcc"],
-            ["desc22"],
+            (["maa", "mab", "mbc", "mbc", "mcc"],{}),
+            (["maa", "mab", "mbc", "mbc", "mcc"],{}),
+            (["desc22"],{}),
         ],
     ):
         align()
@@ -134,12 +134,12 @@ def test_align_man2(cli, db_setup, tmpdir):
     bom_import(args)
 
     with patch(
-        "app.tabs.vimdiff_selection",
+        "app.vimdiff.vimdiff_selection",
         side_effect=[
-            ["maa", "maa", "mbb", "mbb"],
-            ["maa", "maa", "mbb", "mbb"],
-            ["desc11"],
-            ["desc11"],
+            (["maa", "maa", "mbb", "mbb"],{}),
+            (["maa", "maa", "mbb", "mbb"],{}),
+            (["desc11"],{}),
+            (["desc11"],{}),
         ],
     ):
         align()
@@ -189,11 +189,11 @@ def test_align_man4(cli, db_setup, tmpdir):
     bom_import(args)
 
     with patch(
-        "app.tabs.vimdiff_selection",
+        "app.vimdiff.vimdiff_selection",
         side_effect=[
-            ["maa", "mab", "mcc", "mcc"],
-            ["maa", "mab", "mcc", "mcc"],
-            ["desc11"],
+            (["maa", "mab", "mcc", "mcc"],{}),
+            (["maa", "mab", "mcc", "mcc"],{}),
+            (["desc11"],{}),
         ],
     ):
         align()
@@ -241,11 +241,11 @@ def test_align_man5(cli, db_setup, tmpdir):
     bom_import(args)
 
     with patch(
-        "app.tabs.vimdiff_selection",
+        "app.vimdiff.vimdiff_selection",
         side_effect=[
-            ["maa", "mab", "mcc", "mcc"],
-            ["maa", "mab", "mcc", "mcc"],
-            ["cat3", "cat4", "desc11", "pack5"],
+            (["maa", "mab", "mcc", "mcc"],{}),
+            (["maa", "mab", "mcc", "mcc"],{}),
+            (["cat3", "cat4", "desc11", "pack5"],{}),
         ],
     ):
         align()
@@ -396,7 +396,7 @@ def test_align_manufacturers_complex(cli, db_setup, tmpdir):
 
     # 2. Mock the interactive part and run the alignment
     with patch(
-        "app.tabs.vimdiff_selection",
+        "app.vimdiff.vimdiff_selection",
         side_effect=[
             ["MAN_A"] * 5,
             ["MAN_A"] * 5,
@@ -456,7 +456,7 @@ def test_align_manufacturers_complex1(cli, db_setup, tmpdir):
     # 2. Mock the interactive part and run the alignment
     # The user is "choosing" UNIFIED_MANUFACTURER from the vimdiff
     with patch(
-        "app.tabs.vimdiff_selection",
+        "app.vimdiff.vimdiff_selection",
         side_effect=[
             ["MAN"] * 5,
             ["MAN"] * 5,
@@ -529,8 +529,8 @@ def test_align_manufacturers_complex2(cli, db_setup, tmpdir):
 
     # 2. Mock the interactive part and run the alignment
     with patch(
-        "app.tabs.vimdiff_selection",
-        side_effect=[
+        "app.vimdiff.vimdiff_selection",
+        side_effect=([
             ["MAN_A"] * 5,
             ["MAN_A"] * 5,
             [],  # none in keep_dat so will use rm_dat without asking
@@ -538,7 +538,7 @@ def test_align_manufacturers_complex2(cli, db_setup, tmpdir):
             ["desc"],
             ["desc"],
             ["desc"],
-        ],
+            ],{}),
     ):
         align()
 

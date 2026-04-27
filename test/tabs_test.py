@@ -12,7 +12,9 @@ import pytest
 from app import common
 from app.common import tab_cols
 from app.error import SqlTabError, VimdiffSelError
-from app.tabs import ASCII_txt, NA_rows, align_other_cols, vimdiff_selection
+from app.manufacturers import align_other_cols
+from app.tabs import ASCII_txt, NA_rows
+from app.vimdiff import vimdiff_selection
 from conf import config as conf
 
 

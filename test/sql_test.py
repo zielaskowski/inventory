@@ -13,7 +13,7 @@ from app.error import (
     SqlCreateError,
 )
 from app.manufacturers import (
-    get_man_alternatives,
+    get_alt_man,
 )
 from conf import config as conf
 
@@ -221,7 +221,7 @@ def test_sql_upgrade(db_setup, cli, tmpdir, monkeypatch):
     assert "MANUFACTURER" in sql_core.__list_tables__()
     assert "ALTERNATIVE_MANUFACTURER" in sql_core.__list_tables__()
     # check if imported manufacturers
-    alt_man = get_man_alternatives()
+    alt_man = get_alt_man()
     assert alt_man == man_alts
 
 

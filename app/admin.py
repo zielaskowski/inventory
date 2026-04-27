@@ -23,8 +23,8 @@ from app.common import (
 )
 from app.error import ReadJsonError, SqlCreateError, SqlExecuteError, VimdiffSelError
 from app.manufacturers import (
-    get_man_alternatives,
-    write_man_alternatives,
+    get_alt_man,
+    write_alt_man,
 )
 from app.message import msg
 from app.tabs import NA_rows, align_data, prepare_project, tabs_in_data
@@ -130,7 +130,7 @@ def select_restore_backup():
 
 def export_manufacturers(file: str) -> None:
     """export manufacturers to a file"""
-    alt_man = get_man_alternatives()
+    alt_man = get_alt_man()
     write_json(file=file, content=alt_man)
     msg.msg(f"Exported data to {file}")
 
@@ -144,7 +144,7 @@ def import_manufacturers(file: str, force=False):
         if force:
             sql.rm("ALTERNATIVE_MANUFACTURER")
             sql.rm("MANUFACTURER")
-        write_man_alternatives(alt_exist)
+        write_alt_man(alt_exist)
         msg.msg(f"imported manufacturer alternatives from '{file}'")
     except (ReadJsonError, SqlCreateError, SqlExecuteError) as e:
         msg.msg(str(e))

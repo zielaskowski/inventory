@@ -6,7 +6,7 @@ import os
 
 import pytest
 
-from app import admin, common, message, sql
+from app import admin, common, message
 from app.common import (
     backup_config,
     check_dir_file,
@@ -22,10 +22,10 @@ from app.error import CheckDirError, ReadJsonError, ScanDirPermissionError
 from app.import_dat import bom_import
 from app.log import log
 from app.manufacturers import (
-    get_alternatives,
-    get_man_alternatives,
-    store_alternatives,
-    write_man_alternatives,
+    get_alt_man,
+    store_alt_man,
+    use_alt_man,
+    write_alt_man,
 )
 from conf import config as conf
 
@@ -240,8 +240,8 @@ def test_store_alternatives1(monkeypatch, db_setup):
     monkeypatch.setattr(conf, "DEBUG", "pytest")
     importlib.reload(common)
 
-    store_alternatives(alternatives=alternatives, selection=selection)
-    exp = get_man_alternatives()
+    store_alt_man(alternatives=alternatives, selection=selection)
+    exp = get_alt_man()
     imp = {
         "aa": ["a1", "a2", "a3", "a4"],
         "bb": ["b1", "b2", "b3"],
@@ -266,9 +266,9 @@ def test_store_alternatives2():
     selection = ["aa", "cc", "d", "e"]
 
     importlib.reload(common)
-    write_man_alternatives(man_alts)
-    store_alternatives(alternatives=alternatives, selection=selection)
-    exp = get_man_alternatives()
+    write_alt_man(man_alts)
+    store_alt_man(alternatives=alternatives, selection=selection)
+    exp = get_alt_man()
     imp = {
         "aa": ["a1", "a2", "a3", "a4"],
         "bb": ["b1", "b2", "b3"],
@@ -294,9 +294,9 @@ def test_store_alternatives3():
     selection = ["ff", "cc", "d", "e"]
 
     importlib.reload(common)
-    write_man_alternatives(man_alts)
-    store_alternatives(alternatives=alternatives, selection=selection)
-    exp = get_man_alternatives()
+    write_alt_man(man_alts)
+    store_alt_man(alternatives=alternatives, selection=selection)
+    exp = get_alt_man()
     imp = {
         "aa": ["a2", "a3"],
         "bb": ["b1", "b3"],
@@ -325,7 +325,7 @@ def test_get_alternatives1(tmpdir, monkeypatch):
     with open(man_json.strpath, "w", encoding="UTF8") as f:
         json.dump(man_alts, f)
 
-    man_alt, diff_rows = get_alternatives(man)
+    man_alt, diff_rows = use_alt_man(man)
     assert man_alt == ["aa", "aa", "bb", "c"]
     assert diff_rows == [True, True, True, False]
 

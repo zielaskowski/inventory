@@ -15,7 +15,6 @@ from json import JSONDecodeError
 from typing import Dict, List, Set
 
 import pandas as pd
-from jinja2 import Template
 
 import conf.config as conf
 from app.error import (
@@ -153,60 +152,6 @@ def first_diff_index(list1: list[str], list2: list[str]) -> int:
     if len(list1) != len(list2):
         return min(len(list1), len(list2))
     return 0  # identical lists
-
-
-def vimdiff_config(  # pylint: disable=too-many-arguments,too-many-positional-arguments
-    ref_col: str,
-    change_col: str,
-    opt_col: str,
-    what_differ: str,
-    dev_id: str,
-    exit_on_change: bool,
-    start_line: int = 1,
-):
-    """
-    prepare vimdiff config from template
-    and adjust help message to column
-    ref_col, change_col, opt_col are files (without extension) which
-                                 will be displayed
-    alternate_col is the name of column, displayed in help, when
-                  equal DEV_MAN will turn on option selection help and options
-    dev_id, used during attributes alignment, to inform about device
-    exit_on_change if True, will exit vim after each change
-                   (to update file context for exmple)
-    """
-    with open(
-        os.path.join(conf.MODULE_PATH, "conf", "vimdiff_help.txt"),
-        mode="r",
-        encoding="UTF8",
-    ) as f:
-        help_temp = Template(f.read())
-    with open(
-        os.path.join(conf.MODULE_PATH, "conf", ".vimrc"),
-        mode="r",
-        encoding="UTF8",
-    ) as f:
-        vimrc_temp = Template(f.read())
-
-    substitutions = {
-        "START_LINE": start_line,
-        "TEMP_DIR": conf.TEMP_DIR,
-        "LEFT_NAME": opt_col,
-        "RIGHT_NAME": change_col,
-        "WHAT_DIFFER": what_differ,
-        "DEV_ID": dev_id,
-        "REF_COL": ref_col,
-        "MULTIPLE_MANUFACTURERS": conf.DEV_MAN == what_differ,
-        "EXIT_ON_CHANGE": exit_on_change,
-    }
-    vimrc_txt = vimrc_temp.render(substitutions)
-    help_txt = help_temp.render(substitutions)
-    with open(os.path.join(conf.TEMP_DIR, ".vimrc"), mode="w", encoding="UTF8") as f:
-        f.write(vimrc_txt)
-    with open(
-        os.path.join(conf.TEMP_DIR, "vimdiff_help.txt"), "w", encoding="UTF8"
-    ) as f:
-        f.write(help_txt)
 
 
 def write_json(file: str, content: dict[str, dict] | dict[str, list[str]]) -> None:

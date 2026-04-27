@@ -7,7 +7,7 @@ import pytest
 
 from app.import_dat import shop_import
 from app.sql import getDF, put
-from app.tabs import align_manufacturers, columns_align, foreign_tabs, prepare_tab
+from app.tabs import columns_align, find_alt_man, foreign_tabs, prepare_tab
 from conf.config import DEV_MAN
 from inv import cli_parser
 
@@ -145,7 +145,7 @@ def test_shop_import_csv6(db_setup, tmpdir, cli):
         "app.tabs.vimdiff_selection",
         side_effect=[["ac"]],
     ) as mock_select_column:
-        align_manufacturers(inp)
+        find_alt_man(inp)
         mock_select_column.assert_called_with(
             ref_col=alternatives["ref_col"],
             change_col=alternatives["change_col"],

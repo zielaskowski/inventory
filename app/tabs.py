@@ -1,12 +1,11 @@
 """
 helper function for importing
-clean and tidy tables, but also manage files scaning
+clean and tidy tables, but also manage files scanning
 """
 
 import hashlib
 import os
 import re
-import subprocess
 import sys
 from argparse import Namespace
 from datetime import date
@@ -18,13 +17,11 @@ import conf.config as conf
 from app import sql
 from app.common import (
     check_dir_file,
-    first_diff_index,
     foreign_tabs,
     match_from_list,
     read_json_dict,
     tab_cols,
     unpack_foreign,
-    vimdiff_config,
 )
 from app.error import (
     AmbigousMatchError,
@@ -33,11 +30,11 @@ from app.error import (
     PrepareTabError,
     ScanDirPermissionError,
     SqlTabError,
-    VimdiffSelError,
 )
 from app.manufacturers import (
-    get_alternatives,
-    store_alternatives,
+    align_other_cols,
+    find_alt_man,
+    use_alt_man,
 )
 from app.message import msg
 
@@ -69,7 +66,7 @@ def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:
         return
 
     # if we have stored alternatives, use it
-    dat.loc[:, conf.DEV_MAN], _ = get_alternatives(dat[conf.DEV_MAN].to_list())
+    dat.loc[:, conf.DEV_MAN], _ = use_alt_man(dat[conf.DEV_MAN].to_list())
 
     # hash columns - must be last so all columns aligned and present
     dat = hash_tab(dat=dat)
@@ -106,9 +103,12 @@ def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:
     if tab == "STOCK" and not check_existing_data(dat, args):
         return
 
-    # check for different manufacturer on the same dev_id
+    # check for alternative manufacturer on the same dev_id
     # just inform that alignment can be done with admin functions
-    align_data(dat=dat, just_inform=True)
+    find_alt_man(
+        dat=dat.copy(deep=True),
+        just_inform=True,
+    )
 
     # inform if data useful for other tabs is present
     tabs = tabs_in_data(dat)
@@ -317,24 +317,21 @@ def ASCII_txt(  # pylint: disable=invalid-name
     return txt
 
 
-def align_data(dat: pd.DataFrame, just_inform: bool = False) -> pd.DataFrame:
+def align_data(dat: pd.DataFrame) -> pd.DataFrame:
     """
     align new data with existing:
         1. align manufacturers
         2. where manufacturer changed, align all other columns
         3. remove devs where manufacturer changed
         4. return aligned data to be added
-    if just_inform==True, just collect duplication and display, no action
-    return dataframe with changed devices with aditional column 'dev_rm'
+    return DataFrame with changed devices with additional column 'dev_rm'
     with device hashes before change
     raise  VimdiffSelError when user abort or mess with vimdiff
     """
-    align_dat = align_manufacturers(
+    align_dat = find_alt_man(
         dat.copy(deep=True),
-        just_inform=just_inform,
+        just_inform=False,
     )
-    if just_inform:
-        return dat
     # select rows where change
     differ_row = dat[conf.DEV_MAN] != align_dat[conf.DEV_MAN]
     # create new hash after possibly changing manufacturer
@@ -343,11 +340,11 @@ def align_data(dat: pd.DataFrame, just_inform: bool = False) -> pd.DataFrame:
     if align_dat.empty:
         msg.msg("Data is aligned. Nothing done.")
         return align_dat
-    # keep new device in separate dataframe
+    # keep new device in separate DataFrame
     keep_dev_hash = align_dat[conf.DEV_HASH].drop_duplicates().to_list()
     keep_dev = dat[dat[conf.DEV_HASH].isin(keep_dev_hash)]
     if len(keep_dev) != len(keep_dev_hash):
-        # new manufacturer name somwhere, device not existing in db
+        # new manufacturer name somewhere, device not existing in db
         new_dev_hash = [c for c in keep_dev_hash if c not in dat[conf.DEV_HASH]]
         keep_dev = pd.concat(
             [
@@ -390,296 +387,6 @@ def align_data(dat: pd.DataFrame, just_inform: bool = False) -> pd.DataFrame:
     )
     keep_dev = hash_tab(keep_dev)
     return keep_dev
-
-
-def align_other_cols(  # pylint: disable=too-many-locals
-    rm_dat: pd.DataFrame,
-    keep_dat: pd.DataFrame,
-) -> pd.DataFrame:
-    """
-    expect DataFrame with one pair replacement per row:
-    and columns:
-        rm_dat: dev_rm | man_rm | DEV_HASH | DEV_MAN + must_cols
-        keep_dat: must_cols+nice_cols
-    display all "nice" attributes of device to user to choose
-    dispalay only not empty and attributes that differ
-    if keep_attr empty, replace with rm_attr
-    return selected attributes attached in row to input dat
-    raise KeyboardInterrupt when user abort
-    """
-    if rm_dat.empty or keep_dat.empty:
-        raise ValueError("Input DataFrame can not be empty.")
-
-    extra_cols = ["dev_rm", "man_rm"]
-    must_cols, nice_cols = tab_cols(tab="DEVICE")
-
-    missing_rm_cols = [c for c in must_cols + extra_cols if c not in rm_dat.columns]
-    if any(missing_rm_cols):
-        raise ValueError(f"Missing necessery columns in rm_dat: {missing_rm_cols}")
-    missing_keep_cols = [c for c in must_cols + nice_cols if c not in keep_dat.columns]
-    if any(missing_keep_cols):
-        raise ValueError(f"Missing necessery columns in keep_dat: {missing_keep_cols}")
-
-    keep_dat.set_index(conf.DEV_HASH, inplace=True)
-    # collect all useful data from devices we are about to remove
-    for idx in rm_dat.index:
-        rm_attr = rm_dat.copy(deep=True).loc[idx, :]
-        # collect attributes for devices that we want to use
-        keep_attr = keep_dat.loc[keep_dat.index == rm_attr[conf.DEV_HASH]].iloc[0, :]
-        change_man = keep_attr[conf.DEV_MAN]
-        opt_man = rm_attr["man_rm"]
-        ref_id = rm_attr[conf.DEV_ID]
-        rm_attr, keep_attr, keep_nones = align_attributes(rm_attr, keep_attr)
-        if not keep_attr.empty or not keep_nones.empty:
-            try:
-                aligned_dat = vimdiff_selection(
-                    ref_col={"columns": rm_attr.index.to_list()},
-                    change_col={change_man: keep_attr.to_list()},
-                    opt_col={opt_man: rm_attr.to_list()},
-                    what_differ="attributes",
-                    dev_id=ref_id,
-                    exit_on_change=False,
-                )
-            except VimdiffSelError as err:
-                # if no change from user, skip
-                print(str(err))
-                if err.interact:
-                    # raised when user mess up with lines order or number
-                    input("Press any key....")
-                continue
-            keep_attr.iloc[:] = aligned_dat
-            # in case keep_attr is missing indexes
-            keep_attr = keep_attr.reindex(keep_attr.index.union(keep_nones.index))
-            keep_attr.update(keep_nones)
-            # update will put NaN in missing cols, which will brake on int columns
-            # so update on common cols only
-            keep_attr_df = pd.DataFrame([keep_attr])
-            common_col = keep_dat.columns.intersection(keep_attr_df.columns)
-            keep_dat.loc[keep_attr_df.index, common_col] = keep_attr_df
-    return keep_dat.reset_index()
-
-
-def align_attributes(rm_attr: pd.Series, keep_attr: pd.Series) -> tuple:
-    """
-    Align attributes of devices:
-        rm_attr: this attrbutes will lost if not aligned
-        keep_attr: this we optionaly may want to keep
-    """
-    # if NA in rm_attr or missing col, take from keep_attr if present
-    for idx, val in keep_attr.items():
-        if idx not in rm_attr:
-            rm_attr[idx] = val
-        if rm_attr[idx] is None:
-            rm_attr[idx] = keep_attr[idx]
-    # and oposite, then will be easy to remove the same
-    for idx, val in rm_attr.items():
-        if idx not in keep_attr:
-            keep_attr[idx] = val
-    # hide attributes which are already aligned
-    for idx in rm_attr.index:
-        rm, keep = rm_attr[idx], keep_attr[idx]
-        # IEEE754: NaN is not equal to anything, inluding itself!
-        if (rm == keep) or (pd.isna(rm) & pd.isna(keep)):
-            rm_attr.pop(idx)
-            keep_attr.pop(idx)
-    # if None in keep_dat and not in rm_dat, use and write separate Series
-    index_none = rm_attr.loc[keep_attr.isna() & rm_attr.notna()].index
-    keep_none = rm_attr[index_none]
-    rm_attr.drop(index_none, inplace=True, errors="ignore")
-    keep_attr.drop(index_none, inplace=True, errors="ignore")
-    return (
-        rm_attr.sort_index(),
-        keep_attr.sort_index(),
-        keep_none,
-    )
-
-
-def align_manufacturers(  # pylint: disable=too-many-return-statements
-    dat: pd.DataFrame,
-    just_inform: bool = False,
-) -> pd.DataFrame:
-    """
-    For device_id duplication, collect manufacturer name if different
-    create dictionary with list of manufacturers as values for device_id as key:
-    {DEV_ID:[MAN1,MAN2,...]}
-    1.  checking only incoming data against stock. Do not check duplication
-        inside incoming data
-    2.  simplest case is one-to-one or many-to-one: only one device in stock
-    3.  tricky is when are many devices in stock: present manufacturers separated with
-        '|' as list. Special macro in vim to pick option
-    return DataFrame modified by user
-    when 'just_inform', just display messages about possible duplications
-    and ref to admin funcs
-    """
-    start_line = 1  # start line for vim (vim count from 1)
-    if not all(c in dat.columns for c in [conf.DEV_ID, conf.DEV_MAN]):
-        return dat
-    ex_dat = sql.getDF(
-        tab="DEVICE",
-        get_col=[conf.DEV_ID, conf.DEV_MAN],
-        search=dat[conf.DEV_ID].to_list(),
-        where=[conf.DEV_ID],
-    )
-    if ex_dat.empty:
-        # no duplications in stock
-        return dat
-
-    # group existing data on dev, join manufacturers with ' | ' if more then one dev
-    ex_grp = (
-        ex_dat.groupby(conf.DEV_ID)[conf.DEV_MAN]
-        .agg(lambda x: " | ".join(x.astype(str)))
-        .reset_index()
-    )
-
-    # iterate as long as there is a change from user
-    while True:
-        # panda RULES: must be merged on 'left' to keep indexes, and clean up NAs later
-        # with merge on 'inner' indexed are fuck up
-        dat_dup = pd.merge(
-            left=dat,
-            right=ex_grp,
-            on=conf.DEV_ID,
-            how="left",
-            suffixes=("", "_opts"),
-        )
-
-        # column name for grouped manufacturers
-        man_grp_col = conf.DEV_MAN + "_opts"
-
-        # for GREAT panda NaN is any value so must be droped before
-        dat_dup = dat_dup.loc[~dat_dup[man_grp_col].isna(), :]
-
-        # drop rows with matched manufacturer
-        dat_dup = dat_dup[dat_dup[conf.DEV_MAN] != dat_dup[man_grp_col]]
-
-        if dat_dup.empty:
-            # importing manufacturers are aligned with stock
-            return dat
-
-        # remove dup_col from dup_col_grp
-        for r in dat_dup.itertuples():
-            dup_col_grp_v = getattr(r, man_grp_col)
-            dup_col_v = getattr(r, conf.DEV_MAN)
-            opts = str(dup_col_grp_v).split(" | ")
-            opts = [o for o in opts if o != dup_col_v]
-            dat_dup.loc[r.Index, man_grp_col] = " | ".join(opts)
-
-        if just_inform:
-            msg.inform_duplications(
-                dup=dat_dup.loc[:, [conf.DEV_MAN, man_grp_col, conf.DEV_ID]]
-            )
-            return dat
-        # sort data on device_id, much easier to understand in vimdiff
-        dat_dup.sort_values(by=conf.DEV_ID, inplace=True)
-        chosen = vimdiff_selection(
-            ref_col={"devices": dat_dup.loc[:, conf.DEV_ID].to_list()},
-            change_col={conf.DEV_MAN: dat_dup.loc[:, conf.DEV_MAN].to_list()},
-            opt_col={man_grp_col: dat_dup.loc[:, man_grp_col].to_list()},
-            what_differ=conf.DEV_MAN,
-            dev_id="",
-            exit_on_change=True,
-            start_line=start_line,
-        )
-        # if no change from user, finish
-        if dat_dup[conf.DEV_MAN].to_list() == chosen:
-            break
-        # find index of change, so can start vim on correct line number
-        start_line = first_diff_index(dat_dup[conf.DEV_MAN].to_list(), chosen)
-        dat_dup[conf.DEV_MAN] = chosen
-        # put new data into orginal tab, based on preserved indexes
-        dat.loc[dat_dup.index, conf.DEV_MAN] = dat_dup[conf.DEV_MAN]
-
-    return dat
-
-
-def vimdiff_selection(  # pylint: disable=too-many-positional-arguments,too-many-locals,too-many-arguments
-    ref_col: dict[str, list[str]],
-    change_col: dict[str, list[str]],
-    opt_col: dict[str, list[str]],
-    what_differ: str,
-    dev_id: str,
-    exit_on_change: bool,
-    start_line: int = 1,
-) -> list[str]:
-    """
-    present alternatives in vimdiff
-    input is dict, where key is column_name and values are to be displayed
-    column_name is also used to name the file where values are written and then displayed by vimdiff
-    """
-    cols = []
-    for col in [ref_col, change_col, opt_col]:
-        cols.append(next(iter(col)))
-        cols.append(next(iter(col.values())))
-    ref_k, ref_v = (0, 1)
-    change_k, change_v = (2, 3)
-    opt_k, opt_v = (4, 5)
-    # if empty list (nothing to write, nothing to show)
-    # just return
-    if cols[change_v] == [] or cols[opt_v] == []:
-        return []
-
-    for key in [ref_k, change_k, opt_k]:
-        # remove forbiden chars: / \ : * ? " < > |
-        cols[key] = re.sub(r'[\/\\:\*\?"<>\|\r\n\t]', "_", cols[key])
-        with open(
-            # in case manufacturers are the same, need to add suffix to file name
-            conf.TEMP_DIR + cols[key] + "_" + str(key) + ".txt",
-            mode="w",
-            encoding="UTF8",
-        ) as f:
-            for ind, item in enumerate(cols[key + 1]):
-                f.write(str(ind) + "| " + str(item) + "\n")  # add line number: '1| txt'
-                # other way diff may shift rows to align data between columns
-
-    vimdiff_config(
-        ref_col=cols[ref_k] + "_0",
-        change_col=cols[change_k] + "_2",
-        opt_col=cols[opt_k] + "_4",
-        what_differ=what_differ,
-        dev_id=dev_id,
-        exit_on_change=exit_on_change,
-        start_line=start_line,
-    )
-
-    vim_cmd = "vim -u " + conf.TEMP_DIR + ".vimrc"
-    if conf.DEBUG == "none":
-        subprocess.run(vim_cmd, shell=True, check=False)
-    elif conf.DEBUG == "debugpy":
-        with subprocess.Popen("konsole -e " + vim_cmd, shell=True) as p:
-            p.wait()
-
-    with open(
-        conf.TEMP_DIR + cols[change_k] + "_2.txt", mode="r", encoding="UTF8"
-    ) as f:
-        chosen = f.read().splitlines()
-
-    # clean up files
-    for key in [ref_k, change_k, opt_k]:
-        os.remove(conf.TEMP_DIR + cols[key] + "_" + str(key) + ".txt")
-
-    if chosen == []:  # user interrupt
-        raise VimdiffSelError(user_inerrupt=True)
-
-    # remove line numbers
-    chosen = [re.sub(r"^\d+\|\s*", "", c) for c in chosen]
-    chosen = [c.strip() for c in chosen]
-    if any(len(chosen) != len(cols[v]) for v in [ref_v, change_v, opt_v]):
-        # if user mess-up or added/removed rows
-        max_len = max(len(chosen), len(cols[opt_v]))
-        chosen += [None] * (max_len - len(chosen))
-        cols[opt_v] += [None] * (max_len - len(cols[opt_v]))
-        df = pd.DataFrame({"selected": chosen, "opts": cols[opt_v]})
-        raise VimdiffSelError(select=df, interact=conf.DEV_MAN != cols[change_k])
-    # write matches selected by user, so next time save some time
-    if conf.DEV_MAN == cols[change_k]:
-        store_alternatives(
-            alternatives={
-                cols[change_k]: cols[change_v],
-                cols[opt_k]: cols[opt_v],
-            },
-            selection=chosen,
-        )
-    return chosen
 
 
 def check_existing_project(dat: pd.DataFrame, args: Namespace) -> bool:

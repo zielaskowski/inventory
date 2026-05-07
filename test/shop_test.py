@@ -44,8 +44,8 @@ def test_shop_import_csv2(db_setup, tmpdir, cli):
     test = tmpdir.join("test.csv")
     with open(test, "w", encoding="UTF8") as f:
         f.write(
-            "device_id,device_manufacturer,order_qty,price\n"
-            + "aa,bb,1,10"
+            "hash,device_id,device_manufacturer,order_qty,price\n"
+            + "1,aa,bb,1,10"
         ) # fmt: skip
     inp = pd.read_csv(test)
     args = cli.parse_args(["shop", "-d", tmpdir.strpath, "-F", "csv"])

@@ -212,13 +212,14 @@ def align() -> None:
     if dat.empty:
         sys.exit(1)
     # remove old hashes of changed devices
-    sql.rm_all_tabs(hash_list=dat["dev_rm"].to_list())
+    # only if hash changed, other way will update
+    # updating (not replacing) is critical to allow undo operation
+    changed_hash = dat["hash"] != dat["dev_rm"]
+    sql.rm_all_tabs(hash_list=dat.loc[changed_hash, "dev_rm"].to_list())
     # write aligned data back to SQL
     tabs = tabs_in_data(dat)
     for t in tabs:
         must_cols, nice_cols = tab_cols(t)
         tab_dat = NA_rows(dat, must_cols, nice_cols, inform=False)
         on_conflict = None
-        if t == "DEVICE":
-            on_conflict = {"action": "REPLACE"}
         sql.put(dat=tab_dat, tab=t, on_conflict=on_conflict)

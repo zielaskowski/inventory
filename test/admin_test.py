@@ -8,6 +8,7 @@ import pandas as pd
 from app import sql
 from app.admin import admin, align, remove_dev, select_log_undo
 from app.import_dat import bom_import, shop_import
+from app.log import log
 from conf.config import BOM_QTY, DEV_DESC, DEV_ID, DEV_MAN
 
 
@@ -23,7 +24,6 @@ def test_undo_device1(db_setup, tmpdir, cli):
             + "device2,MAN_B,20,proj2,desc2\n"
         )
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "bom1", "-F", "csv"])
-    sql.log.log(args)
     bom_import(args)
 
     bom_file = tmpdir.join("bom2.csv")
@@ -33,10 +33,9 @@ def test_undo_device1(db_setup, tmpdir, cli):
             + "device2,MAN_B,10,proj1,desc1\n"
             + "device4,MAN_B,20,proj2,desc2\n"
         )
-    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "bom2", "-F", "csv"])
-    time.sleep(2)
     sql.log.log_on = True
-    sql.log.log(args)
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "bom2", "-F", "csv"])
+    time.sleep(1)
     bom_import(args)
     with patch("app.admin.msg.select_log", return_value=1):
         select_log_undo(10)
@@ -63,6 +62,7 @@ def test_align_man1(cli, db_setup, tmpdir):
     change device manufacturer to other (already existed)
     expected added qty.
     change description to existing one
+    Then undo
     """
     # base data
     bom1 = tmpdir.join("bom1.csv")
@@ -78,7 +78,11 @@ def test_align_man1(cli, db_setup, tmpdir):
         )# fmt: skip
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "bom1", "-F", "csv"])
     bom_import(args)
+    bom1_df = sql.getDF(tab="BOM", follow=True)
 
+    log.log_on = True
+    args = cli.parse_args(["admin", "-a"])
+    time.sleep(1)
     with patch(
         "app.manufacturers.vimdiff_selection",
         side_effect=[
@@ -87,7 +91,7 @@ def test_align_man1(cli, db_setup, tmpdir):
             (["desc22"], {}),
         ],
     ):
-        align()
+        admin(args)
 
     dev = sql.getDF(tab="BOM", follow=True)
 
@@ -110,6 +114,10 @@ def test_align_man1(cli, db_setup, tmpdir):
         ignore_index=True,
     )
     pd.testing.assert_frame_equal(dev, exp_dat, check_dtype=False)
+    log_last = int(sql.getDF(tab="LOG").loc[1, "date"])
+    sql.undo(log_last)
+    after_undo = sql.getDF(tab="BOM", follow=True)
+    pd.testing.assert_frame_equal(after_undo, bom1_df)
 
 
 def test_align_man2(cli, db_setup, tmpdir):
@@ -117,6 +125,7 @@ def test_align_man2(cli, db_setup, tmpdir):
     multiple projects in BOM
     and then add existing device in SHOP
     importing device and manufacturer already present but changing manuf to other
+    Then undo
     """
     # base data
     bom1 = tmpdir.join("bom1.csv")
@@ -132,7 +141,11 @@ def test_align_man2(cli, db_setup, tmpdir):
         )# fmt: skip
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "bom1", "-F", "csv"])
     bom_import(args)
+    bom1_df = sql.getDF(tab="BOM", follow=True)
 
+    log.log_on = True
+    time.sleep(1)
+    args = cli.parse_args(["admin", "-a"])
     with patch(
         "app.manufacturers.vimdiff_selection",
         side_effect=[
@@ -142,7 +155,7 @@ def test_align_man2(cli, db_setup, tmpdir):
             (["desc11"], {}),
         ],
     ):
-        align()
+        admin(args)
 
     dev = sql.getDF(tab="BOM", follow=True)
 
@@ -165,6 +178,13 @@ def test_align_man2(cli, db_setup, tmpdir):
         ignore_index=True,
     )
     pd.testing.assert_frame_equal(dev, exp_dat, check_dtype=False)
+    log_last = int(sql.getDF(tab="LOG").loc[1, "date"])
+    sql.undo(log_last)
+    after_undo = sql.getDF(tab="BOM", follow=True)
+    pd.testing.assert_frame_equal(
+        after_undo.sort_values(by=["hash", "device_description"]),
+        bom1_df.sort_values(by=["hash", "device_description"]),
+    )
 
 
 def test_align_man4(cli, db_setup, tmpdir):
@@ -172,6 +192,7 @@ def test_align_man4(cli, db_setup, tmpdir):
     test ffill: multiple projects in BOM
     and then add existing device in SHOP
     importing device and manufacturer already present but changing manuf to other
+    Then update
     """
     # base data
     bom1 = tmpdir.join("bom1.csv")
@@ -187,7 +208,11 @@ def test_align_man4(cli, db_setup, tmpdir):
         )# fmt: skip
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "bom1", "-F", "csv"])
     bom_import(args)
+    bom1_df = sql.getDF(tab="BOM", follow=True)
 
+    log.log_on = True
+    time.sleep(1)
+    args = cli.parse_args(["admin", "-a"])
     with patch(
         "app.manufacturers.vimdiff_selection",
         side_effect=[
@@ -196,7 +221,7 @@ def test_align_man4(cli, db_setup, tmpdir):
             (["desc11"], {}),
         ],
     ):
-        align()
+        admin(args)
 
     dev = sql.getDF(tab="BOM", follow=True)
 
@@ -219,6 +244,13 @@ def test_align_man4(cli, db_setup, tmpdir):
         ignore_index=True,
     )
     pd.testing.assert_frame_equal(dev, exp_dat, check_dtype=False)
+    log_last = int(sql.getDF(tab="LOG").loc[1, "date"])
+    sql.undo(log_last)
+    after_undo = sql.getDF(tab="BOM", follow=True)
+    pd.testing.assert_frame_equal(
+        after_undo.sort_values(by=["hash", "device_description"]),
+        bom1_df.sort_values(by=["hash", "device_description"]),
+    )
 
 
 def test_align_man5(cli, db_setup, tmpdir):
@@ -239,7 +271,11 @@ def test_align_man5(cli, db_setup, tmpdir):
         )# fmt: skip
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "bom1", "-F", "csv"])
     bom_import(args)
+    bom1_df = sql.getDF(tab="BOM", follow=True)
 
+    log.log_on = True
+    time.sleep(1)
+    args = cli.parse_args(["admin", "-a"])
     with patch(
         "app.manufacturers.vimdiff_selection",
         side_effect=[
@@ -248,7 +284,7 @@ def test_align_man5(cli, db_setup, tmpdir):
             (["cat3", "cat4", "desc11", "pack5"], {}),
         ],
     ):
-        align()
+        admin(args)
 
     dev = sql.getDF(tab="BOM", follow=True)
 
@@ -272,6 +308,13 @@ def test_align_man5(cli, db_setup, tmpdir):
     )
     # assert all(exp_dat.apply(sorted,axis='rows') == dev.apply(sorted,axis='rows'))
     pd.testing.assert_frame_equal(dev, exp_dat, check_dtype=False)
+    log_last = int(sql.getDF(tab="LOG").loc[1, "date"])
+    sql.undo(log_last)
+    after_undo = sql.getDF(tab="BOM", follow=True)
+    pd.testing.assert_frame_equal(
+        after_undo.sort_values(by=["hash", "device_description"]),
+        bom1_df.sort_values(by=["hash", "device_description"]),
+    )
 
 
 # import bom: one dev in two projects

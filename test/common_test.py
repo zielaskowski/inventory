@@ -110,13 +110,11 @@ def test_log1(db_setup, cli, tmpdir):
     """
     1. no log for args not changing db
     2. log write
-    3. log replace
-    4. assert log_args_once
+    4. assert log_on
     5. log read
     """
     args = cli.parse_args(["admin", "-c"])
     admin.admin(args)
-    assert log.log_on is True
 
     test = tmpdir.join("test.csv")
     with open(test, "w", encoding="UTF8") as f:
@@ -131,14 +129,14 @@ def test_log1(db_setup, cli, tmpdir):
 
 
 def test_find_files1():
-    """lack of permisions"""
+    """lack of permissions"""
     with pytest.raises(ScanDirPermissionError) as err_info:
         find_files("/", "csv")
     assert err_info.match("/")
 
 
 def test_find_files2(find_file_fix, tmpdir):
-    """expected bevaviour"""
+    """expected behavior"""
     file_list = []
     d = tmpdir.mkdir("sub")
     for _ in range(4):
@@ -205,7 +203,7 @@ def test_check_dir_files2(find_file_fix, tmpdir, cli):
 
 
 def test_foreign_tabs1(monkeypatch, tmpdir):
-    """expected behaviour"""
+    """expected behavior"""
     sql_scheme = {
         "tab1": {
             "col1": "TEXT",
@@ -225,7 +223,7 @@ def test_foreign_tabs1(monkeypatch, tmpdir):
 
 
 def test_store_alternatives1(monkeypatch, db_setup):
-    """default behaviour"""
+    """default behavior"""
     man_alts = {
         "aa": ["a1", "a2", "a3"],
         "bb": ["b1", "b2", "b3"],
@@ -253,7 +251,7 @@ def test_store_alternatives1(monkeypatch, db_setup):
     assert exp == imp
 
 
-def test_store_alternatives2():
+def test_store_alternatives2(db_setup):
     """check one-to-one condition"""
     man_alts = {
         "aa": ["a1", "a2", "a3"],
@@ -280,7 +278,7 @@ def test_store_alternatives2():
     assert exp == imp
 
 
-def test_store_alternatives3():
+def test_store_alternatives3(db_setup):
     """remove alternatives if exists (from all keys)"""
     man_alts = {
         "aa": ["a1", "a2", "a3"],

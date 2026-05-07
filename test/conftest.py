@@ -13,6 +13,7 @@ from inv import cli_parser
 @pytest.fixture(name="cli")
 def cli_fixture():
     """command line parser"""
+    sql.log.log_on = True
     return cli_parser()
 
 

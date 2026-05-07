@@ -9,10 +9,9 @@ import json
 import os
 import re
 import shutil
-import sys
 from datetime import datetime
 from json import JSONDecodeError
-from typing import Dict, List, Set
+from typing import Dict, List, NamedTuple, Set
 
 import pandas as pd
 
@@ -26,9 +25,19 @@ from app.error import (
     SqlTabError,
     WriteJsonError,
 )
-from app.message import MessageHandler
+from app.message import msg
 
-msg = MessageHandler()
+
+class TypedItertuple(NamedTuple):
+    """to allow pyright understand pandas itertuple"""
+
+    id: int
+    source: str
+    subject: str
+    type: str
+    time: int
+    specversion: str
+    data: str
 
 
 def create_loc_config():
@@ -408,51 +417,3 @@ def match_from_list(cmd: str, choices: Dict | list) -> str:
     if len(matches) > 1:
         raise AmbigousMatchError(cmd=cmd, matches=matches)
     raise NoMatchError(cmd=cmd)
-
-
-class AbbreviationParser(argparse.ArgumentParser):
-    """override argparser to provide arguments abbrevation"""
-
-    def _get_abbreviation(  # pylint: disable=inconsistent-return-statements
-        self,
-        cmd: str,
-        choices: Dict,
-    ) -> str:
-        if cmd in ["-h", "--help"]:
-            return cmd
-        try:
-            return match_from_list(cmd=cmd, choices=choices)
-        except AmbigousMatchError as err:
-            self.error(str(err))
-        except NoMatchError as err:
-            self.error(str(err))
-
-    def parse_args(self, args: list | None = None, namespace=None):  # type: ignore
-        if args is None:
-            args = sys.argv[1:]
-        # only subcommand given so show help
-        if len(args) == 1:
-            args += ["-h"]
-
-        # in case choices are None
-        try:
-            choices = (
-                    self # pylint: disable=protected-access
-                    ._subparsers
-                    ._actions[1]  # pyright: ignore[reportAssignmentType,reportOptionalMemberAccess]
-                    .choices
-                    ) # fmt: skip
-        except AttributeError:
-            self.error("No arguments added to argparser")
-
-        # Check if the first positional argument is an abbreviation of a subcommand
-        if args and args[0] in choices:
-            return super().parse_args(args, namespace)
-
-        if args and args[0]:
-            full_cmd = self._get_abbreviation(
-                args[0],
-                choices,  # pyright: ignore[reportArgumentType]
-            )
-            args[0] = full_cmd  # pyright: ignore
-        return super().parse_args(args, namespace)

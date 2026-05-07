@@ -72,9 +72,9 @@ def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:
     dat = hash_tab(dat=dat)
 
     # align other cols before skipping data in incoming data
-    on_conflict = None
+    on_conflict =  {"action": "IGNORE"}
     if not args.dont_align_columns:
-        on_conflict = {"action": "REPLACE"}
+        on_conflict = None  # will take default: UPDATE_SET
         existing_data = sql.getDF(
             tab="DEVICE",
             search=dat.loc[:, conf.DEV_HASH],
@@ -129,7 +129,7 @@ def import_tab(dat: pd.DataFrame, tab: str, args: Namespace, file: str) -> None:
 
 def tabs_in_data(dat: pd.DataFrame) -> list[str]:
     """
-    return all tables which mandatary cols are present in dat
+    return all tables which mandatory cols are present in dat
     """
     sql_scheme = read_json_dict(conf.SQL_SCHEME)
     # need to start from DEVICE because other tables refer to it

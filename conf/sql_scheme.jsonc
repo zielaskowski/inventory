@@ -5,40 +5,43 @@
     //** column names with lower case
     //** table names with upper case only
     //** col type ONLY upper case
+    //** column ID is indexed automatically (when INTEGER type)
     //** 
     //** SPECIAL KEYWORDS
     //** reference with FOREIGN key only to UNIQUE/PRIMARY columns
     //** tables with FOREIGN should follow tables they refer (order matter)
-    //** foreign keys are deferred, mening the integrity is chck only during commit
-    //** becouse when REPLACING on conflict, the primary key is first deleted then 
-    //** written new one, which wil violate integrity if referenced by foreign
+    //** foreign keys are deferred, meaning the integrity is checked only during commit
+    //** because when REPLACING on conflict, the primary key is first deleted then 
+    //** written new one, which will violate integrity if referenced by foreign
     //** FOREIGN	[
     //**	    	   {"col":"FOREIGN_TAB(foreign_col)"},
     //**		   ......
     //**		]
-    //** UNIQUE      	 column ID is indexed automatically (when INTEGER type)
-    //** HASH_COLS   	 is not SQL! it's aditional info to allow hashing automation
+    //** UNIQUE      	 UNIQUE columns combination: all columns selected must be unique
+    //** HASH_COLS   	 is not SQL! It's additional info to allow hashing automation
     //** ON_CONFLICT 	 describes action to perform on conflict on table level
-    //**             	 (so can be only one). Check is applied during INSERT|UPADTE
-    //**		 commands (not during CREATE TABLE), so no sql rebnuild is
-    //**		 necessery when changing ON CONFLICT logic.
-    //**		 If missing REAPLCE is default.
+    //**             	 (so can be only one). Check is applied during INSERT|UPDATE
+    //**		 commands (not during CREATE TABLE), so no sql rebuild is
+    //**		 necessary when changing ON CONFLICT logic.
+    //**		 If missing REPLACE is default.
     //**		 WARNING: REPLACE will create new id primary key
-    //**		 so you should never refer to it as foraign key.
-    //**		 Conflict is checking on unique columns from UNIQUE and PRIMARY key
-    //**		 When UPADE_SET and no add_col, algorithm will replace all columns
-    //**		 except primary key.
+    //**		 so you should never refer to it as foreign key.
+    //**		 Also REPLACE is not working with undo commands, as replaced values
+    //**		 are not stored.
+    //**		 When UPDATE_SET and no add_col, algorithm will replace all columns
+    //**		 The CONFLICT is checked against any conflict:
+    //**		 PRIMARY key or UNIQUE cols.
     //**		{
     //**		'action': UPDATE_SET|REPLACE|IGNORE|FAIL|ABORT|ROLLBACK
     //**		'add_col':[cols] //UPDATE will add new value to existing
     //**		}
     //** COL_DESCRIPTION description of columns
 
-    //** changing columns marked NOT NULL very liekely will break the app
-    //** if realy need to change them, align with col definitions in conf/sql_colnames.py
-    //** other columns probably can be modified, but no quarente given
+    //** changing columns marked NOT NULL very likely will break the app
+    //** if really need to change them, align with col definitions in conf/sql_colnames.py
+    //** other columns probably can be modified, but no guarantee given
 
-    //** list of devices, not necessery in stock
+    //** list of devices, not necessary in stock
     "DEVICE": {
         "hash": "TEXT PRIMARY KEY",
 	"device_id": "TEXT NOT NULL",
@@ -49,7 +52,7 @@
 	"dev_category2": "TEXT",
         "ON_CONFLICT": 
             {
-                "action": "IGNORE"
+                "action": "UPDATE_SET"
             }
         ,
 	//** 'hash' col must be present in table
@@ -68,7 +71,7 @@
     },
     //** BOM for project
     //** file and device_id are unique to not mix BOMs
-    //** from different project, this allow reimport and other
+    //** from different project, this allow re-import and other
     "BOM": {
         "id": "INTEGER PRIMARY KEY",
         "qty": "INTEGER NOT NULL",
@@ -129,7 +132,7 @@
         ],
         "ON_CONFLICT": 
             {
-                "action": "REPLACE"
+                "action": "UPDATE_SET"
             }
         
     },

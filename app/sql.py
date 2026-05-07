@@ -6,13 +6,15 @@ DB structure is described in ./conf/sql_scheme.json
 import json
 import os
 import sys
-from typing import Dict, List, Set
+from typing import Dict, Iterator, List, Set, cast
 
 import pandas as pd
+from _pytest._code import source
 
 import conf.config as conf
 from app import sql_core as sql
 from app.common import (
+    TypedItertuple,
     norm_to_list_str,
     tab_exists_scheme,
     unpack_foreign,
@@ -90,52 +92,45 @@ def undo(from_date: int) -> None:
     # do not log now
     log_on = log.log_on
     log.log_on = False
-    # TODO: list undo logs so user have chance to undo undo
-    for r in logs.itertuples():
-        args = json.loads(r.data)  # type: ignore
-        if "created" in r.type:  # type: ignore
-            args = args["new"]
-            col_defs = sql.__table_definition__(r.source)  # type: ignore
-            pks = [c for c in col_defs.keys() if "PRIMARY" in col_defs[c]]
-            pk = pks[0]
-            qty_cols = [
-                str(c) for c in args.keys() if c in [conf.BOM_QTY, conf.STOCK_QTY]
-            ]
-            if qty_cols != []:
-                # check if we updated (added qty) or created new record
-                qty_col: str = qty_cols[0]
-                curr_row = getDF(
-                    tab=r.source,  # type: ignore
-                    get_col=qty_cols,
-                    search=[args[pk]],
-                    where=pks,
-                )
-                curr_qty = int(curr_row.loc[0, qty_col])
-                log_qty = args[qty_col]
-            else:
-                log_qty = 0
-                curr_qty = 0
-                qty_col = ""
+    # trick for pyright to understand pandas itertuples
+    rows = cast(
+        Iterator[TypedItertuple],
+        logs.itertuples(index=False, name="TypedItertuple"),
+    )
+    for r in rows:
+        args = json.loads(r.data)
+        col_defs = sql.__table_definition__(r.source)
+        pks = [c for c in col_defs.keys() if "PRIMARY" in col_defs[c]]
+        if "created" in r.type:
             try:
-                if not curr_qty - log_qty:  # change was whole qty, remove
-                    rm(
-                        tab=r.source,  # type: ignore
-                        value=[r.subject],  # type: ignore
-                        column=pks,
-                    )
-                else:  # change was only qty, update
-                    edit(
-                        tab=r.source,  # type: ignore
-                        new_val=[curr_qty - log_qty],  # type: ignore
-                        col=qty_col,
-                        search=[args[pk]],
-                        where=pk,
-                    )
+                rm(
+                    tab=r.source,  # type: ignore
+                    value=[r.subject],  # type: ignore
+                    column=pks,
+                )
             except SqlExecuteError as e:
-                if "FOREIGN KEY" not in str(e):
-                    sys.exit(1)
+                # DEVICE tables are replaced when adding new devices
+                # to allow columns alignment. This triggers DEVICE.created audit.
+                # Removing may violate FOREIGN KEY constraint
+                if "FOREIGN KEY" in str(e):
+                    continue
+                msg.msg(str(e))
+        if "deleted" in r.type:
+            dat = pd.DataFrame(args["old"], index=pd.Series([0]))
+            put(dat=dat, tab=r.source)
+        if "updated" in r.type:
+            changed_cols = [
+                nk for nk, nv in args["new"].items() if nv != args["old"][nk]
+            ]
+            for c in changed_cols:
+                edit(
+                    tab=r.source,
+                    new_val=[args["old"][c]],
+                    col=c,
+                    search=[r.subject],
+                    where=pks[0],
+                )
     log.log_on = log_on
-    return
 
 
 def put(dat: pd.DataFrame, tab: str, on_conflict: dict | None = None) -> Dict:
@@ -143,7 +138,10 @@ def put(dat: pd.DataFrame, tab: str, on_conflict: dict | None = None) -> Dict:
     put DataFrame into sql at table=tab
     takes from DataFrame only columns present in sql table
     check if tab exists!
-    put() may raise SqlExecuteError and SqlTabError
+    If 'on_conflict' is None, use one defined in sql_scheme.json,
+    other way take 'action' (so using UPDATE_SET with add_columns not implemented)
+    raises:
+        SqlExecuteError and SqlTabError
     """
     log.log_write()
     tab_exists_scheme(tab)

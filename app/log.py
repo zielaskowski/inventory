@@ -3,7 +3,7 @@ Logging class. Log only commands changing the db.
 Logs are kept in sql db in LOG table: id|date|command
 Intention is to visualize user what to undo
 Methods:
-    - log - store argumeents for logging
+    - log - store arguments for logging
     - log_read - read what stored in db
     - low_write - write arguments to db
 
@@ -22,11 +22,11 @@ from app.message import msg
 
 
 class Log:
-    """loging methods"""
+    """logging methods"""
 
     def __init__(self) -> None:
         # log only once, each logging by sql_execute will change to FALSE
-        # one command usualy trigger mutliple sql operation
+        # one command usually trigger multiple sql operation
         self.log_on = True
         self.cmd = []
 

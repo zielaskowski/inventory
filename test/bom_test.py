@@ -44,7 +44,7 @@ def test_bom_empty_sql(cli, capsys, db_setup):  # pylint: disable=unused-argumen
 
 
 def test_bom_no_permission(cli):
-    """scaninig folder without permission"""
+    """scanning folder without permission"""
     args = cli.parse_args(["bom", "-d", "/"])
     with pytest.raises(SystemExit) as err_info:
         bom_import(args)
@@ -195,6 +195,46 @@ def test_bom_import_csv4(cli, db_setup, tmpdir):
     bom_import(args)
     csv.write("device_id,device_manufacturer,qty,project\n", mode="w")
     csv.write("aa,bb,4,test\n", mode="a")
+    inp = pd.read_csv(csv)
+    exp = pd.read_csv(exp)
+    common_cols = exp.columns.intersection(inp.columns)
+    exp = exp[common_cols]
+    assert exp.equals(inp[common_cols])
+
+
+def test_bom_import_dont_overwrite(cli, db_setup, tmpdir):
+    """import again with different description but do not overwrite existing"""
+    csv = tmpdir.join("test.csv")
+    with open(csv, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,qty,project,device_description\n" 
+            + "aa,bb,1,test,desc1\n"
+        )  # fmt: skip
+    csv2 = tmpdir.join("test2.csv")
+    with open(csv2, "w", encoding="UTF8") as f:
+        f.write(
+            "device_id,device_manufacturer,qty,project,device_description\n" 
+            + "aa,bb,1,test,desc2\n"
+        )  # fmt: skip
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "test.csv", "-F", "csv"])
+    bom_import(args)
+    args = cli.parse_args(
+        [
+            "bom",
+            "-d",
+            tmpdir.strpath,
+            "-f",
+            "test2.csv",
+            "-F",
+            "csv",
+            "-o",
+            "--dont_align_columns",
+        ]
+    )
+    bom_import(args)
+    exp = tmpdir.join("exp.csv")
+    args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
+    bom_import(args)
     inp = pd.read_csv(csv)
     exp = pd.read_csv(exp)
     common_cols = exp.columns.intersection(inp.columns)

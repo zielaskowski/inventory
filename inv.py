@@ -8,9 +8,9 @@ import sys
 from datetime import datetime
 
 import conf.config as conf
+from app.abbrevation_parser import AbbreviationParser
 from app.admin import admin
 from app.common import (
-    AbbreviationParser,
     backup_config,
     list_backups,
     str_to_date_backup,
@@ -18,7 +18,7 @@ from app.common import (
 from app.error import SqlCheckError, SqlCreateError
 from app.import_dat import bom_import, shop_import, stock_import
 from app.message import msg
-from app.sql import check, log
+from app.sql import check
 from app.transaction import trans
 
 
@@ -573,7 +573,7 @@ if __name__ == "__main__":
             msg.msg(str(e))
             sys.exit(1)
     if conf.DEBUG != "pytest":
-        # backup config folder,every BACKUP_FREQ days
+        # backup config folder every BACKUP_FREQ days
         last_backup = str_to_date_backup(list_backups()[-1])
         diff = datetime.now() - last_backup
         if diff.days > conf.BACKUP_FREQ:
@@ -581,7 +581,6 @@ if __name__ == "__main__":
             backup_config()
 
     if "func" in args:
-        log.log(args)
         args.func(args)
     else:
         parser.print_help()

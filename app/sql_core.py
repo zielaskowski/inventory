@@ -428,8 +428,8 @@ def __create_tab_cmd__(tab: str) -> str:
                     msg.msg(str(err))
                     raise SqlCreateError(conf.SQL_SCHEME) from err
 
-                # foreign check will fail when REPLACEin table, which is defauly
-                # so db is created with foeign keys INITIALY DEFERRED
+                # foreign check will fail when REPLACE in table, which is default
+                # so db is created with foreign keys INITIALLY DEFERRED
                 # in this case the integrity fails only at commit only
                 tab_cmd += f"FOREIGN KEY({k}) REFERENCES {v} "
                 tab_cmd += "DEFERRABLE INITIALLY DEFERRED, "
@@ -441,24 +441,12 @@ def __create_tab_cmd__(tab: str) -> str:
 def __update_set__(tab: str, add_cols: Union[str, None]) -> str:
     """create ON_CONFLICT UPDATE_SET cmd"""
     cols = __table_definition__(tab=tab)
-    unique_col = __sqlite_master__(
-        name=f"uniqueRow_{tab}",
-        pattern=r"\(.*\)$",
-    )
-    if not unique_col:
-        msg.msg(f"Missing UNIQUE cols for ON CONFLICT directive for table '{tab}'")
-        sys.exit(1)
-    # unique cols in ON CONFLICT should not have quotes
-    unique_col = unique_col.replace("'", "")
-
     if add_cols:
         update_cols = ",".join([f"{c} = {c} + EXCLUDED.{c}" for c in add_cols])
     else:  # replace all columns except primary
-        update_cols = ",".join(
-            [f"{c} = EXCLUDED.{c}" for c, v in cols.items() if "PRIMARY" not in v]
-        )
+        update_cols = ",".join([f"{c} = EXCLUDED.{c}" for c in cols])
 
-    cmd = f"""ON CONFLICT {unique_col}
+    cmd = f"""ON CONFLICT
               DO UPDATE SET {update_cols}
            """
     return cmd

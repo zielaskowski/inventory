@@ -159,26 +159,24 @@
     },
     //** manufacturers table
     "MANUFACTURER":{
-	    "man_id": "INTEGER PRIMARY KEY",
-	    "manufacturer_name": "TEXT NOT NULL",
+	    "manufacturer_name": "TEXT PRIMARY KEY",
 	    "COL_DESCRIPTION":{
 		"manufacturer_name":"primary manufacturer name"
 	    },
-	    "UNIQUE":["manufacturer_name"],
 	    "ON_CONFLICT":{"action":"UPDATE_SET"}
     },
     //** alternative manufacturer table
     "ALTERNATIVE_MANUFACTURER":{
 	    "id": "INTEGER PRIMARY KEY",
-	    "man_id": "INTEGER NOT NULL",
+	    "manufacturer_name": "INTEGER NOT NULL",
 	    "manufacturer_alt_name": "TEXT NOT NULL",
 	    "COL_DESCRIPTION":{
-		"man_id":"primary manufacturer reference",
+		"man_name":"primary manufacturer reference",
 		"manufacturer_alt_name":"alternative manufacturer name"
 	    },
-	    "FOREIGN":[{"man_id": "MANUFACTURER(man_id)"}],
+	    "FOREIGN":[{"manufacturer_name": "MANUFACTURER(manufacturer_name)"}],
 	    "UNIQUE":["manufacturer_alt_name"],
-	    "ON_CONFLICT":{"action":"REPLACE"}
+	    "ON_CONFLICT":{"action":"UPDATE_SET"}
     },
     "LOG":{
 	    "id": "INTEGER PRIMARY KEY",

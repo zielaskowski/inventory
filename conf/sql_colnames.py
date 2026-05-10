@@ -26,7 +26,6 @@ SHOP_ID = "shop_id"
 STOCK_QTY = "stock_qty"
 STOCK_HASH = "device_hash"
 # MANUFACTURER table
-MAN_ID = "manufacturer_id"
 MAN_NAME = "manufacturer_name"
 MAN_ALT_NAME = "manufacturer_alt_name"
 # LOG table

@@ -403,7 +403,11 @@ def _add_admin_parser(command_parser):
         "--sql_upgrade",
         action="store_true",
         help="""Upgrade sql database to latest version:
-            add alternative manufacturer table and auditing""",
+            add alternative manufacturer table and auditing; make foreign keys
+            deferrable; correct unique key in STOCK table. 
+            Use --force to rebuild ALL tables: useful when changing schema definition.
+            Column names must mutch between old and new schema.
+            Keeps all data untouched.""",
     )
     admin_group.add_argument(
         "-c",

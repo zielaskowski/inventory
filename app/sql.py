@@ -9,7 +9,6 @@ import sys
 from typing import Dict, Iterator, List, Set, cast
 
 import pandas as pd
-from _pytest._code import source
 
 import conf.config as conf
 from app import sql_core as sql
@@ -17,17 +16,22 @@ from app.common import (
     TypedItertuple,
     norm_to_list_str,
     tab_exists_scheme,
+    tab_in_scheme,
     unpack_foreign,
 )
 from app.error import (
     SqlCheckError,
+    SqlColnamesChangeError,
+    SqlCreateError,
     SqlExecuteError,
+    SqlGetError,
+    SqlTabError,
 )
 from app.log import log
 from app.message import msg
 
 
-def sql_upgrade() -> None:
+def sql_upgrade(force=False) -> None:
     """
     add sql auditing
     add manufacturers table and try to import from manufacturer_alternatives.json
@@ -43,27 +47,31 @@ def sql_upgrade() -> None:
         ]
         if t not in sql.__list_tables__()
     ]
-    # upadate also if audit is missing
+    # update also if audit is missing
     audit_tab = [t for t in ["audite_changefeed"] if t not in sql.__list_tables__()]
+    # make sure the foreign keys are deferred
     defer_tabs = []
-    for t in sql.__list_tables__():
+    for t in tab_in_scheme():
         tab_sql = sql.__sqlite_master__(t)
-        if "FOREIGN" in tab_sql and "DEFERRABLE" not in tab_sql:
+        if ("FOREIGN" in tab_sql and "DEFERRABLE" not in tab_sql) or force:
             defer_tabs.append(t)
 
-    # old definition of STOCK table was missing UNIQE key
+    # old definition of STOCK table was missing UNIQUE key
     if not sql.__sqlite_master__(name="uniqueRow_STOCK"):
         defer_tabs.append("STOCK")
 
     if not missing_tabs and not defer_tabs and not audit_tab:
         msg.msg("sql DB already in latest version")
         sys.exit(1)
-
     for t in defer_tabs:
-        sql.__defer_foreign__(tab=t)
-        # after commit sql will remove redundant UNIQE keys
-        # and defer_foreign delete old and create new tab
-        sql.__add_unique__(tab=t)
+        try:
+            sql.__defer_foreign__(tab=t)
+            # defer_foreign delete old and create new tab
+            # after commit sql will remove redundant UNIQUE keys
+            sql.__add_unique__(tab=t)
+        except SqlColnamesChangeError as e:
+            msg.msg(str(e))
+            raise KeyError from e
     for t in missing_tabs:
         sql.__create__(t)
 

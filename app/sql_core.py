@@ -13,14 +13,18 @@ from audite import track_changes
 
 import conf.config as conf
 from app.common import (
+    list_to_tuple_str,
     norm_to_list_str,
     read_json_dict,
+    refernce_foreign,
+    tab_cols,
     tab_exists_scheme,
     unpack_foreign,
 )
 from app.error import (
     CheckDirError,
     ReadJsonError,
+    SqlColnamesChangeError,
     SqlCreateError,
     SqlExecuteError,
     SqlGetError,
@@ -134,7 +138,7 @@ def __sqlite_master__(name: str, pattern: Union[None, str] = None) -> str:
 
 
 def __table_definition__(tab: str) -> dict:
-    """return table definition as dicionary
+    """return table definition as dictionary
     with column names as keys and type as values
     """
     if tab not in __list_tables__():
@@ -198,9 +202,7 @@ def __write_table__(
     records = list(df_copy.itertuples(index=False, name=None))
 
     # single element tuple add coma which brake column names
-    col_names = f"{list(dat.columns)}"
-    col_names = col_names.replace("[", "(")
-    col_names = col_names.replace("]", ")")
+    col_names = list_to_tuple_str(dat.columns)
 
     action = on_conflict.get("action", "REPLACE")  # default is ON CONFLICT REPLACE
     if action == "UPDATE_SET":
@@ -210,7 +212,7 @@ def __write_table__(
         action = "OR " + action
         update_cmd = ""
 
-    cmd = f"""INSERT {action} INTO {tab} {col_names}
+    cmd = f"""INSERT {action} INTO {tab} ({col_names})
               VALUES ({','.join(['?'] * len(dat.columns))})
            """
     cmd += update_cmd
@@ -346,6 +348,7 @@ def __get__(  # pylint: disable=R0917, R0913, R0914, R0912
 def __cmd_execute__(
     script: List[str],
     params: Sequence[str | tuple[Any, ...] | list[str]] | None = None,
+    foreign_key=True,
 ) -> Dict[str, pd.DataFrame]:
     """Execute provided SQL commands.
     If db returns anything write as dict {command: respose as pd.DataFrame}
@@ -383,7 +386,10 @@ def __cmd_execute__(
             | sqlite3.PARSE_DECLTYPES,  # pylint: disable=E1101
         )
         cur = con.cursor()
-        cur.execute("PRAGMA foreign_keys = ON")
+        if foreign_key:
+            cur.execute("PRAGMA foreign_keys = ON")
+        else:
+            cur.execute("PRAGMA foreign_keys = OFF")
         cur.execute("PRAGMA recursive_triggers = OFF")
         for cmd in script:
             if executemany:
@@ -463,30 +469,53 @@ def __add_unique__(tab: Union[str, None] = None) -> None:
     else:
         tabs = [tab]
     for t in tabs:
-        # get uniqe cols from sql_scheme
-        if "UNIQUE" in sql_scheme[t].keys():
-            unique_cols = sql_scheme[t]["UNIQUE"]
-        else:
+        # get unique cols from sql_scheme
+        if not (unique_cols := sql_scheme[t].get("UNIQUE", None)):
             continue
-        unique_cols = str(unique_cols)
-        # replace square brackets with parenthesis
-        unique_cols = re.sub(r"\[", r"(", unique_cols)
-        unique_cols = re.sub(r"\]", r")", unique_cols)
-        if unique_cols:
-            cmd.append(f"CREATE UNIQUE INDEX uniqueRow_{t} ON {t} {unique_cols}")
+        unique_cols = list_to_tuple_str(unique_cols)
+        cmd.append(f"CREATE UNIQUE INDEX uniqueRow_{t} ON {t} ({unique_cols})")
     if cmd:
         __cmd_execute__(cmd)
 
 
 def __defer_foreign__(tab: str) -> None:
-    """defer foraign key in existing table"""
+    """defer foreign key in existing table
+    Raises:
+        SqlColnamesChangeError when new colnames not align with existing table
+    """
     if tab not in __list_tables__():
         raise SqlTabError(tab=tab, tabs=__list_tables__())
-    cmd = [f"ALTER TABLE {tab} RENAME TO {tab}_old"]
+    cmd = [f"DROP TABLE IF EXISTS {tab}_old"]
+    cmd.append(f"ALTER TABLE {tab} RENAME TO {tab}_old")
     cmd.append(__create_tab_cmd__(tab=tab))
-    cmd.append(f"INSERT INTO {tab} SELECT * FROM {tab}_old")
+    # cols in sql_scheme.json
+    must_cols, nice_cols = tab_cols(tab, all_cols=True, foreign=False)
+    old_cols = __tab_columns__(tab)
+    # skip tables if new colnames are not within old colnames
+    # this would loose data
+    if any(c for c in must_cols + nice_cols if c not in old_cols):
+        # columns names change
+        raise SqlColnamesChangeError(
+            tab=tab,
+            new_cols=must_cols + nice_cols,
+            old_cols=old_cols,
+        )
+    # skip tables if any foreign key can be lost,
+    # check if column names are aligned, other way skip
+    ref_cols,ref_tabs = refernce_foreign(tab=tab)
+    if any(c for c in ref_cols if c not in must_cols+nice_cols):
+        raise SqlColnamesChangeError(
+                tab=tab,
+                ref_cols=ref_cols,
+                ref_tabs=ref_tabs,
+                )
+    cmd.append(f"""INSERT INTO {tab} ({list_to_tuple_str(must_cols,nice_cols)})
+               SELECT {list_to_tuple_str(must_cols,nice_cols,quote=False)}
+               FROM {tab}_old""")
     cmd.append(f"DROP TABLE {tab}_old")
-    __cmd_execute__(cmd)
+    # we will be copying tables
+    # so temporary foreign keys  constraint may fail
+    __cmd_execute__(cmd, foreign_key=False)
 
 
 def __check_scheme__(tab: str, col_def: Dict) -> None:  # pylint: disable=R0912

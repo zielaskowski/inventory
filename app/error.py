@@ -124,6 +124,32 @@ class SqlCheckError(Exception):
         return f"SQL check error: {self.message}"
 
 
+class SqlColnamesChangeError(Exception):
+    """when upgrading new colnames not aligned with old one"""
+
+    def __init__(
+        self,
+        tab: str,
+        new_cols: Union[List[str], set[str], None] = None,
+        old_cols: Union[List[str], set[str], None] = None,
+        ref_cols: Union[List[str], set[str], None] = None,
+        ref_tabs: Union[List[str], set[str], None] = None,
+    ) -> None:
+        if new_cols:
+            self.message = f"For table '{tab}'\n"
+            self.message += f"new column names: '{new_cols}'\n"
+            self.message += f"and old column names: '{old_cols}'\n"
+            self.message += "do not match."
+        else:
+            self.message = f"Other tabs: '{ref_tabs}' reference columns "
+            self.message += f"'{ref_cols}' which were removed form '{tab}'\n"
+        self.message += "Aborting upgrade.\n"
+        self.message += "Align column names manually (i.e. with sqlitebrowser)."
+
+    def __str__(self) -> str:
+        return f"SQL upgrade error: {self.message}"
+
+
 class VimdiffSelError(Exception):
     """exception class"""
 

@@ -11,7 +11,7 @@ import re
 import shutil
 from datetime import datetime
 from json import JSONDecodeError
-from typing import Dict, List, NamedTuple, Set
+from typing import Dict, List, NamedTuple, Set, Tuple, Union
 
 import pandas as pd
 
@@ -278,10 +278,39 @@ def check_dir_file(args: argparse.Namespace) -> list[str]:
     return files
 
 
+def tab_in_scheme() -> List:
+    """return list of tables in sql_scheme.json
+    raises:
+        read_jsonError
+    """
+    sql_scheme = read_json_dict(conf.SQL_SCHEME)
+    return list(sql_scheme.keys())
+
+
+def list_to_tuple_str(*args: Union[List, pd.Index], quote=True) -> str:
+    """convert list to string
+    without(!!) parenthesis around. Add quotes around columns only if quote==True
+    Simple str(tuple) with one element adds comma at the end
+    which brakes sql, and not always parenthesis are valid
+    """
+    lst = []
+    for a in args:
+        if isinstance(a, pd.Index):
+            a = list(a)
+        lst += a
+    out = str(lst)
+    out = out.replace("[", "").replace("]", "")
+    if not quote:
+        out = out.replace("'", "").replace('"', "")
+    return out
+
+
 def tab_exists_scheme(tab: str) -> None:
     """
     check if tab exists
-    raises sql_tabError if not
+    raises:
+        sql_tabError if tab not exists
+        read_jsonError
     """
     sql_scheme = read_json_dict(conf.SQL_SCHEME)
     if tab not in sql_scheme.keys():
@@ -291,11 +320,13 @@ def tab_exists_scheme(tab: str) -> None:
 def tab_cols(
     tab: str,
     all_cols: bool = False,
+    foreign: bool = True,
 ) -> tuple[list[str], list[str]]:
     """
     return list of columns that are required for the given tab
     and list of columns that are "nice to have"
-    follow FOREIGN key constraints to other tab
+    follow FOREIGN key constraints to other tab if foreign==True
+    if all_cols==True, show also hidden cols
     """
     sql_scheme = read_json_dict(conf.SQL_SCHEME)
     tab_exists_scheme(tab)  # will raise sql_tabError if not
@@ -315,7 +346,7 @@ def tab_cols(
             if u in nice_cols:
                 nice_cols.remove(u)
 
-    if "FOREIGN" in cols:
+    if "FOREIGN" in cols and foreign:
         for f in sql_scheme[tab]["FOREIGN"]:
             col, foreign_tab, _ = unpack_foreign(f)
 
@@ -347,7 +378,7 @@ def tab_cols(
 
 
 def foreign_tabs(tab: str) -> list[str]:
-    """return list of tables refrenced in FOREIGN key"""
+    """return list of tables referenced in FOREIGN key"""
     tab_exists_scheme(tab)  # will raise sql_tabError if not
     sql_scheme = read_json_dict(conf.SQL_SCHEME)
     tabs = []
@@ -357,13 +388,35 @@ def foreign_tabs(tab: str) -> list[str]:
     return tabs
 
 
+def refernce_foreign(tab: str) -> Tuple[set[str], List[str]]:
+    """Return colnames of tab which are related by any
+    other table. Return column name referenced by other tables
+    foreign keys and foreign key itself for reporting purposes
+    """
+    tab_exists_scheme(tab)  # will raise sql_tabError if not
+    sql_scheme = read_json_dict(conf.SQL_SCHEME)
+    tabs = tab_in_scheme()
+    tabs = [t for t in tabs if t != tab]
+    ref_cols = []
+    ref_f = []
+    for t in tabs:
+        for f in sql_scheme[t].get("FOREIGN", {}):
+            ref_col, ref_tab, ref_tab_col = unpack_foreign(f)
+            if ref_tab == tab:
+                ref_cols.append(ref_tab_col)
+                ref_f.append(
+                    {t + "(" + ref_col + ") : " + tab + "(" + ref_tab_col + ")"}
+                )
+    return set(ref_cols), ref_f
+
+
 def unpack_foreign(foreign: dict[str, str] | None | list) -> tuple[str, str, str]:
     """
     read foreign key from sql_scheme
     expected input:
         sql_scheme[tab].get('FOREIGN') -> list[dict] | None
-        for foreign in sql_scheme[tab].get('FOREIGN',[]) -> dict
-    tab without FOREIGN key will return None: mean DEVICE tab
+        for foreign in sql_scheme[tab].get('FOREIGN',{}) -> dict
+    tab without FOREIGN key will return ('hash',"",""); for example DEVICE tab
     returns col which is connected and destination table and column
     """
     # DEVICE is very special: do not have FOREIGN key

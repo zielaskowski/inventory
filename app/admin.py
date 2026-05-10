@@ -71,7 +71,7 @@ def admin(args: Namespace) -> None:  # pylint: disable=R0912
     if args.remove_project:
         remove_project(args)
     if args.sql_upgrade:
-        upgrade()
+        upgrade(force=args.force)
     if args.import_manufacturers:
         import_manufacturers(
             file=args.import_manufacturers,
@@ -87,17 +87,18 @@ def admin(args: Namespace) -> None:  # pylint: disable=R0912
         select_log_undo(args.undo)
 
 
-def upgrade() -> None:
+def upgrade(force=False) -> None:
     """
-    upgade sql db to latest standard
+    upgrade sql db to latest standard
     """
     backup_config()
     try:
-        sql.sql_upgrade()
+        sql.sql_upgrade(force=force)
         import_manufacturers(conf.MAN_ALT)
-    except SqlCreateError as err:
+    except (SqlCreateError, KeyError) as err:
         restore_config()
-        print(err)
+        if str(err):
+            print(err)
         sys.exit(1)
 
 

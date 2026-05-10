@@ -8,7 +8,7 @@ import sys
 from datetime import datetime
 
 import conf.config as conf
-from app.abbrevation_parser import AbbreviationParser
+from app.abbreviation_parser import AbbreviationParser
 from app.admin import admin
 from app.common import (
     backup_config,
@@ -33,14 +33,14 @@ def _add_bom_import_parser(command_parser):
         "-d",
         "--dir",
         default=".",
-        help="""Directory to start scaning for files to be imported.
+        help="""Directory to start scanning for files to be imported.
                 Scan only in 'BOM' folder (can be change in config.py)""",
         required=False,
     )
     cli_import_bom.add_argument(
         "-f",
         "--file",
-        help="""xls/xlsx file to import. Select proper format (can be extendeed in config.py).
+        help="""xls/xlsx file to import. Select proper format (can be extended in config.py).
                 Will import only files where FILE is within file name. Case sensitive.
                 Default: all files.""",
         required=False,
@@ -104,7 +104,7 @@ def _add_bom_import_parser(command_parser):
     )
     cli_import_bom.add_argument(
         "--info",
-        help="""Display info about necessery and acceptable columns for BOM table.""",
+        help="""Display info about necessary and acceptable columns for BOM table.""",
         required=False,
         action="store_true",
     )
@@ -139,7 +139,7 @@ def _add_shop_cart_import_parser(command_parser):
     cli_import_cart.add_argument(
         "-f",
         "--file",
-        help="""xls/xlsx file to import. Select proper format (can be extendeed in config.py).
+        help="""xls/xlsx file to import. Select proper format (can be extended in config.py).
                 Will import only files where this FILE is within file name. Case sensitive.""",
         required=False,
     )
@@ -181,7 +181,7 @@ def _add_shop_cart_import_parser(command_parser):
     )
     cli_import_cart.add_argument(
         "--info",
-        help="""Display info about necessery and acceptable columns for SHOP table.""",
+        help="""Display info about necessary and acceptable columns for SHOP table.""",
         required=False,
         action="store_true",
     )
@@ -207,7 +207,7 @@ def _add_transact_parser(command_parser):
     cli_transact.add_argument(
         "-f",
         "--file",
-        help="File name to save shoping list (with extension), default is 'shopping_list'",
+        help="File name to save shopping list (with extension), default is 'shopping_list'",
         required=False,
         default="shopping_list",
     )
@@ -215,7 +215,7 @@ def _add_transact_parser(command_parser):
         "-d",
         "--dir",
         default=".",
-        help="Directory to save shoping list. If omitted, current directory is used",
+        help="Directory to save shopping list. If omitted, current directory is used",
         required=False,
     )
     cli_transact.add_argument(
@@ -257,14 +257,14 @@ def _add_stock_parser(command_parser):
         "-d",
         "--dir",
         default=".",
-        help="""Directory to start scaning for files to be imported.
+        help="""Directory to start scanning for files to be imported.
                 Scan only in 'BOM' folder (can be change in config.py)""",
         required=False,
     )
     cli_stock.add_argument(
         "-f",
         "--file",
-        help="""xls/xlsx/csv file to import. Select proper format (can be extendeed in config.py).
+        help="""xls/xlsx/csv file to import. Select proper format (can be extended in config.py).
                 Will import only files where FILE is within file name. Case sensitive.
                 Default: all files.""",
         required=False,
@@ -347,7 +347,7 @@ def _add_stock_parser(command_parser):
     cli_stock.add_argument(
         "--add_device_manufacturer",
         metavar="DEV_MAN",
-        help="""Add single DEVICE by its MAUNUFACTURER, usually connects with --add_device_id.
+        help="""Add single DEVICE by its MANUFACTURER, usually connects with --add_device_id.
                 See README.md to see how to use with fuzzy search.""",
     )
     cli_stock.add_argument(
@@ -359,12 +359,12 @@ def _add_stock_parser(command_parser):
     cli_stock.add_argument(
         "--use_device_manufacturer",
         metavar="DEV_MAN",
-        help="""Remove single DEVICE by its MAUNUFACTURER, usually connects with --use_device_id.
+        help="""Remove single DEVICE by its MANUFACTURER, usually connects with --use_device_id.
                 See README.md to see how to use with fuzzy search.""",
     )
     cli_stock.add_argument(
         "--info",
-        help="""Display info about necessery and acceptable columns for STOCK table.""",
+        help="""Display info about necessary and acceptable columns for STOCK table.""",
         action="store_true",
     )
     cli_stock.add_argument(
@@ -396,7 +396,7 @@ def _add_admin_parser(command_parser):
         nargs="?",
         metavar="n",
         help="""
-        Undo last commands. Will ask for selection how far into hostory undo (default=9).
+        Undo last commands. Will ask for selection how far into history undo (default=9).
         You can provide how many last commands to present for selection""",
     )
     admin_group.add_argument(
@@ -406,7 +406,7 @@ def _add_admin_parser(command_parser):
             add alternative manufacturer table and auditing; make foreign keys
             deferrable; correct unique key in STOCK table. 
             Use --force to rebuild ALL tables: useful when changing schema definition.
-            Column names must mutch between old and new schema.
+            Column names must match between old and new schema.
             Keeps all data untouched.""",
     )
     admin_group.add_argument(
@@ -431,7 +431,7 @@ def _add_admin_parser(command_parser):
     admin_group.add_argument(
         "--set_local_config",
         action="store_true",
-        help="Set config in local directory. You can then adjust manualy.",
+        help="Set config in local directory. You can then adjust manually.",
     )
     admin_group.add_argument(
         "--import_manufacturers",
@@ -478,7 +478,7 @@ def _add_admin_parser(command_parser):
         default=False,
         help="""Remove shop part number from shop table.
                 You can read part number from csv file, see --csv option.
-                Usefull when item not in shop stock any more""",
+                Useful when item not in shop stock any more""",
     )
     cli_admin.add_argument(
         "--force",
@@ -517,27 +517,27 @@ def cli_parser() -> AbbreviationParser:
         Also store BOM projects (list of devices).
         
         Typical workflow can be:
-        Scan all BOM files from location (including subfolders) and put 
+        Scan all BOM files from location (including sub-folders) and put 
         into BOM table (each element into separate row). Scan only files 
         inside 'bom|BOM' folder. Can be changed in config.py. Each imported file 
         will be treated as project. You can combine multiple project and export to
         file suitable for importing into shop cart. There is also a function to 
-        import Shoping cart with prices. If you import shop cart from many shops,
+        import Shopping cart with prices. If you import shop cart from many shops,
         BOM can export separate file for each shop considering best cost combination.
-        Finaly, you can commit the selected projects, which will store the
+        Finally, you can commit the selected projects, which will store the
         devices in the STOCK table.
 
         Output is written in stock.sql db file. If the file is not found, it will be
         created based on sql_scheme.jsonc file.
-        Application can import exccel files in different formats (from different)
+        Application can import excel files in different formats (from different)
         shops. Format description is in config file. Should be easy to extend.
-        Each execution of app is writing used arguments into log file. You cen setup 
+        Each execution of app is writing used arguments into log file. You can setup 
         in {conf.CONFIG_PATH}/config.py file.
 
         Configuration of app is searched in '.config' folder starting from current
         folder and up to root. If '.config' is not found will use default
         settings from location where app is installed. SQL database file is inside .config
-        folder, so the same aplies.
+        folder, so the same applies.
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

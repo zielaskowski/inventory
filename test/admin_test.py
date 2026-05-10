@@ -256,6 +256,7 @@ def test_align_man4(cli, db_setup, tmpdir):
 def test_align_man5(cli, db_setup, tmpdir):
     """
     multiple projects in BOM, some attributes for devices
+    then undo
     """
     # base data
     bom1 = tmpdir.join("bom1.csv")
@@ -379,6 +380,9 @@ def test_remove_dev_skip_project_devices(cli, db_setup, tmpdir):
     """
     _setup_data_for_remove_test(cli, tmpdir)
 
+    bom1_df = sql.getDF(tab="BOM", follow=True)
+    log.log_on = True
+    time.sleep(1)
     # Attempt to remove an unused device and a device used in a project
     remove_dev(dev=["dev_unused", "dev_to_remove"], force=False)
 
@@ -395,6 +399,13 @@ def test_remove_dev_skip_project_devices(cli, db_setup, tmpdir):
     # The safe project and its device should be untouched
     assert "proj_safe" in bom_after["project"].to_list()
     assert "dev_in_safe_proj" in devices_after["device_id"].to_list()
+    log_last = int(sql.getDF(tab="LOG").loc[1, "date"])
+    sql.undo(log_last)
+    after_undo = sql.getDF(tab="BOM", follow=True)
+    pd.testing.assert_frame_equal(
+        after_undo.sort_values(by=["hash", "device_description"]),
+        bom1_df.sort_values(by=["hash", "device_description"]),
+    )
 
 
 def test_remove_dev_force(cli, db_setup, tmpdir):
@@ -404,6 +415,9 @@ def test_remove_dev_force(cli, db_setup, tmpdir):
     """
     _setup_data_for_remove_test(cli, tmpdir)
 
+    bom1_df = sql.getDF(tab="BOM", follow=True)
+    log.log_on = True
+    time.sleep(1)
     # Force remove an unused device and a device used in a project
     remove_dev(dev=["dev_unused", "dev_to_remove"], force=True)
 
@@ -419,6 +433,13 @@ def test_remove_dev_force(cli, db_setup, tmpdir):
     # The safe project and its device should be untouched
     assert "proj_safe" in bom_after["project"].to_list()
     assert "dev_in_safe_proj" in devices_after["device_id"].to_list()
+    log_last = int(sql.getDF(tab="LOG").loc[1, "date"])
+    sql.undo(log_last)
+    after_undo = sql.getDF(tab="BOM", follow=True)
+    pd.testing.assert_frame_equal(
+        after_undo.sort_values(by=["hash", "device_description"]),
+        bom1_df.sort_values(by=["hash", "device_description"]),
+    )
 
 
 def test_align_manufacturers_complex(cli, db_setup, tmpdir):
@@ -429,6 +450,9 @@ def test_align_manufacturers_complex(cli, db_setup, tmpdir):
     _setup_bom_data_for_align(cli, tmpdir)
     _setup_shop_data_for_align(cli, tmpdir)
 
+    bom1_df = sql.getDF(tab="BOM", follow=True)
+    log.log_on = True
+    time.sleep(1)
     # Verify initial state: 5 different manufacturers for 'device1'
     initial_devs = sql.getDF(
         tab="DEVICE", search=["device1"], where=["device_id"], follow=True
@@ -477,6 +501,13 @@ def test_align_manufacturers_complex(cli, db_setup, tmpdir):
     shop_df = sql.getDF(tab="SHOP", follow=True)
     assert len(shop_df) == 3
     assert set(shop_df["shop"]) == {"shop1", "shop2", "shop3"}
+    log_last = int(sql.getDF(tab="LOG").loc[1, "date"])
+    sql.undo(log_last)
+    after_undo = sql.getDF(tab="BOM", follow=True)
+    pd.testing.assert_frame_equal(
+        after_undo.sort_values(by=["hash", "device_description"]),
+        bom1_df.sort_values(by=["hash", "device_description"]),
+    )
 
 
 def test_align_manufacturers_complex1(cli, db_setup, tmpdir):
@@ -488,6 +519,9 @@ def test_align_manufacturers_complex1(cli, db_setup, tmpdir):
     _setup_bom_data_for_align(cli, tmpdir)
     _setup_shop_data_for_align(cli, tmpdir)
 
+    bom1_df = sql.getDF(tab="BOM", follow=True)
+    log.log_on = True
+    time.sleep(1)
     # Verify initial state: 5 different manufacturers for 'device1'
     initial_devs = sql.getDF(
         tab="DEVICE", search=["device1"], where=["device_id"], follow=True
@@ -533,6 +567,13 @@ def test_align_manufacturers_complex1(cli, db_setup, tmpdir):
     shop_df = sql.getDF(tab="SHOP", follow=True)
     assert len(shop_df) == 3
     assert set(shop_df["shop"]) == {"shop1", "shop2", "shop3"}
+    log_last = int(sql.getDF(tab="LOG").loc[1, "date"])
+    sql.undo(log_last)
+    after_undo = sql.getDF(tab="BOM", follow=True)
+    pd.testing.assert_frame_equal(
+        after_undo.sort_values(by=["hash", "device_description"]),
+        bom1_df.sort_values(by=["hash", "device_description"]),
+    )
 
 
 def test_align_manufacturers_complex2(cli, db_setup, tmpdir):
@@ -544,6 +585,9 @@ def test_align_manufacturers_complex2(cli, db_setup, tmpdir):
     _setup_bom_data_for_align1(cli, tmpdir)
     _setup_shop_data_for_align(cli, tmpdir)
 
+    bom1_df = sql.getDF(tab="DEVICE")
+    log.log_on = True
+    time.sleep(1)
     # Verify initial state: 5 different manufacturers for 'device1'
     initial_devs = sql.getDF(
         tab="DEVICE", search=["device1"], where=["device_id"], follow=True
@@ -553,6 +597,7 @@ def test_align_manufacturers_complex2(cli, db_setup, tmpdir):
     assert initial_mans == {"MAN_A", "MAN_B", "MAN_C", "MAN_D", "MAN_E"}
 
     # 2. Mock the interactive part and run the alignment
+    args = cli.parse_args(["admin", "-a"])
     with patch(
         "app.manufacturers.vimdiff_selection",
         side_effect=[
@@ -565,7 +610,7 @@ def test_align_manufacturers_complex2(cli, db_setup, tmpdir):
             (["desc"], {}),
         ],
     ):
-        align()
+        admin(args)
 
     # 3. Verify the final state
     final_devs = sql.getDF(
@@ -592,6 +637,14 @@ def test_align_manufacturers_complex2(cli, db_setup, tmpdir):
     shop_df = sql.getDF(tab="SHOP", follow=True)
     assert len(shop_df) == 3
     assert set(shop_df["shop"]) == {"shop1", "shop2", "shop3"}
+    log_last = int(sql.getDF(tab="LOG").loc[1, "date"])
+    sql.undo(log_last)
+    after_undo = sql.getDF(tab="DEVICE")
+    pd.testing.assert_frame_equal(
+        after_undo.sort_values(by=["hash"]).reset_index(drop=True).fillna('None'),
+        bom1_df.sort_values(by=["hash"]).reset_index(drop=True).fillna('None'),
+        check_like=True,
+    )
 
 
 def _setup_bom_data_for_align1(cli, tmpdir):
@@ -628,14 +681,26 @@ def test_admin_project_remove1(cli, db_setup, tmpdir, capsys):
         ) # fmt: skip
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
     bom_import(args)
+    log.log_on = True
+    time.sleep(1)
+    bom1_df = sql.getDF(tab="BOM", follow=True)
     args = cli.parse_args(["admin", "--remove_project", "%"])
     admin(args)
+    log.log_on = True
+    time.sleep(1)
     exp = tmpdir.join("exp.csv")
     exp.write("")
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-f", "exp.csv", "-e", "%"])
     bom_import(args)
     out, _ = capsys.readouterr()
     assert "no projects in bom table" in out.lower()
+    log_last = int(sql.getDF(tab="LOG").loc[1, "date"])
+    sql.undo(log_last)
+    after_undo = sql.getDF(tab="BOM", follow=True)
+    pd.testing.assert_frame_equal(
+        after_undo.sort_values(by=["hash", "device_description"]),
+        bom1_df.sort_values(by=["hash", "device_description"]),
+    )
 
 
 def test_admin_project_remove2(cli, db_setup, tmpdir):
@@ -654,6 +719,9 @@ def test_admin_project_remove2(cli, db_setup, tmpdir):
         ) # fmt: skip
     args = cli.parse_args(["bom", "-d", tmpdir.strpath, "-F", "csv"])
     bom_import(args)
+    log.log_on = True
+    time.sleep(1)
+    bom1_df = sql.getDF(tab="BOM", follow=True)
     args = cli.parse_args(["admin", "--remove_project", "test1"])
     admin(args)
     exp = tmpdir.join("exp.csv")
@@ -665,6 +733,13 @@ def test_admin_project_remove2(cli, db_setup, tmpdir):
     common_cols = exp.columns.intersection(inp.columns)
     exp = exp[common_cols]
     assert exp.equals(inp[common_cols])
+    log_last = int(sql.getDF(tab="LOG").loc[1, "date"])
+    sql.undo(log_last)
+    after_undo = sql.getDF(tab="BOM", follow=True)
+    pd.testing.assert_frame_equal(
+        after_undo.sort_values(by=["hash", "device_description"]),
+        bom1_df.sort_values(by=["hash", "device_description"]),
+    )
 
 
 def test_admin_project_remove3(cli, db_setup, tmpdir, capsys):
